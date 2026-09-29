@@ -82,7 +82,7 @@ app.post('/api/send-reg-code', async (req, res) => {
     login = login.trim().toLowerCase();
 
     let db = await loadDatabase();
-    if (db.users?.[login]) {
+    if (db.users && db.users[login]) {
         return res.status(400).json({ success: false, error: 'Логин уже занят' });
     }
 
@@ -145,7 +145,7 @@ app.post('/api/login', async (req, res) => {
     login = login.trim().toLowerCase();
     let db = await loadDatabase();
 
-    const user = db.users?.[login];
+    const user = db.users && db.users[login];
     if (!user) {
         return res.status(400).json({ success: false, error: 'Пользователь с таким логином не найден' });
     }
@@ -193,7 +193,7 @@ app.post('/api/reset-password', async (req, res) => {
     }
 
     let db = await loadDatabase();
-    if (db.users?.[record.login]) {
+    if (db.users && db.users[record.login]) {
         db.users[record.login].password = newPassword;
         await saveDatabase(db);
         delete resetCodes[email];
@@ -206,7 +206,7 @@ app.post('/api/reset-password', async (req, res) => {
 app.post('/api/update-profile', async (req, res) => {
     let { login, name, avatar, email } = req.body;
     let db = await loadDatabase();
-    if (!db.users?.[login]) return res.status(400).json({ success: false, error: 'Пользователь не найден' });
+    if (!db.users || !db.users[login]) return res.status(400).json({ success: false, error: 'Пользователь не найден' });
 
     if (name) db.users[login].name = name.trim();
     if (avatar) db.users[login].avatar = avatar;
@@ -216,7 +216,6 @@ app.post('/api/update-profile', async (req, res) => {
     res.json({ success: true, user: db.users[login], db });
 });
 
-// Сохранение локального псевдонима (переименование друга)
 app.post('/api/set-nickname', async (req, res) => {
     let { login, targetLogin, nickname } = req.body;
     let db = await loadDatabase();
@@ -238,7 +237,6 @@ app.post('/api/ping', async (req, res) => {
     res.json({ success: true });
 });
 
-// Отправка заявки в друзья
 app.post('/api/add-friend', async (req, res) => {
     let { login, targetLogin } = req.body;
     login = login ? login.trim().toLowerCase() : '';
@@ -246,7 +244,7 @@ app.post('/api/add-friend', async (req, res) => {
     
     let db = await loadDatabase();
 
-    if (!db.users?.[targetLogin]) {
+    if (!db.users || !db.users[targetLogin]) {
         return res.status(400).json({ success: false, error: `Пользователь @${targetLogin} не найден!` });
     }
     if (targetLogin === login) {
@@ -256,7 +254,7 @@ app.post('/api/add-friend', async (req, res) => {
     if (!db.friends) db.friends = {};
     if (!db.friendRequests) db.friendRequests = {};
 
-    if (db.friends[login]?.includes(targetLogin)) {
+    if (db.friends[login] && db.friends[login].includes(targetLogin)) {
         return res.status(400).json({ success: false, error: 'Вы уже друзья!' });
     }
 
@@ -269,14 +267,13 @@ app.post('/api/add-friend', async (req, res) => {
     res.json({ success: true, db });
 });
 
-// Ответ на заявку в друзья (принять / отклонить)
 app.post('/api/respond-friend-request', async (req, res) => {
     let { login, requesterLogin, accept } = req.body;
     login = login.trim().toLowerCase();
     requesterLogin = requesterLogin.trim().toLowerCase();
 
     let db = await loadDatabase();
-    if (!db.friendRequests?[login]) return res.status(400).json({ success: false });
+    if (!db.friendRequests || !db.friendRequests[login]) return res.status(400).json({ success: false });
 
     db.friendRequests[login] = db.friendRequests[login].filter(l => l !== requesterLogin);
 
@@ -342,7 +339,7 @@ app.post('/api/create-group', async (req, res) => {
 app.post('/api/join-group', async (req, res) => {
     let { groupId, login } = req.body;
     let db = await loadDatabase();
-    if (!db.groups?.[groupId]) return res.status(400).json({ success: false, error: 'Группа не найдена' });
+    if (!db.groups || !db.groups[groupId]) return res.status(400).json({ success: false, error: 'Группа не найдена' });
 
     if (!db.groups[groupId].members.includes(login)) {
         db.groups[groupId].members.push(login);
@@ -354,7 +351,7 @@ app.post('/api/join-group', async (req, res) => {
 app.post('/api/send-group-message', async (req, res) => {
     let { groupId, sender, text, media } = req.body;
     let db = await loadDatabase();
-    if (!db.groups?.[groupId]) return res.status(400).json({ success: false });
+    if (!db.groups || !db.groups[groupId]) return res.status(400).json({ success: false });
 
     const msg = {
         sender,
