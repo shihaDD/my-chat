@@ -7,7 +7,6 @@
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Helvetica, Arial, sans-serif; }
         body { background: #dadbd4; height: 100vh; display: flex; justify-content: center; align-items: center; overflow: hidden; position: relative; }
         
-        /* Экран входа */
         #auth-screen {
             background: #f0f2f5;
             padding: 40px;
@@ -44,7 +43,6 @@
         }
         #auth-screen button:hover { background: #008f72; }
 
-        /* Зелёная полоса сверху */
         .whatsapp-bg-top {
             position: absolute;
             top: 0;
@@ -55,7 +53,6 @@
             z-index: 0;
         }
 
-        /* Главное окно мессенджера */
         #chat-screen {
             display: none;
             width: 100vw;
@@ -107,24 +104,22 @@
 
     <div class="whatsapp-bg-top"></div>
 
-    <!-- Экран авторизации -->
     <div id="auth-screen">
         <h2>WhatsApp Web</h2>
         <div id="step-phone-block">
             <p>Введите номер телефона и ваше имя</p>
             <input type="text" id="phone-input" placeholder="+7 (___) ___-__-__" autocomplete="off">
             <input type="text" id="name-input" placeholder="Ваше имя..." autocomplete="off">
-            <button id="get-code-btn">Получить код из СМС</button>
+            <button id="get-code-btn">Получить код</button>
         </div>
         
         <div id="step-code-block" style="display: none;">
-            <p>Введите 4-значный код из СМС</p>
+            <p>Введите 4-значный код из всплывающего окна</p>
             <input type="text" id="sms-code-input" placeholder="____" maxlength="4" autocomplete="off">
             <button id="verify-code-btn">Подтвердить и войти</button>
         </div>
     </div>
 
-    <!-- Основной интерфейс -->
     <div id="chat-screen">
         <div class="sidebar">
             <div class="sidebar-header">
@@ -161,6 +156,7 @@
         const socket = io();
         let myData = null;
         let activeRecipientPhone = null;
+        let generatedPopupCode = ''; // Переменная для хранения сгенерированного кода
         let messagesStore = JSON.parse(localStorage.getItem('whatsapp_messages') || '{}');
 
         const authScreen = document.getElementById('auth-screen');
@@ -183,14 +179,13 @@
         const messageInput = document.getElementById('message-input');
         const sendBtn = document.getElementById('send-btn');
 
-        // Авто-логин, если уже сохранен пользователь
         const savedUser = localStorage.getItem('whatsapp_user');
         if (savedUser) {
             myData = JSON.parse(savedUser);
             startChatSession();
         }
 
-        // Маска телефона
+        // Маска для ввода телефона
         phoneInput.oninput = (e) => {
             let val = e.target.value.replace(/\D/g, '');
             if (val.startsWith('7') || val.startsWith('8')) val = val.substring(1);
@@ -202,7 +197,7 @@
             phoneInput.value = val.length === 0 ? '' : res;
         };
 
-        // Шаг 1: Запрос кода
+        // Кнопка «Получить код»: генерирует случайный 4-значный код и показывает во всплывающем окне
         getCodeBtn.onclick = () => {
             const phone = phoneInput.value.trim();
             const name = nameInput.value.trim();
@@ -211,18 +206,18 @@
             if (cleanDigits.length < 11) return alert('Введите полный номер телефона!');
             if (!name) return alert('Введите ваше имя!');
 
-            socket.emit('request_code', { phone, name }, (response) => {
-                if (response.success) {
-                    alert('Код отправлен! (Посмотрите в консоль вашего сервера/терминала)');
-                    stepPhoneBlock.style.display = 'none';
-                    stepCodeBlock.style.display = 'block';
-                } else {
-                    alert(response.message);
-                }
-            });
+            // Генерируем случайный 4-значный код от 1000 до 9999
+            generatedPopupCode = Math.floor(1000 + Math.random() * 9000).toString();
+
+            // Показываем код во всплывающем окне (alert)
+            alert(`Ваш проверочный код: ${generatedPopupCode}`);
+
+            // Переключаем интерфейс на ввод кода
+            stepPhoneBlock.style.display = 'none';
+            stepCodeBlock.style.display = 'block';
         };
 
-        // Шаг 2: Проверка введенного кода
+        // Кнопка «Подтвердить и войти»: проверяет совпадение введенного кода
         verifyCodeBtn.onclick = () => {
             const phone = phoneInput.value.trim();
             const name = nameInput.value.trim();
@@ -230,20 +225,21 @@
 
             if (code.length !== 4) return alert('Введите 4-значный код!');
 
-            socket.emit('verify_code', { phone, name, code }, (response) => {
-                if (response.success) {
-                    myData = response.user;
-                    localStorage.setItem('whatsapp_user', JSON.stringify(myData));
-                    startChatSession();
-                } else {
-                    alert(response.message);
-                }
-            });
+            if (code === generatedPopupCode) {
+                myData = { phone, name };
+                localStorage.setItem('whatsapp_user', JSON.stringify(myData));
+                
+                // Регистрируем пользователя на сервере для обмена сообщениями
+                socket.emit('verify_code', { phone, name, code: 'bypass' }, () => {}); 
+                
+                startChatSession();
+            } else {
+                alert('Неверный код! Попробуйте еще раз.');
+            }
         };
 
         function startChatSession() {
-            socket.emit('request_code', { phone: myData.phone, name: myData.name }, () => {}); // переподключение
-            // Сразу регистрируем на сервере сессию
+            // На всякий случай сообщаем серверу о входе пользователя
             socket.emit('verify_code', { phone: myData.phone, name: myData.name, code: 'bypass' }, () => {}); 
             
             myAvatarLabel.textContent = myData.name.charAt(0).toUpperCase();
