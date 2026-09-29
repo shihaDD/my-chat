@@ -17,15 +17,28 @@ io.on('connection', (socket) => {
     socket.on('verify_code', (userData) => {
         socket.userPhone = userData.phone;
         
-        // Проверяем, есть ли уже пользователь с таким телефоном, обновляем или добавляем
-        const existingUserIndex = users.findIndex(u => u.phone === userData.phone);
-        if (existingUserIndex !== -1) {
-            users[existingUserIndex] = { ...userData, id: socket.id };
+        // Ищем существующего пользователя по номеру телефона
+        let existingUser = users.find(u => u.phone === userData.phone);
+
+        if (existingUser) {
+            // Обновляем данные и ставим статус "онлайн"
+            existingUser.id = socket.id;
+            existingUser.name = userData.name;
+            if (userData.avatar) existingUser.avatar = userData.avatar;
+            existingUser.isOnline = true;
         } else {
-            users.push({ ...userData, id: socket.id });
+            // Добавляем нового пользователя
+            users.push({
+                phone: userData.phone,
+                name: userData.name,
+                avatar: userData.avatar || null,
+                id: socket.id,
+                isOnline: true,
+                lastSeen: null
+            });
         }
 
-        // Рассылаем обновленный список пользователей всем
+        // Рассылаем актуальный список всем клиентам
         io.emit('users_list', users);
     });
 
@@ -43,22 +56,18 @@ io.on('connection', (socket) => {
 
     // Отправка личного сообщения
     socket.on('private_message', (data) => {
-        // data.toPhone — кому отправляем, data.message — текст
         const recipient = users.find(u => u.phone === data.toPhone);
         const sender = users.find(u => u.id === socket.id);
 
         if (recipient && sender) {
             const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             
-            // 1. Отправляем само сообщение получателю
             io.to(recipient.id).emit('message', {
                 fromPhone: sender.phone,
                 text: data.message,
                 time: time
             });
 
-            // 2. Сразу меняем статус отправленного сообщения на "доставлено" (delivered), 
-            // так как сервер его принял и переслал активному получателю
             socket.emit('message_status_update', {
                 toPhone: recipient.phone,
                 status: 'delivered'
@@ -66,24 +75,28 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Событие: получатель открыл чат и прочитал сообщения
+    // Прочтение сообщений
     socket.on('mark_as_read', (data) => {
-        // data.fromPhone — чьи сообщения были прочитаны (кто отправил изначально)
         const sender = users.find(u => u.phone === data.fromPhone);
         const reader = users.find(u => u.id === socket.id);
 
         if (sender && reader) {
-            // Уведомляем исходного отправителя о том, что его сообщения прочитаны
             io.to(sender.id).emit('message_status_update', {
-                toPhone: reader.phone, // для отправителя это тот человек, с кем чат
+                toPhone: reader.phone,
                 status: 'read'
             });
         }
     });
 
+    // При отключении не удаляем пользователя, а переводим в офлайн и сохраняем время
     socket.on('disconnect', () => {
         console.log('Пользователь отключился:', socket.id);
-        users = users.filter(u => u.id !== socket.id);
+        const user = users.find(u => u.id === socket.id);
+        if (user) {
+            user.isOnline = false;
+            user.lastSeen = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            user.id = null; // сбрасываем сокет-id
+        }
         io.emit('users_list', users);
     });
 });
