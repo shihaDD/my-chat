@@ -125,6 +125,49 @@
         .save-settings-btn { padding: 12px; background: #00a884; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: 600; margin-top: 10px; }
         .save-settings-btn:hover { background: #008f72; }
 
+        /* Модальное окно для добавления контакта */
+        #add-modal {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            width: 350px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+        .modal-content h3 { color: #41525d; margin-bottom: 15px; font-weight: 500; }
+        .modal-content input {
+            width: 100%;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+            border: 1px solid #d1d7db;
+            border-radius: 8px;
+            font-size: 15px;
+            outline: none;
+            text-align: center;
+        }
+        .modal-buttons { display: flex; gap: 10px; }
+        .modal-btn {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .modal-btn.cancel { background: #e2e8f0; color: #3b4a54; }
+        .modal-btn.submit { background: #00a884; color: #fff; }
+        .modal-btn.submit:hover { background: #008f72; }
+
         #custom-toast {
             position: fixed;
             top: 20px;
@@ -153,6 +196,18 @@
     <div id="custom-toast">
         <span style="font-size: 20px;">💬</span>
         <div id="custom-toast-text">Текст уведомления</div>
+    </div>
+
+    <!-- Модальное окно добавления контакта -->
+    <div id="add-modal">
+        <div class="modal-content">
+            <h3>Добавить контакт</h3>
+            <input type="text" id="modal-phone-input" placeholder="+7 (___) ___-__-__" autocomplete="off">
+            <div class="modal-buttons">
+                <button class="modal-btn cancel" id="modal-cancel-btn">Отмена</button>
+                <button class="modal-btn submit" id="modal-submit-btn">Добавить</button>
+            </div>
+        </div>
     </div>
 
     <div id="auth-screen">
@@ -314,6 +369,12 @@
         const renameContactBtn = document.getElementById('rename-contact-btn');
         const addContactBtn = document.getElementById('add-contact-btn');
 
+        // Элементы модального окна добавления контакта
+        const addModal = document.getElementById('add-modal');
+        const modalPhoneInput = document.getElementById('modal-phone-input');
+        const modalCancelBtn = document.getElementById('modal-cancel-btn');
+        const modalSubmitBtn = document.getElementById('modal-submit-btn');
+
         const settingsBtn = document.getElementById('settings-btn');
         const closeSettingsBtn = document.getElementById('close-settings-btn');
         const chatMainContainer = document.getElementById('chat-main-container');
@@ -344,6 +405,7 @@
 
         phoneInput.oninput = (e) => { phoneInput.value = formatPhone(e.target.value); };
         editPhoneInput.oninput = (e) => { editPhoneInput.value = formatPhone(e.target.value); };
+        modalPhoneInput.oninput = (e) => { modalPhoneInput.value = formatPhone(e.target.value); };
 
         getCodeBtn.onclick = () => {
             const phone = phoneInput.value.trim();
@@ -392,12 +454,28 @@
             chatScreen.style.display = 'grid';
         }
 
-        // Кнопка добавления контакта
+        // Открытие модального окна добавления контакта по нажатию на «+»
         addContactBtn.onclick = () => {
-            const phoneInputVal = prompt('Введите номер телефона контакта для добавления:');
-            if (!phoneInputVal) return;
-            const formatted = formatPhone(phoneInputVal);
-            socket.emit('add_contact', { myPhone: myData.phone, targetPhone: formatted || phoneInputVal.trim() });
+            modalPhoneInput.value = '+7 ';
+            addModal.style.display = 'flex';
+            modalPhoneInput.focus();
+        };
+
+        modalCancelBtn.onclick = () => {
+            addModal.style.display = 'none';
+        };
+
+        modalSubmitBtn.onclick = () => {
+            const phoneVal = modalPhoneInput.value.trim();
+            const cleanDigits = phoneVal.replace(/\D/g, '');
+
+            if (cleanDigits.length < 10) {
+                showNotification('Введите полный номер телефона!');
+                return;
+            }
+
+            socket.emit('add_contact', { myPhone: myData.phone, targetPhone: phoneVal });
+            addModal.style.display = 'none';
         };
 
         socket.on('add_contact_response', (res) => {
