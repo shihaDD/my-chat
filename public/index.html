@@ -9,8 +9,7 @@
         * { box-sizing: border-box; }
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            background: #0b0c10; 
-            color: #c5c6c7;
+            background: #0b0c10; color: #c5c6c7;
             margin: 0; padding: 0; 
             display: flex; justify-content: center; align-items: center; 
             height: 100vh; overflow: hidden;
@@ -27,7 +26,6 @@
         .modal h3 { color: #66fcf1; margin-top: 0; text-transform: uppercase; letter-spacing: 2px; }
         .login-status { font-size: 12px; text-align: left; margin-top: -8px; min-height: 15px; }
 
-        /* Окно звонка / демонстрации */
         .call-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 3000; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         .call-videos { display: flex; gap: 20px; margin-bottom: 20px; max-width: 90%; max-height: 70vh; }
         video { width: 450px; height: 320px; background: #000; border: 2px solid #66fcf1; border-radius: 8px; object-fit: cover; }
@@ -70,8 +68,10 @@
         .send-panel { display: flex; gap: 10px; }
         .send-panel input { flex-grow: 1; }
 
-        .news-item { background: #0b0c10; border: 1px solid #45a29e; padding: 10px; border-radius: 6px; margin-bottom: 8px; font-size: 13px; color: #c5c6c7; text-decoration: none; display: block; }
-        .news-item:hover { border-color: #66fcf1; color: #66fcf1; }
+        /* Оформление карточек мемов с картинками */
+        .meme-card { background: #0b0c10; border: 1px solid #45a29e; padding: 12px; border-radius: 8px; margin-bottom: 12px; text-align: center; }
+        .meme-card img { max-width: 100%; max-height: 300px; border-radius: 6px; margin-top: 8px; border: 1px solid #45a29e; }
+        .meme-card p { color: #66fcf1; font-size: 14px; margin: 0 0 6px 0; font-weight: bold; }
 
         h4 { color: #66fcf1; margin-top: 0; }
         b { color: #66fcf1; }
@@ -80,7 +80,6 @@
 <body>
 
 <div class="container">
-    <!-- ОКНО АВТОРИЗАЦИИ -->
     <div id="authModal" class="modal-overlay">
         <div class="modal">
             <h3>В Одно Ебло</h3>
@@ -92,7 +91,6 @@
         </div>
     </div>
 
-    <!-- ОКНО ЗВОНКА / ДЕМОНСТРАЦИИ -->
     <div id="callModal" class="call-modal hidden">
         <h3 id="callStatusText" style="color: #66fcf1; margin-bottom: 20px;">Соединение...</h3>
         <div class="call-videos">
@@ -108,13 +106,12 @@
         <button onclick="endCall()" style="background: #ff007f; color: #fff; border-color: #ff007f;">Завершить звонок</button>
     </div>
 
-    <!-- ИНТЕРФЕЙС -->
     <div class="app-content">
         <div class="main-nav">
             <h4 style="font-size:12px; margin-bottom:5px;">МЕНЮ</h4>
             <button class="nav-btn active" onclick="switchTab('messages')">💬 Сообщения</button>
             <button class="nav-btn" onclick="switchTab('friends')">👥 Друзья</button>
-            <button class="nav-btn" onclick="switchTab('news')">📰 Новости</button>
+            <button class="nav-btn" onclick="switchTab('news')">🖼 Мемы</button>
             <div style="margin-top:auto; font-size: 11px; color: #45a29e; word-break: break-all;">
                 Имя: <b id="currentUserName"></b><br>
                 Логин: <span id="currentUserLogin" style="color:#66fcf1;"></span>
@@ -125,7 +122,7 @@
         <div class="tab-pane" id="leftPane">
             <h4 id="paneTitle">Сообщения</h4>
             <div id="addFriendBox" class="hidden" style="margin-bottom: 10px; display: flex; flex-direction: column; gap: 6px;">
-                <input type="text" id="friendLoginInput" placeholder="Логин друга..." style="font-size:13px; padding:8px;">
+                <input type="text" id="friendLoginInput" placeholder="Логин друга (например, neo)..." style="font-size:13px; padding:8px;">
                 <button onclick="addFriend()" style="font-size:12px; padding:8px;">+ Добавить друга</button>
             </div>
             <div class="pane-list" id="paneList"></div>
@@ -148,8 +145,9 @@
                 </div>
             </div>
 
+            <!-- Блок отображения мемов в картинках -->
             <div id="newsContainer" class="hidden" style="overflow-y: auto; height: 100%; padding-right: 5px;">
-                <div id="newsList">Загрузка новостей из Google...</div>
+                <div id="newsList">Загрузка свежих мемов...</div>
             </div>
         </div>
     </div>
@@ -161,10 +159,8 @@
     let currentPartner = '';
     let currentTab = 'messages';
     let dbData = {};
-    let googleNews = [];
-    let isLoginValid = false;
+    let memeList = [];
 
-    // WebRTC переменные
     let peerConnection;
     let localStream;
     let remoteStream;
@@ -178,7 +174,7 @@
         } else {
             localStorage.removeItem('v_odno_eblo_login');
         }
-        fetchNews();
+        fetchMemes();
         setInterval(loadData, 3000);
     };
 
@@ -186,7 +182,6 @@
         if (currentUserLogin) socket.emit('register', currentUserLogin);
     });
 
-    // Обработка входящих WebRTC сигналов звонка
     socket.on('incoming-call', async ({ from, offer, callType }) => {
         const callerName = dbData.users[from]?.name || from;
         if (confirm(`Входящий звонок (${callType ? 'Демонстрация экрана' : 'Голосовой'}) от ${callerName}. Принять?`)) {
@@ -209,9 +204,7 @@
         }
     });
 
-    socket.on('call-ended', () => {
-        closeCall();
-    });
+    socket.on('call-ended', () => { closeCall(); });
 
     function startHeartbeat() {
         setInterval(() => {
@@ -297,97 +290,13 @@
         location.reload();
     }
 
-    // ЛОГИКА ВЕБИРИЧ ЗВОНКОВ И ДЕМОНСТРАЦИИ
-    async function createPeerConnection(toLogin) {
-        peerConnection = new RTCPeerConnection(rtcConfig);
-
-        remoteStream = new MediaStream();
-        document.getElementById('remoteVideo').srcObject = remoteStream;
-
-        peerConnection.ontrack = (event) => {
-            event.streams[0].getTracks().forEach(track => remoteStream.addTrack(track));
-        };
-
-        peerConnection.onicecandidate = (event) => {
-            if (event.candidate) {
-                socket.emit('ice-candidate', { to: toLogin, candidate: event.candidate });
-            }
-        };
-
-        if (localStream) {
-            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-        }
-    }
-
-    async function startCall(isScreenShare) {
-        if (!currentPartner || currentPartner === currentUserLogin) return alert.error?.() || alert('Выберите собеседника');
-        
-        document.getElementById('callModal').classList.remove('hidden');
-        document.getElementById('callStatusText').textContent = isScreenShare ? 'Запуск демонстрации экрана...' : 'Вызов...';
-
-        try {
-            if (isScreenShare) {
-                localStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-            } else {
-                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            }
-            document.getElementById('localVideo').srcObject = localStream;
-
-            await createPeerConnection(currentPartner);
-            const offer = await peerConnection.createOffer();
-            await peerConnection.setLocalDescription(offer);
-
-            socket.emit('call-user', { to: currentPartner, offer, from: currentUserLogin, callType: isScreenShare });
-        } catch (e) {
-            alert('Не удалось получить доступ к медиаустройствам или экрану');
-            closeCall();
-        }
-    }
-
-    async function acceptCall(offer, isScreenShare) {
-        document.getElementById('callModal').classList.remove('hidden');
-        document.getElementById('callStatusText').textContent = 'Подключение звонка...';
-
-        try {
-            if (isScreenShare) {
-                localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false }); // для экрана часто берут только аудио с микрофона или пустой поток
-            } else {
-                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            }
-            document.getElementById('localVideo').srcObject = localStream;
-
-            await createPeerConnection(currentPartner);
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-            const answer = await peerConnection.createAnswer();
-            await peerConnection.setLocalDescription(answer);
-
-            socket.emit('call-accepted', { to: currentPartner, answer });
-            document.getElementById('callStatusText').textContent = 'Соединение установлено';
-        } catch (e) {
-            closeCall();
-        }
-    }
-
-    function endCall() {
-        socket.emit('hang-up', { to: currentPartner });
-        closeCall();
-    }
-
-    function closeCall() {
-        if (localStream) localStream.getTracks().forEach(t => t.stop());
-        if (peerConnection) peerConnection.close();
-        peerConnection = null;
-        localStream = null;
-        document.getElementById('callModal').classList.add('hidden');
-    }
-
-    async function fetchNews() {
+    async function fetchMemes() {
         try {
             const res = await fetch('/api/news');
             const data = await res.json();
             if (data.success) {
-                googleNews = data.news;
-                if (currentTab === 'news') renderNews();
+                memeList = data.memes;
+                if (currentTab === 'news') renderMemes();
             }
         } catch (e) {}
     }
@@ -405,11 +314,11 @@
         document.getElementById('callButtons').classList.add('hidden');
 
         if (tab === 'news') {
-            document.getElementById('paneTitle').textContent = 'Google Новости';
+            document.getElementById('paneTitle').textContent = 'Мемы';
             document.getElementById('leftPane').classList.add('hidden');
-            document.getElementById('contentTitle').textContent = 'Свежие новости от Google';
+            document.getElementById('contentTitle').textContent = 'Свежие мемы из сети';
             document.getElementById('newsContainer').classList.remove('hidden');
-            renderNews();
+            renderMemes();
         } else {
             document.getElementById('leftPane').classList.remove('hidden');
             if (tab === 'messages') {
@@ -494,7 +403,6 @@
         document.getElementById('contentTitle').textContent = titleText;
         document.getElementById('chatContainer').classList.remove('hidden');
         
-        // Показываем кнопки звонка только при общении с реальными друзьями/пользователями (не в избранном)
         if (login !== currentUserLogin) {
             document.getElementById('callButtons').classList.remove('hidden');
         } else {
@@ -524,20 +432,22 @@
         messagesBox.scrollTop = messagesBox.scrollHeight;
     }
 
-    function renderNews() {
+    function renderMemes() {
         const newsList = document.getElementById('newsList');
         newsList.innerHTML = '';
-        if (googleNews.length === 0) {
-            newsList.innerHTML = 'Загрузка...';
+        if (memeList.length === 0) {
+            newsList.innerHTML = 'Загрузка мемов...';
             return;
         }
-        googleNews.forEach(n => {
-            const a = document.createElement('a');
-            a.className = 'news-item';
-            a.href = n.link;
-            a.target = '_blank';
-            a.innerHTML = `<b>${n.date}</b><br>${n.title}`;
-            newsList.appendChild(a);
+        memeList.forEach(m => {
+            const div = document.createElement('div');
+            div.className = 'meme-card';
+            div.innerHTML = `
+                <p>${m.title}</p>
+                <img src="${m.image}" alt="meme" loading="lazy">
+                <br><small style="color:#888; font-size:11px;">Автор: ${m.author}</small>
+            `;
+            newsList.appendChild(div);
         });
     }
 
@@ -559,6 +469,80 @@
 
     function checkEnter(e) {
         if (e.key === 'Enter') sendMessage();
+    }
+
+    // WebRTC функции звонков
+    async function createPeerConnection(toLogin) {
+        peerConnection = new RTCPeerConnection(rtcConfig);
+        remoteStream = new MediaStream();
+        document.getElementById('remoteVideo').srcObject = remoteStream;
+
+        peerConnection.ontrack = (event) => {
+            event.streams[0].getTracks().forEach(track => remoteStream.addTrack(track));
+        };
+        peerConnection.onicecandidate = (event) => {
+            if (event.candidate) socket.emit('ice-candidate', { to: toLogin, candidate: event.candidate });
+        };
+        if (localStream) {
+            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+        }
+    }
+
+    async function startCall(isScreenShare) {
+        if (!currentPartner || currentPartner === currentUserLogin) return alert('Выберите собеседника');
+        document.getElementById('callModal').classList.remove('hidden');
+        document.getElementById('callStatusText').textContent = isScreenShare ? 'Запуск демонстрации...' : 'Вызов...';
+
+        try {
+            if (isScreenShare) {
+                localStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+            } else {
+                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            }
+            document.getElementById('localVideo').srcObject = localStream;
+
+            await createPeerConnection(currentPartner);
+            const offer = await peerConnection.createOffer();
+            await peerConnection.setLocalDescription(offer);
+
+            socket.emit('call-user', { to: currentPartner, offer, from: currentUserLogin, callType: isScreenShare });
+        } catch (e) {
+            alert('Ошибка доступа к камере/экрану');
+            closeCall();
+        }
+    }
+
+    async function acceptCall(offer, isScreenShare) {
+        document.getElementById('callModal').classList.remove('hidden');
+        document.getElementById('callStatusText').textContent = 'Подключение...';
+
+        try {
+            localStream = await navigator.mediaDevices.getUserMedia({ video: !isScreenShare, audio: true });
+            document.getElementById('localVideo').srcObject = localStream;
+
+            await createPeerConnection(currentPartner);
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+
+            socket.emit('call-accepted', { to: currentPartner, answer });
+            document.getElementById('callStatusText').textContent = 'Соединение установлено';
+        } catch (e) {
+            closeCall();
+        }
+    }
+
+    function endCall() {
+        socket.emit('hang-up', { to: currentPartner });
+        closeCall();
+    }
+
+    function closeCall() {
+        if (localStream) localStream.getTracks().forEach(t => t.stop());
+        if (peerConnection) peerConnection.close();
+        peerConnection = null;
+        localStream = null;
+        document.getElementById('callModal').classList.add('hidden');
     }
 </script>
 
