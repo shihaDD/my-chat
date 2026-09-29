@@ -1,363 +1,471 @@
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const fs = require('fs');
-const path = require('path');
-
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-    maxHttpBufferSize: 20 * 1024 * 1024 // Поддержка больших файлов и аватарок
-});
-
-app.use(express.static('public'));
-
-const DB_FILE = path.join(__dirname, 'database.json');
-
-function loadDatabase() {
-    if (fs.existsSync(DB_FILE)) {
-        try {
-            const data = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-            return {
-                pendingCodes: data.pendingCodes || {},
-                registeredUsers: data.registeredUsers || {},
-                groups: data.groups || [],
-                communities: data.communities || [],
-                messages: data.messages || {},
-                mutedChats: data.mutedChats || {} // Хранилище заглушенных чатов: { phone: [chatId1, chatId2] }
-            };
-        } catch (e) {
-            console.error('Ошибка чтения базы данных, создаем новую:', e);
-        }
-    }
-    return {
-        pendingCodes: {},
-        registeredUsers: {},
-        groups: [],
-        communities: [],
-        messages: {},
-        mutedChats: {}
-    };
-}
-
-function saveDatabase() {
-    const data = {
-        pendingCodes,
-        registeredUsers,
-        groups,
-        communities,
-        messages,
-        mutedChats
-    };
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
-}
-
-let db = loadDatabase();
-const pendingCodes = db.pendingCodes;
-const registeredUsers = db.registeredUsers;
-const activeUsers = {}; 
-let groups = db.groups;
-let communities = db.communities;
-const messages = db.messages;
-const mutedChats = db.mutedChats;
-
-// Функция для сохранения базы и рассылки актуальных списков и аватарок всем клиентам
-function updateAllLists() {
-    saveDatabase();
-    io.emit('groups_list', groups);
-    io.emit('communities_list', communities);
-}
-
-io.on('connection', (socket) => {
-    console.log('Пользователь подключился:', socket.id);
-
-    // При подключении сразу отправляем актуальные списки и аватарки
-    socket.emit('groups_list', groups);
-    socket.emit('communities_list', communities);
-
-    function getPhoneBySocket(sId) {
-        for (const [phone, id] of Object.entries(activeUsers)) {
-            if (id === sId) return phone;
-        }
-        return null;
-    }
-
-    socket.on('request_code', ({ phone }) => {
-        const code = Math.floor(1000 + Math.random() * 9000).toString();
-        pendingCodes[phone] = code;
-        saveDatabase();
-        socket.emit('code_sent_debug', { code });
-    });
-
-    socket.on('verify_code', ({ name, phone, code }) => {
-        if (pendingCodes[phone] && pendingCodes[phone] === code) {
-            delete pendingCodes[phone];
-            registeredUsers[phone] = { name, phone, isOnline: true };
-            activeUsers[phone] = socket.id;
-            socket.emit('verification_result', { success: true });
-            socket.emit('all_messages', messages);
-            socket.emit('muted_chats_list', mutedChats[phone] || []);
-            updateAllLists();
-        } else {
-            socket.emit('verification_result', { success: false, message: 'Неверный код подтверждения!' });
-        }
-    });
-
-    socket.on('register_session', ({ phone, name }) => {
-        if (phone && name) {
-            registeredUsers[phone] = { name, phone, isOnline: true };
-            activeUsers[phone] = socket.id;
-            socket.emit('muted_chats_list', mutedChats[phone] || []);
-            updateAllLists();
-        }
-    });
-
-    // --- УПРАВЛЕНИЕ УВЕДОМЛЕНИЯМИ (МЬЮТ / МУТ ДРУЗЕЙ, ГРУПП, СООБЩЕСТВ) ---
-    socket.on('toggle_mute_chat', ({ chatId }) => {
-        const phone = getPhoneBySocket(socket.id);
-        if (!phone) return;
-
-        if (!mutedChats[phone]) {
-            mutedChats[phone] = [];
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Мессенджер</title>
+    <style>
+        :root {
+            --bg-body: #e5ddd5;
+            --bg-sidebar: #ffffff;
+            --sidebar-header: #f0f2f5;
+            --search-bg: #f6f6f6;
+            --search-input-bg: #ffffff;
+            --border-color: #e1e2e5;
+            --chat-hover: #f5f5f5;
+            --chat-active: #ebebeb;
+            --chat-area-bg: #efeae2;
+            --chat-header: #f0f2f5;
+            --text-main: #333333;
+            --text-secondary: #666666;
+            --msg-in: #ffffff;
+            --msg-out: #d9fdd3;
+            --accent: #00a884;
+            --accent-hover: #019073;
         }
 
-        const index = mutedChats[phone].indexOf(chatId);
-        let isMuted = false;
-
-        if (index > -1) {
-            mutedChats[phone].splice(index, 1);
-            isMuted = false;
-        } else {
-            mutedChats[phone].push(chatId);
-            isMuted = true;
+        /* Тема: Темная */
+        body.theme-dark {
+            --bg-body: #111b21;
+            --bg-sidebar: #111b21;
+            --sidebar-header: #202c33;
+            --search-bg: #111b21;
+            --search-input-bg: #202c33;
+            --border-color: #222d34;
+            --chat-hover: #202c33;
+            --chat-active: #2a3942;
+            --chat-area-bg: #0b141a;
+            --chat-header: #202c33;
+            --text-main: #e9edef;
+            --text-secondary: #8696a0;
+            --msg-in: #202c33;
+            --msg-out: #005c4b;
+            --accent: #00a884;
+            --accent-hover: #019073;
         }
 
-        saveDatabase();
-        socket.emit('chat_mute_status', { chatId, isMuted });
-    });
+        /* Тема: Ночная (OLED) */
+        body.theme-oled {
+            --bg-body: #000000;
+            --bg-sidebar: #000000;
+            --sidebar-header: #121212;
+            --search-bg: #000000;
+            --search-input-bg: #1e1e1e;
+            --border-color: #222222;
+            --chat-hover: #1a1a1a;
+            --chat-active: #262626;
+            --chat-area-bg: #000000;
+            --chat-header: #121212;
+            --text-main: #ffffff;
+            --text-secondary: #aaaaaa;
+            --msg-in: #1e1e1e;
+            --msg-out: #004d40;
+            --accent: #00bfa5;
+            --accent-hover: #00897b;
+        }
 
-    socket.on('check_contact', ({ phone, autoAdd }) => {
-        const targetUser = registeredUsers[phone];
-        if (targetUser) {
-            const contactData = { phone: targetUser.phone, name: targetUser.name, isOnline: !!activeUsers[phone] };
-            socket.emit('contact_check_result', {
-                exists: true,
-                contact: contactData
-            });
-            if (autoAdd) {
-                socket.emit('auto_added_contact', contactData);
+        /* Тема: Мятная */
+        body.theme-mint {
+            --bg-body: #e0f2f1;
+            --bg-sidebar: #ffffff;
+            --sidebar-header: #b2dfdb;
+            --search-bg: #e0f2f1;
+            --search-input-bg: #ffffff;
+            --border-color: #b2dfdb;
+            --chat-hover: #b2dfdb55;
+            --chat-active: #b2dfdbaa;
+            --chat-area-bg: #f5fbfb;
+            --chat-header: #b2dfdb;
+            --text-main: #004d40;
+            --text-secondary: #00796b;
+            --msg-in: #ffffff;
+            --msg-out: #b2dfdb;
+            --accent: #00897b;
+            --accent-hover: #00695c;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
+        body { display: flex; height: 100vh; background: var(--bg-body); color: var(--text-main); transition: background 0.3s, color 0.3s; }
+        
+        /* Авторизация */
+        #auth-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000;
+        }
+        .auth-card { background: var(--bg-sidebar); color: var(--text-main); padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); width: 350px; text-align: center; }
+        .auth-card h2 { margin-bottom: 20px; }
+        .auth-card input, .auth-card select { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--search-input-bg); color: var(--text-main); }
+        .auth-card button { width: 100%; padding: 10px; background: var(--accent); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        .auth-card button:hover { background: var(--accent-hover); }
+
+        /* Интерфейс мессенджера */
+        .sidebar { width: 350px; background: var(--bg-sidebar); border-right: 1px solid var(--border-color); display: flex; flex-direction: column; }
+        .sidebar-header { padding: 15px; background: var(--sidebar-header); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); }
+        .search-box { padding: 10px; background: var(--search-bg); }
+        .search-box input { width: 100%; padding: 8px 12px; border: none; border-radius: 20px; background: var(--search-input-bg); color: var(--text-main); outline: none; }
+        
+        .chat-list { flex: 1; overflow-y: auto; }
+        .chat-item { display: flex; align-items: center; padding: 12px 15px; cursor: pointer; border-bottom: 1px solid var(--border-color); position: relative; }
+        .chat-item:hover { background: var(--chat-hover); }
+        .chat-item.active { background: var(--chat-active); }
+        .avatar { width: 45px; height: 45px; border-radius: 50%; background: var(--border-color); display: flex; justify-content: center; align-items: center; margin-right: 12px; font-weight: bold; color: var(--text-secondary); overflow: hidden; flex-shrink: 0; }
+        .avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .chat-info { flex: 1; overflow: hidden; }
+        .chat-name { font-weight: bold; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-main); }
+        .chat-last-msg { font-size: 13px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mute-icon { font-size: 12px; color: var(--text-secondary); margin-left: 5px; }
+
+        .chat-area { flex: 1; display: flex; flex-direction: column; background: var(--chat-area-bg); }
+        .chat-header { padding: 10px 20px; background: var(--chat-header); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); }
+        .chat-header-info { display: flex; align-items: center; }
+        .chat-actions button { background: none; border: none; cursor: pointer; font-size: 16px; margin-left: 15px; color: var(--text-secondary); }
+        .chat-actions button:hover { color: var(--text-main); }
+
+        .messages-container { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; }
+        .message { max-width: 60%; padding: 8px 12px; margin-bottom: 8px; border-radius: 8px; position: relative; word-wrap: break-word; color: var(--text-main); }
+        .message.incoming { background: var(--msg-in); align-self: flex-start; }
+        .message.outgoing { background: var(--msg-out); align-self: flex-end; }
+        .message .msg-time { font-size: 10px; color: var(--text-secondary); float: right; margin-left: 10px; margin-top: 5px; }
+
+        .message-input-area { padding: 10px 20px; background: var(--chat-header); display: flex; align-items: center; border-top: 1px solid var(--border-color); }
+        .message-input-area input { flex: 1; padding: 10px 15px; border: 1px solid var(--border-color); border-radius: 20px; outline: none; background: var(--search-input-bg); color: var(--text-main); }
+        .message-input-area button { background: var(--accent); color: white; border: none; padding: 10px 20px; margin-left: 10px; border-radius: 20px; cursor: pointer; font-weight: bold; }
+        .message-input-area button:hover { background: var(--accent-hover); }
+
+        /* Модальное окно настроек темы */
+        #settings-modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1001;
+        }
+        .modal-card { background: var(--bg-sidebar); color: var(--text-main); padding: 25px; border-radius: 8px; width: 320px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+        .modal-card h3 { margin-bottom: 15px; }
+        .modal-card select { width: 100%; padding: 8px; margin-bottom: 15px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--search-input-bg); color: var(--text-main); }
+        .modal-card button { width: 100%; padding: 8px; background: var(--accent); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body class="theme-light">
+
+    <!-- Экран авторизации -->
+    <div id="auth-screen">
+        <div class="auth-card">
+            <h2>Вход в мессенджер</h2>
+            <input type="text" id="auth-name" placeholder="Ваше имя">
+            <input type="text" id="auth-phone" placeholder="Номер телефона (например, 79991234567)">
+            <button id="auth-btn">Войти</button>
+        </div>
+    </div>
+
+    <!-- Модальное окно настроек (смена темы) -->
+    <div id="settings-modal" class="hidden">
+        <div class="modal-card">
+            <h3>Настройки темы</h3>
+            <label style="font-size: 14px; display: block; margin-bottom: 5px;">Выберите тему оформления:</label>
+            <select id="theme-select">
+                <option value="theme-light">Классическая светлая</option>
+                <option value="theme-dark">Тёмная (WhatsApp стиль)</option>
+                <option value="theme-oled">Ночная (OLED Черная)</option>
+                <option value="theme-mint">Мятная (Зеленоватая)</option>
+            </select>
+            <button onclick="closeSettingsModal()">Сохранить и закрыть</button>
+        </div>
+    </div>
+
+    <!-- Основной интерфейс -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <span id="current-user-label" style="font-weight: bold;">Профиль</span>
+            <div>
+                <button onclick="openSettingsModal()" title="Настройки темы" style="cursor:pointer; border:none; background:none; font-size:16px;">⚙️</button>
+                <button onclick="openCreateGroupModal()" title="Создать группу" style="cursor:pointer; border:none; background:none; font-size:16px; margin-left:8px;">👥</button>
+                <button onclick="openCreateCommunityModal()" title="Создать сообщество" style="cursor:pointer; border:none; background:none; font-size:16px; margin-left:8px;">📢</button>
+            </div>
+        </div>
+        <div class="search-box">
+            <input type="text" id="search-input" placeholder="Поиск или новый чат...">
+        </div>
+        <div class="chat-list" id="chat-list">
+            <!-- Список чатов -->
+        </div>
+    </div>
+
+    <div class="chat-area">
+        <div class="chat-header">
+            <div class="chat-header-info">
+                <div class="avatar" id="active-chat-avatar">#</div>
+                <div>
+                    <div id="active-chat-name" style="font-weight: bold;">Выберите чат</div>
+                    <div id="active-chat-status" style="font-size: 12px; color: var(--text-secondary);"></div>
+                </div>
+            </div>
+            <div class="chat-actions">
+                <button id="mute-chat-btn" title="Отключить/включить уведомления" onclick="toggleMuteCurrentChat()">🔕</button>
+            </div>
+        </div>
+        <div class="messages-container" id="messages-container">
+            <!-- Сообщения -->
+        </div>
+        <div class="message-input-area" id="input-area" style="display: none;">
+            <input type="text" id="message-input" placeholder="Введите сообщение...">
+            <button id="send-btn">Отправить</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+
+        let myPhone = localStorage.getItem('myPhone');
+        let myName = localStorage.getItem('myName');
+        
+        // Загрузка сохраненной темы
+        let currentTheme = localStorage.getItem('appTheme') || 'theme-light';
+        applyTheme(currentTheme);
+
+        let activeChatId = null;
+        let activeChatType = null;
+        
+        let allMessages = {};
+        let groupsList = [];
+        let communitiesList = [];
+        let mutedChats = [];
+
+        if (myPhone && myName) {
+            document.getElementById('auth-screen').classList.add('hidden');
+            document.getElementById('current-user-label').innerText = myName;
+            socket.emit('register_session', { phone: myPhone, name: myName });
+        }
+
+        document.getElementById('auth-btn').addEventListener('click', () => {
+            const name = document.getElementById('auth-name').value.trim();
+            const phone = document.getElementById('auth-phone').value.trim();
+            if (name && phone) {
+                myPhone = phone;
+                myName = name;
+                localStorage.setItem('myPhone', myPhone);
+                localStorage.setItem('myName', myName);
+                document.getElementById('auth-screen').classList.add('hidden');
+                document.getElementById('current-user-label').innerText = myName;
+                socket.emit('register_session', { phone: myPhone, name: myName });
             }
-        } else {
-            socket.emit('contact_check_result', { exists: false });
+        });
+
+        // Управление темой
+        function applyTheme(themeName) {
+            document.body.className = themeName;
+            localStorage.setItem('appTheme', themeName);
+            document.getElementById('theme-select').value = themeName;
         }
-    });
 
-    socket.on('create_group', ({ name, description, members, creator }) => {
-        const groupId = 'group_' + Date.now();
-        const newGroup = { id: groupId, name, description: description || '', avatar: '', members, creator };
-        groups.push(newGroup);
-        updateAllLists();
-    });
+        document.getElementById('theme-select').addEventListener('change', (e) => {
+            applyTheme(e.target.value);
+        });
 
-    socket.on('create_community', ({ name, description, creator }) => {
-        const comId = 'com_' + Date.now();
-        const newCom = { id: comId, name, description: description || '', avatar: '', creator, subscribers: [creator] };
-        communities.push(newCom);
-        updateAllLists();
-    });
-
-    socket.on('delete_group', ({ groupId, myPhone }) => {
-        const group = groups.find(g => g.id === groupId);
-        if (group && group.creator === myPhone) {
-            groups = groups.filter(g => g.id !== groupId);
-            delete messages[`group_${groupId}`];
-            updateAllLists();
+        function openSettingsModal() {
+            document.getElementById('settings-modal').classList.remove('hidden');
         }
-    });
 
-    socket.on('delete_community', ({ communityId, myPhone }) => {
-        const com = communities.find(c => c.id === communityId);
-        if (com && com.creator === myPhone) {
-            communities = communities.filter(c => c.id !== communityId);
-            delete messages[`community_${communityId}`];
-            updateAllLists();
+        function closeSettingsModal() {
+            document.getElementById('settings-modal').classList.add('hidden');
         }
-    });
 
-    socket.on('join_group_by_link', ({ groupId, myPhone }) => {
-        const group = groups.find(g => g.id === groupId);
-        if (group && !group.members.includes(myPhone)) {
-            group.members.push(myPhone);
-            updateAllLists();
-            io.emit('group_updated', group);
-        }
-    });
+        socket.on('all_messages', (data) => {
+            allMessages = data;
+            renderChatList();
+            if (activeChatId) renderMessages();
+        });
 
-    socket.on('join_community_by_link', ({ communityId, myPhone }) => {
-        const com = communities.find(c => c.id === communityId);
-        if (com && !com.subscribers.includes(myPhone)) {
-            com.subscribers.push(myPhone);
-            updateAllLists();
-            io.emit('community_updated', com);
-        }
-    });
+        socket.on('groups_list', (groups) => {
+            groupsList = groups;
+            renderChatList();
+        });
 
-    // --- ОБНОВЛЕНИЕ ИНФОРМАЦИИ И АВАТАРОК ---
-    socket.on('update_group_info', ({ groupId, name, description, avatar, myPhone }) => {
-        const group = groups.find(g => g.id === groupId);
-        if (group && group.creator === myPhone) {
-            group.name = name;
-            group.description = description;
-            if (avatar !== undefined) group.avatar = avatar; // Сохраняем новую аватарку группы
-            updateAllLists();
-            io.emit('group_updated', group);
-        }
-    });
+        socket.on('communities_list', (communities) => {
+            communitiesList = communities;
+            renderChatList();
+        });
 
-    socket.on('update_community_info', ({ communityId, name, description, avatar, myPhone }) => {
-        const com = communities.find(c => c.id === communityId);
-        if (com && com.creator === myPhone) {
-            com.name = name;
-            com.description = description;
-            if (avatar !== undefined) com.avatar = avatar; // Сохраняем новую аватарку сообщества
-            updateAllLists();
-            io.emit('community_updated', com);
-        }
-    });
+        socket.on('muted_chats_list', (muted) => {
+            mutedChats = muted;
+            renderChatList();
+            updateMuteButtonUI();
+        });
 
-    socket.on('add_group_member', ({ groupId, phone }) => {
-        const group = groups.find(g => g.id === groupId);
-        if (group && !group.members.includes(phone)) {
-            group.members.push(phone);
-            updateAllLists();
-            io.emit('group_updated', group);
-        }
-    });
+        socket.on('chat_mute_status', ({ chatId, isMuted }) => {
+            if (isMuted) {
+                if (!mutedChats.includes(chatId)) mutedChats.push(chatId);
+            } else {
+                mutedChats = mutedChats.filter(id => id !== chatId);
+            }
+            renderChatList();
+            updateMuteButtonUI();
+        });
 
-    socket.on('remove_group_member', ({ groupId, phone }) => {
-        const group = groups.find(g => g.id === groupId);
-        if (group) {
-            group.members = group.members.filter(p => p !== phone);
-            updateAllLists();
-            io.emit('group_updated', group);
-        }
-    });
+        socket.on('message', (msg) => {
+            let chatKey = '';
+            if (msg.type === 'group') {
+                chatKey = `group_${msg.groupId}`;
+            } else if (msg.type === 'community') {
+                chatKey = `community_${msg.communityId}`;
+            } else {
+                chatKey = msg.fromPhone === myPhone ? `${msg.fromPhone}_${msg.fromPhone}` : [msg.fromPhone, myPhone].sort().join('_');
+            }
 
-    socket.on('add_community_member', ({ communityId, phone }) => {
-        const com = communities.find(c => c.id === communityId);
-        if (com && !com.subscribers.includes(phone)) {
-            com.subscribers.push(phone);
-            updateAllLists();
-            io.emit('community_updated', com);
-        }
-    });
+            if (!allMessages[chatKey]) allMessages[chatKey] = [];
+            allMessages[chatKey].push(msg);
+            renderChatList();
+            if (activeChatId === chatKey || (activeChatType === 'private' && activeChatId === msg.fromPhone)) {
+                renderMessages();
+            }
+        });
 
-    socket.on('remove_community_member', ({ communityId, phone }) => {
-        const com = communities.find(c => c.id === communityId);
-        if (com) {
-            com.subscribers = com.subscribers.filter(p => p !== phone);
-            updateAllLists();
-            io.emit('community_updated', com);
-        }
-    });
+        function renderChatList() {
+            const listEl = document.getElementById('chat-list');
+            listEl.innerHTML = '';
 
-    // --- ЛИЧНЫЕ СООБЩЕНИЯ И ИЗБРАННОЕ ---
-    socket.on('private_message', ({ toPhone, message, file }) => {
-        const senderPhone = getPhoneBySocket(socket.id);
-        let senderName = 'Пользователь';
-        if (senderPhone && registeredUsers[senderPhone]) {
-            senderName = registeredUsers[senderPhone].name;
-        }
-        if (!senderPhone) return;
+            const favKey = `${myPhone}_${myPhone}`;
+            const isFavMuted = mutedChats.includes(favKey);
+            const favDiv = document.createElement('div');
+            favDiv.className = `chat-item ${activeChatId === favKey ? 'active' : ''}`;
+            favDiv.innerHTML = `
+                <div class="avatar">⭐</div>
+                <div class="chat-info">
+                    <div class="chat-name">Избранное ${isFavMuted ? '<span class="mute-icon">🔕</span>' : ''}</div>
+                    <div class="chat-last-msg">Сохраненные сообщения</div>
+                </div>
+            `;
+            favDiv.onclick = () => selectChat(favKey, 'favorites', 'Избранное', '⭐');
+            listEl.appendChild(favDiv);
 
-        // Если отправляем себе (Избранное) — фиксированный ключ, чтобы чат не очищался
-        const chatKey = senderPhone === toPhone ? `${senderPhone}_${senderPhone}` : [senderPhone, toPhone].sort().join('_');
+            groupsList.forEach(group => {
+                if (group.members && group.members.includes(myPhone)) {
+                    const chatKey = `group_${group.id}`;
+                    const isMuted = mutedChats.includes(chatKey);
+                    const div = document.createElement('div');
+                    div.className = `chat-item ${activeChatId === chatKey ? 'active' : ''}`;
+                    div.innerHTML = `
+                        <div class="avatar">${group.avatar ? `<img src="${group.avatar}">` : '👥'}</div>
+                        <div class="chat-info">
+                            <div class="chat-name">${group.name} ${isMuted ? '<span class="mute-icon">🔕</span>' : ''}</div>
+                            <div class="chat-last-msg">Группа</div>
+                        </div>
+                    `;
+                    div.onclick = () => selectChat(chatKey, 'group', group.name, group.avatar || '👥', group.id);
+                    listEl.appendChild(div);
+                }
+            });
 
-        if (!messages[chatKey]) messages[chatKey] = [];
-        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const msgData = { fromPhone: senderPhone, fromName: senderName, text: message, file, time };
-                
-        messages[chatKey].push(msgData);
-        saveDatabase();
-
-        const targetSocketId = activeUsers[toPhone];
-        if (targetSocketId && senderPhone !== toPhone) {
-            const recipientMuted = mutedChats[toPhone] && mutedChats[toPhone].includes(chatKey);
-            io.to(targetSocketId).emit('message', { ...msgData, isMuted: recipientMuted });
-        } else if (senderPhone === toPhone) {
-            socket.emit('message', msgData);
-        }
-    });
-
-    // --- СООБЩЕНИЯ ГРУПП ---
-    socket.on('group_message', ({ groupId, message, file }) => {
-        const senderPhone = getPhoneBySocket(socket.id);
-        let senderName = 'Пользователь';
-        if (senderPhone && registeredUsers[senderPhone]) {
-            senderName = registeredUsers[senderPhone].name;
-        }
-        if (!senderPhone) return;
-
-        const chatKey = `group_${groupId}`;
-        if (!messages[chatKey]) messages[chatKey] = [];
-        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const msgData = { groupId, fromPhone: senderPhone, fromName: senderName, text: message, file, time, type: 'group' };
-                
-        messages[chatKey].push(msgData);
-        saveDatabase();
-
-        const group = groups.find(g => g.id === groupId);
-        if (group) {
-            group.members.forEach(phone => {
-                const sId = activeUsers[phone];
-                if (sId) {
-                    const recipientMuted = mutedChats[phone] && mutedChats[phone].includes(chatKey);
-                    io.to(sId).emit('message', { ...msgData, isMuted: recipientMuted });
+            communitiesList.forEach(com => {
+                if (com.subscribers && com.subscribers.includes(myPhone)) {
+                    const chatKey = `community_${com.id}`;
+                    const isMuted = mutedChats.includes(chatKey);
+                    const div = document.createElement('div');
+                    div.className = `chat-item ${activeChatId === chatKey ? 'active' : ''}`;
+                    div.innerHTML = `
+                        <div class="avatar">${com.avatar ? `<img src="${com.avatar}">` : '📢'}</div>
+                        <div class="chat-info">
+                            <div class="chat-name">${com.name} ${isMuted ? '<span class="mute-icon">🔕</span>' : ''}</div>
+                            <div class="chat-last-msg">Сообщество</div>
+                        </div>
+                    `;
+                    div.onclick = () => selectChat(chatKey, 'community', com.name, com.avatar || '📢', com.id);
+                    listEl.appendChild(div);
                 }
             });
         }
-    });
 
-    // --- СООБЩЕНИЯ СООБЩЕСТВ ---
-    socket.on('community_message', ({ communityId, message, file }) => {
-        const senderPhone = getPhoneBySocket(socket.id);
-        let senderName = 'Пользователь';
-        if (senderPhone && registeredUsers[senderPhone]) {
-            senderName = registeredUsers[senderPhone].name;
+        function selectChat(chatId, type, name, avatar, rawId = null) {
+            activeChatId = chatId;
+            activeChatType = type;
+            document.getElementById('active-chat-name').innerText = name;
+            
+            const avatarEl = document.getElementById('active-chat-avatar');
+            if (avatar.startsWith('http') || avatar.startsWith('data:')) {
+                avatarEl.innerHTML = `<img src="${avatar}">`;
+            } else {
+                avatarEl.innerHTML = avatar;
+            }
+
+            document.getElementById('input-area').style.display = 'flex';
+            renderChatList();
+            renderMessages();
+            updateMuteButtonUI();
         }
-        if (!senderPhone) return;
 
-        const chatKey = `community_${communityId}`;
-        if (!messages[chatKey]) messages[chatKey] = [];
-        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        const msgData = { communityId, fromPhone: senderPhone, fromName: senderName, text: message, file, time, type: 'community' };
-                
-        messages[chatKey].push(msgData);
-        saveDatabase();
+        function updateMuteButtonUI() {
+            const btn = document.getElementById('mute-chat-btn');
+            if (!activeChatId) return;
+            if (mutedChats.includes(activeChatId)) {
+                btn.innerText = '🔔 (Мут вкл)';
+                btn.style.color = '#d9534f';
+            } else {
+                btn.innerText = '🔕';
+                btn.style.color = 'var(--text-secondary)';
+            }
+        }
 
-        const com = communities.find(c => c.id === communityId);
-        if (com) {
-            com.subscribers.forEach(phone => {
-                const sId = activeUsers[phone];
-                if (sId) {
-                    const recipientMuted = mutedChats[phone] && mutedChats[phone].includes(chatKey);
-                    io.to(sId).emit('message', { ...msgData, isMuted: recipientMuted });
-                }
+        function toggleMuteCurrentChat() {
+            if (!activeChatId) return;
+            socket.emit('toggle_mute_chat', { chatId: activeChatId });
+        }
+
+        function renderMessages() {
+            const container = document.getElementById('messages-container');
+            container.innerHTML = '';
+            const msgs = allMessages[activeChatId] || [];
+
+            msgs.forEach(msg => {
+                const div = document.createElement('div');
+                const isOutgoing = msg.fromPhone === myPhone;
+                div.className = `message ${isOutgoing ? 'outgoing' : 'incoming'}`;
+                div.innerHTML = `
+                    ${!isOutgoing && activeChatType !== 'favorites' ? `<div style="font-size: 11px; font-weight: bold; color: var(--accent); margin-bottom: 2px;">${msg.fromName || 'Участник'}</div>` : ''}
+                    <div>${msg.text}</div>
+                    <div class="msg-time">${msg.time || ''}</div>
+                `;
+                container.appendChild(div);
             });
+            container.scrollTop = container.scrollHeight;
         }
-    });
 
-    socket.on('disconnect', () => {
-        const phone = getPhoneBySocket(socket.id);
-        if (phone) {
-            delete activeUsers[phone];
-            if (registeredUsers[phone]) registeredUsers[phone].isOnline = false;
+        document.getElementById('send-btn').addEventListener('click', sendMessage);
+        document.getElementById('message-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        function sendMessage() {
+            const input = document.getElementById('message-input');
+            const text = input.value.trim();
+            if (!text || !activeChatId) return;
+
+            if (activeChatType === 'favorites') {
+                socket.emit('private_message', { toPhone: myPhone, message: text });
+            } else if (activeChatType === 'group') {
+                const groupId = activeChatId.replace('group_',urrence = '');
+                socket.emit('group_message', { groupId, message: text });
+            } else if (activeChatType === 'community') {
+                const communityId = activeChatId.replace('community_', '');
+                socket.emit('community_message', { communityId, message: text });
+            } else if (activeChatType === 'private') {
+                socket.emit('private_message', { toPhone: activeChatId, message: text });
+            }
+            input.value = '';
         }
-        updateAllLists();
-    });
-});
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Сервер запущен на порту ${PORT}`);
-});
+        function openCreateGroupModal() {
+            const name = prompt('Введите название новой группы:');
+            if (name) {
+                socket.emit('create_group', { name, members: [myPhone], creator: myPhone });
+            }
+        }
+
+        function openCreateCommunityModal() {
+            const name = prompt('Введите название нового сообщества:');
+            if (name) {
+                socket.emit('create_community', { name, creator: myPhone });
+            }
+        }
+    </script>
+</body>
+</html>
