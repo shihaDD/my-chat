@@ -283,7 +283,7 @@
             </div>
             
             <h3 id="callStatusText" style="color: #66fcf1; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px;">Идет аудиовызов...</h3>
-            <p id="pttStatusIndicator" style="color: #ff007f; font-weight: bold; margin-bottom: 15px;" class="hidden">🔴 МИКРОФОН ВЫКЛЮЧЕН (Зажмите кнопку)</p>
+            <p id="pttStatusIndicator" style="color: #ff007f; font-weight: bold; margin-bottom: 15px;" class="hidden">🔴 МИКРОФОН ВЫКЛЮЧЕН (Зажмите пробел)</p>
             
             <audio id="remoteAudio" autoplay></audio>
 
@@ -584,37 +584,17 @@
     }
 
     function capturePttKey(e) {
-        e.stopPropagation();
         isCapturingKey = true;
         const input = document.getElementById('pttKeyInput');
-        input.value = 'Нажмите клавишу или кнопку мыши...';
-
-        function cleanup() {
-            isCapturingKey = false;
-            window.removeEventListener('keydown', keyCaptureHandler);
-            window.removeEventListener('mousedown', mouseCaptureHandler);
-        }
-
-        function keyCaptureHandler(ev) {
+        input.value = 'Нажмите любую клавишу...';
+        window.addEventListener('keydown', function keyCaptureHandler(ev) {
             if (!isCapturingKey) return;
             ev.preventDefault();
             input.value = ev.code;
             localStorage.setItem('v_odno_eblo_ptt_key', ev.code);
-            cleanup();
-        }
-
-        function mouseCaptureHandler(ev) {
-            if (!isCapturingKey) return;
-            if (ev.target === input) return;
-            ev.preventDefault();
-            const btnCode = 'Mouse' + ev.button;
-            input.value = btnCode;
-            localStorage.setItem('v_odno_eblo_ptt_key', btnCode);
-            cleanup();
-        }
-
-        window.addEventListener('keydown', keyCaptureHandler);
-        window.addEventListener('mousedown', mouseCaptureHandler);
+            isCapturingKey = false;
+            window.removeEventListener('keydown', keyCaptureHandler);
+        });
     }
 
     async function saveProfileSettings() {
@@ -1254,7 +1234,7 @@
             if (isMe || (isGroupChat && (groupObj?.creator === currentUserLogin || groupObj?.roles?.[currentUserLogin] === 'Администратор'))) {
                 const escapedText = m.text.replace(/'/g, "\\'").replace(/"/g, '&quot;');
                 actionBtns = `
-                    <span style="cursor:pointer; margin-left:8px; font-size:12px;" onclick="editMessagePrompt(${index}, '${escapedText}')" title="Редактировать">✏</span>
+                    <span style="cursor:pointer; margin-left:8px; font-size:12px;" onclick="editMessagePrompt(${index}, '${escapedText}')" title="Редактировать">✏️️</span>
                     <span style="cursor:pointer; margin-left:4px; font-size:12px;" onclick="deleteMessageConfirm(${index})" title="Удалить">🗑️</span>
                 `;
             }
@@ -1640,7 +1620,7 @@
         }
     }
 
-    // Слушатели PTT (Push-To-Talk) — Клавиатура и Мышь
+    // Слушатели PTT (Push-To-Talk)
     window.addEventListener('keydown', (e) => {
         if (isCapturingKey) return;
         const pttMode = localStorage.getItem('v_odno_eblo_ptt_mode') || 'voice';
@@ -1649,11 +1629,8 @@
         if (pttMode === 'key' && e.code === pttKey && !isPttActive && localStream) {
             isPttActive = true;
             setAudioTrackEnabled(true);
-            const indicator = document.getElementById('pttStatusIndicator');
-            if (indicator) {
-                indicator.textContent = '🟢 МИКРОФОН ВКЛЮЧЕН';
-                indicator.style.color = '#66fcf1';
-            }
+            document.getElementById('pttStatusIndicator').textContent = '🟢 МИКРОФОН ВКЛЮЧЕН';
+            document.getElementById('pttStatusIndicator').style.color = '#66fcf1';
         }
     });
 
@@ -1665,43 +1642,8 @@
         if (pttMode === 'key' && e.code === pttKey && isPttActive && localStream) {
             isPttActive = false;
             setAudioTrackEnabled(false);
-            const indicator = document.getElementById('pttStatusIndicator');
-            if (indicator) {
-                indicator.textContent = '🔴 МИКРОФОН ВЫКЛЮЧЕН (Зажмите кнопку)';
-                indicator.style.color = '#ff007f';
-            }
-        }
-    });
-
-    window.addEventListener('mousedown', (e) => {
-        if (isCapturingKey) return;
-        const pttMode = localStorage.getItem('v_odno_eblo_ptt_mode') || 'voice';
-        const pttKey = localStorage.getItem('v_odno_eblo_ptt_key') || 'Space';
-
-        if (pttMode === 'key' && ('Mouse' + e.button) === pttKey && !isPttActive && localStream) {
-            isPttActive = true;
-            setAudioTrackEnabled(true);
-            const indicator = document.getElementById('pttStatusIndicator');
-            if (indicator) {
-                indicator.textContent = '🟢 МИКРОФОН ВКЛЮЧЕН';
-                indicator.style.color = '#66fcf1';
-            }
-        }
-    });
-
-    window.addEventListener('mouseup', (e) => {
-        if (isCapturingKey) return;
-        const pttMode = localStorage.getItem('v_odno_eblo_ptt_mode') || 'voice';
-        const pttKey = localStorage.getItem('v_odno_eblo_ptt_key') || 'Space';
-
-        if (pttMode === 'key' && ('Mouse' + e.button) === pttKey && isPttActive && localStream) {
-            isPttActive = false;
-            setAudioTrackEnabled(false);
-            const indicator = document.getElementById('pttStatusIndicator');
-            if (indicator) {
-                indicator.textContent = '🔴 МИКРОФОН ВЫКЛЮЧЕН (Зажмите кнопку)';
-                indicator.style.color = '#ff007f';
-            }
+            document.getElementById('pttStatusIndicator').textContent = '🔴 МИКРОФОН ВЫКЛЮЧЕН (Зажмите кнопку)';
+            document.getElementById('pttStatusIndicator').style.color = '#ff007f';
         }
     });
 </script>
