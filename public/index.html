@@ -3,339 +3,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Мессенджер</title>
+    <title>Чат с сохранением на GitHub</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
-        body { display: flex; height: 100vh; background: #e5ddd5; color: #333; }
-        
-        /* Авторизация */
-        #auth-screen {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #f0f2f5; display: flex; justify-content: center; align-items: center; z-index: 1000;
-        }
-        .auth-card { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 350px; text-align: center; }
-        .auth-card h2 { margin-bottom: 20px; }
-        .auth-card input { width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; }
-        .auth-card button { width: 100%; padding: 10px; background: #00a884; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
-        .auth-card button:hover { background: #019073; }
-
-        /* Интерфейс мессенджера */
-        .sidebar { width: 350px; background: white; border-right: 1px solid #e1e2e5; display: flex; flex-direction: column; }
-        .sidebar-header { padding: 15px; background: #f0f2f5; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e1e2e5; }
-        .search-box { padding: 10px; background: #f6f6f6; }
-        .search-box input { width: 100%; padding: 8px 12px; border: none; border-radius: 20px; background: white; }
-        
-        .chat-list { flex: 1; overflow-y: auto; }
-        .chat-item { display: flex; align-items: center; padding: 12px 15px; cursor: pointer; border-bottom: 1px solid #f0f2f5; position: relative; }
-        .chat-item:hover { background: #f5f5f5; }
-        .chat-item.active { background: #ebebeb; }
-        .avatar { width: 45px; height: 45px; border-radius: 50%; background: #dfe5e7; display: flex; justify-content: center; align-items: center; margin-right: 12px; font-weight: bold; color: #555; overflow: hidden; flex-shrink: 0; }
-        .avatar img { width: 100%; height: 100%; object-fit: cover; }
-        .chat-info { flex: 1; overflow: hidden; }
-        .chat-name { font-weight: bold; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .chat-last-msg { font-size: 13px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .mute-icon { font-size: 12px; color: #888; margin-left: 5px; }
-
-        .chat-area { flex: 1; display: flex; flex-direction: column; background: #efeae2; }
-        .chat-header { padding: 10px 20px; background: #f0f2f5; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e1e2e5; }
-        .chat-header-info { display: flex; align-items: center; }
-        .chat-actions button { background: none; border: none; cursor: pointer; font-size: 16px; margin-left: 15px; color: #555; }
-        .chat-actions button:hover { color: #000; }
-
-        .messages-container { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; }
-        .message { max-width: 60%; padding: 8px 12px; margin-bottom: 8px; border-radius: 8px; position: relative; word-wrap: break-word; }
-        .message.incoming { background: white; align-self: flex-start; }
-        .message.outgoing { background: #d9fdd3; align-self: flex-end; }
-        .message .msg-time { font-size: 10px; color: #999; float: right; margin-left: 10px; margin-top: 5px; }
-
-        .message-input-area { padding: 10px 20px; background: #f0f2f5; display: flex; align-items: center; }
-        .message-input-area input { flex: 1; padding: 10px 15px; border: none; border-radius: 20px; outline: none; }
-        .message-input-area button { background: #00a884; color: white; border: none; padding: 10px 20px; margin-left: 10px; border-radius: 20px; cursor: pointer; font-weight: bold; }
-        
-        .hidden { display: none !important; }
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 30px auto; padding: 20px; }
+        .box { border: 1px solid #ccc; padding: 15px; margin-bottom: 15px; border-radius: 5px; }
+        pre { background: #f4f4f4; padding: 10px; border-radius: 4px; }
+        button { padding: 8px 15px; cursor: pointer; }
     </style>
 </head>
 <body>
 
-    <!-- Экран авторизации -->
-    <div id="auth-screen">
-        <div class="auth-card">
-            <h2>Вход в мессенджер</h2>
-            <input type="text" id="auth-name" placeholder="Ваше имя">
-            <input type="text" id="auth-phone" placeholder="Номер телефона (например, 79991234567)">
-            <button id="auth-btn">Войти</button>
-        </div>
+    <h1>Управление базой данных</h1>
+
+    <div class="box">
+        <h3>Содержимое database.json с сервера:</h3>
+        <button onclick="loadData()">Обновить данные</button>
+        <pre id="dbContent">Загрузка...</pre>
     </div>
 
-    <!-- Основной интерфейс -->
-    <div class="sidebar">
-        <div class="sidebar-header">
-            <span id="current-user-label" style="font-weight: bold;">Профиль</span>
-            <div>
-                <button onclick="openCreateGroupModal()" title="Создать группу" style="cursor:pointer; border:none; background:none; font-size:16px;">👥</button>
-                <button onclick="openCreateCommunityModal()" title="Создать сообщество" style="cursor:pointer; border:none; background:none; font-size:16px; margin-left:10px;">📢</button>
-            </div>
-        </div>
-        <div class="search-box">
-            <input type="text" id="search-input" placeholder="Поиск или новый чат...">
-        </div>
-        <div class="chat-list" id="chat-list">
-            <!-- Список чатов генерируется динамически -->
-        </div>
+    <div class="box">
+        <h3>Добавить тестовое действие</h3>
+        <button onclick="sendUpdate()">Сделать запрос к /api/update</button>
     </div>
 
-    <div class="chat-area">
-        <div class="chat-header">
-            <div class="chat-header-info">
-                <div class="avatar" id="active-chat-avatar">#</div>
-                <div>
-                    <div id="active-chat-name" style="font-weight: bold;">Выберите чат</div>
-                    <div id="active-chat-status" style="font-size: 12px; color: #666;"></div>
-                </div>
-            </div>
-            <div class="chat-actions">
-                <button id="mute-chat-btn" title="Отключить/включить уведомления" onclick="toggleMuteCurrentChat()">🔕</button>
-            </div>
-        </div>
-        <div class="messages-container" id="messages-container">
-            <!-- Сообщения -->
-        </div>
-        <div class="message-input-area" id="input-area" style="display: none;">
-            <input type="text" id="message-input" placeholder="Введите сообщение...">
-            <button id="send-btn">Отправить</button>
-        </div>
-    </div>
-
-    <script src="/socket.io/socket.io.js"></script>
     <script>
-        const socket = io();
-
-        let myPhone = localStorage.getItem('myPhone');
-        let myName = localStorage.getItem('myName');
-        let activeChatId = null;
-        let activeChatType = null;
-        
-        let allMessages = {};
-        let groupsList = [];
-        let communitiesList = [];
-        let mutedChats = [];
-
-        if (myPhone && myName) {
-            document.getElementById('auth-screen').classList.add('hidden');
-            document.getElementById('current-user-label').innerText = myName;
-            socket.emit('register_session', { phone: myPhone, name: myName });
-        }
-
-        document.getElementById('auth-btn').addEventListener('click', () => {
-            const name = document.getElementById('auth-name').value.trim();
-            const phone = document.getElementById('auth-phone').value.trim();
-            if (name && phone) {
-                myPhone = phone;
-                myName = name;
-                localStorage.setItem('myPhone', myPhone);
-                localStorage.setItem('myName', myName);
-                document.getElementById('auth-screen').classList.add('hidden');
-                document.getElementById('current-user-label').innerText = myName;
-                socket.emit('register_session', { phone: myPhone, name: myName });
-            }
-        });
-
-        socket.on('all_messages', (data) => {
-            allMessages = data;
-            renderChatList();
-            if (activeChatId) renderMessages();
-        });
-
-        socket.on('groups_list', (groups) => {
-            groupsList = groups;
-            renderChatList();
-        });
-
-        socket.on('communities_list', (communities) => {
-            communitiesList = communities;
-            renderChatList();
-        });
-
-        socket.on('muted_chats_list', (muted) => {
-            mutedChats = muted;
-            renderChatList();
-            updateMuteButtonUI();
-        });
-
-        socket.on('chat_mute_status', ({ chatId, isMuted }) => {
-            if (isMuted) {
-                if (!mutedChats.includes(chatId)) mutedChats.push(chatId);
-            } else {
-                mutedChats = mutedChats.filter(id => id !== chatId);
-            }
-            renderChatList();
-            updateMuteButtonUI();
-        });
-
-        socket.on('message', (msg) => {
-            let chatKey = '';
-            if (msg.type === 'group') {
-                chatKey = `group_${msg.groupId}`;
-            } else if (msg.type === 'community') {
-                chatKey = `community_${msg.communityId}`;
-            } else {
-                chatKey = msg.fromPhone === myPhone ? `${msg.fromPhone}_${msg.fromPhone}` : [msg.fromPhone, myPhone].sort().join('_');
-            }
-
-            if (!allMessages[chatKey]) allMessages[chatKey] = [];
-            allMessages[chatKey].push(msg);
-            renderChatList();
-            if (activeChatId === chatKey || (activeChatType === 'private' && activeChatId === msg.fromPhone)) {
-                renderMessages();
-            }
-        });
-
-        function renderChatList() {
-            const listEl = document.getElementById('chat-list');
-            listEl.innerHTML = '';
-
-            const favKey = `${myPhone}_${myPhone}`;
-            const isFavMuted = mutedChats.includes(favKey);
-            const favDiv = document.createElement('div');
-            favDiv.className = `chat-item ${activeChatId === favKey ? 'active' : ''}`;
-            favDiv.innerHTML = `
-                <div class="avatar">⭐</div>
-                <div class="chat-info">
-                    <div class="chat-name">Избранное ${isFavMuted ? '<span class="mute-icon">🔕</span>' : ''}</div>
-                    <div class="chat-last-msg">Сохраненные сообщения</div>
-                </div>
-            `;
-            favDiv.onclick = () => selectChat(favKey, 'favorites', 'Избранное', '⭐');
-            listEl.appendChild(favDiv);
-
-            groupsList.forEach(group => {
-                if (group.members && group.members.includes(myPhone)) {
-                    const chatKey = `group_${group.id}`;
-                    const isMuted = mutedChats.includes(chatKey);
-                    const div = document.createElement('div');
-                    div.className = `chat-item ${activeChatId === chatKey ? 'active' : ''}`;
-                    div.innerHTML = `
-                        <div class="avatar">${group.avatar ? `<img src="${group.avatar}">` : '👥'}</div>
-                        <div class="chat-info">
-                            <div class="chat-name">${group.name} ${isMuted ? '<span class="mute-icon">🔕</span>' : ''}</div>
-                            <div class="chat-last-msg">Группа</div>
-                        </div>
-                    `;
-                    div.onclick = () => selectChat(chatKey, 'group', group.name, group.avatar || '👥', group.id);
-                    listEl.appendChild(div);
-                }
-            });
-
-            communitiesList.forEach(com => {
-                if (com.subscribers && com.subscribers.includes(myPhone)) {
-                    const chatKey = `community_${com.id}`;
-                    const isMuted = mutedChats.includes(chatKey);
-                    const div = document.createElement('div');
-                    div.className = `chat-item ${activeChatId === chatKey ? 'active' : ''}`;
-                    div.innerHTML = `
-                        <div class="avatar">${com.avatar ? `<img src="${com.avatar}">` : '📢'}</div>
-                        <div class="chat-info">
-                            <div class="chat-name">${com.name} ${isMuted ? '<span class="mute-icon">🔕</span>' : ''}</div>
-                            <div class="chat-last-msg">Сообщество</div>
-                        </div>
-                    `;
-                    div.onclick = () => selectChat(chatKey, 'community', com.name, com.avatar || '📢', com.id);
-                    listEl.appendChild(div);
-                }
-            });
-        }
-
-        function selectChat(chatId, type, name, avatar, rawId = null) {
-            activeChatId = chatId;
-            activeChatType = type;
-            document.getElementById('active-chat-name').innerText = name;
-            
-            const avatarEl = document.getElementById('active-chat-avatar');
-            if (avatar.startsWith('http') || avatar.startsWith('data:')) {
-                avatarEl.innerHTML = `<img src="${avatar}">`;
-            } else {
-                avatarEl.innerHTML = avatar;
-            }
-
-            document.getElementById('input-area').style.display = 'flex';
-            renderChatList();
-            renderMessages();
-            updateMuteButtonUI();
-        }
-
-        function updateMuteButtonUI() {
-            const btn = document.getElementById('mute-chat-btn');
-            if (!activeChatId) return;
-            if (mutedChats.includes(activeChatId)) {
-                btn.innerText = '🔔 (Мут вкл)';
-                btn.style.color = '#d9534f';
-            } else {
-                btn.innerText = '🔕';
-                btn.style.color = '#555';
+        async function loadData() {
+            try {
+                const response = await fetch('/api/data');
+                const data = await response.json();
+                document.getElementById('dbContent').textContent = JSON.stringify(data, null, 2);
+            } catch (e) {
+                document.getElementById('dbContent').textContent = 'Ошибка загрузки данных';
             }
         }
 
-        function toggleMuteCurrentChat() {
-            if (!activeChatId) return;
-            socket.emit('toggle_mute_chat', { chatId: activeChatId });
-        }
-
-        function renderMessages() {
-            const container = document.getElementById('messages-container');
-            container.innerHTML = '';
-            const msgs = allMessages[activeChatId] || [];
-
-            msgs.forEach(msg => {
-                const div = document.createElement('div');
-                const isOutgoing = msg.fromPhone === myPhone;
-                div.className = `message ${isOutgoing ? 'outgoing' : 'incoming'}`;
-                div.innerHTML = `
-                    ${!isOutgoing && activeChatType !== 'favorites' ? `<div style="font-size: 11px; font-weight: bold; color: #00a884; margin-bottom: 2px;">${msg.fromName || 'Участник'}</div>` : ''}
-                    <div>${msg.text}</div>
-                    <div class="msg-time">${msg.time || ''}</div>
-                `;
-                container.appendChild(div);
-            });
-            container.scrollTop = container.scrollHeight;
-        }
-
-        document.getElementById('send-btn').addEventListener('click', sendMessage);
-        document.getElementById('message-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendMessage();
-        });
-
-        function sendMessage() {
-            const input = document.getElementById('message-input');
-            const text = input.value.trim();
-            if (!text || !activeChatId) return;
-
-            if (activeChatType === 'favorites') {
-                socket.emit('private_message', { toPhone: myPhone, message: text });
-            } else if (activeChatType === 'group') {
-                const groupId = activeChatId.replace('group_', '');
-                socket.emit('group_message', { groupId, message: text });
-            } else if (activeChatType === 'community') {
-                const communityId = activeChatId.replace('community_', '');
-                socket.emit('community_message', { communityId, message: text });
-            } else if (activeChatType === 'private') {
-                socket.emit('private_message', { toPhone: activeChatId, message: text });
-            }
-            input.value = '';
-        }
-
-        function openCreateGroupModal() {
-            const name = prompt('Введите название новой группы:');
-            if (name) {
-                socket.emit('create_group', { name, members: [myPhone], creator: myPhone });
+        async function sendUpdate() {
+            try {
+                const response = await fetch('/api/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'test', time: new Date().toISOString() })
+                });
+                const result = await response.json();
+                alert('Данные обновлены и отправлены на GitHub!');
+                document.getElementById('dbContent').textContent = JSON.stringify(result.db, null, 2);
+            } catch (e) {
+                alert('Ошибка при обновлении');
             }
         }
 
-        function openCreateCommunityModal() {
-            const name = prompt('Введите название нового сообщества:');
-            if (name) {
-                socket.emit('create_community', { name, creator: myPhone });
-            }
-        }
+        // Загружаем данные при открытии страницы
+        loadData();
     </script>
+
 </body>
 </html>
