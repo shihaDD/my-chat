@@ -423,7 +423,7 @@
                 gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
                 osc.start(now);
                 osc.stop(now + 0.25);
-            } else { // beep по умолчанию
+            } else {
                 osc.type = 'sine';
                 osc.frequency.setValueAtTime(440, now);
                 gain.gain.setValueAtTime(0.2, now);
@@ -918,7 +918,6 @@
                     listDiv.appendChild(div);
                 });
             } else if (friendsSubTab === 'outcoming') {
-                // ИСХОДЯЩИЕ ЗАЯВКИ
                 let outcoming = [];
                 if (dbData.friendRequests) {
                     Object.entries(dbData.friendRequests).forEach(([targetUser, reqList]) => {
@@ -1103,10 +1102,13 @@
             const isMe = (m.sender === currentUserLogin);
             div.className = `msg ${isMe && currentPartner !== currentUserLogin && !isGroupChat ? 'me' : 'other'}`;
             
-            let senderName = getDisplayName(m.sender);
+            let senderName = '';
             if (isGroupChat && groupObj) {
                 const role = groupObj.roles?.[m.sender] || (groupObj.creator === m.sender ? 'Создатель' : 'Участник');
                 senderName = `🏠 ${groupObj.name} [${role}]`;
+            } else {
+                // Вывод имени отправителя (ваше имя или имя друга)
+                senderName = getDisplayName(m.sender);
             }
             
             let mediaHtml = '';
