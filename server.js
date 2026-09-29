@@ -12,25 +12,25 @@ const io = new Server(server, {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// База данных в памяти
+// Базы данных в памяти
 const users = new Map(); // username -> { password, nickname }
 const friendships = new Map(); // username -> Set of friend usernames
 const incomingRequests = new Map(); // username -> Set of pending requests
 const outgoingRequests = new Map(); // username -> Set of sent requests
 const customNames = new Map(); // "user1:user2" -> customNickname
+const communities = new Map(); // communityId -> { id, name, creator, members: Map(username -> role) }
 const messages = []; // Сообщения общего чата
 const feedItems = []; // Лента
 
-// Инициализация стартовых элементов ленты
-for (let i = 1; i <= 10; i++) {
+// Инициализация ленты
+for (let i = 1; i <= 5; i++) {
   feedItems.push({
     id: i,
     type: i % 2 === 0 ? 'video' : 'image',
     url: i % 2 === 0 ? 'https://www.w3schools.com/html/mov_bbb.mp4' : `https://picsum.photos/seed/meme${i}/400/600`,
     caption: `Мем / Видео #${i} в ленте`,
     author: 'Система',
-    likes: i * 5,
-    comments: []
+    likes: i * 5
   });
 }
 
@@ -67,7 +67,7 @@ io.on('connection', (socket) => {
     socket.emit('init_data', {
       messages,
       feed: feedItems,
-      users: Array.from(users.keys()).filter(u => u !== username)
+      communities: getCommunitiesList()
     });
     broadcastUserData(socket);
   });
@@ -98,12 +98,68 @@ io.on('connection', (socket) => {
     broadcastUserData(socket);
   });
 
+  // Управление сообществами и ролями (Создатель, Админ, Участник)
+  socket.on('create_community', ({ name }) => {
+    const user = socket.data.username;
+    if (!name) return;
+    const communityId = 'comm_' + Date.now();
+    const membersMap = new Map();
+    membersMap.set(user, 'creator'); // Создатель
+
+    communities.set(communityId, {
+      id: communityId,
+      name,
+      creator: user,
+      members: membersMap
+    });
+
+    io.to('main-room').emit('communities_updated', getCommunitiesList());
+  });
+
+  socket.on('join_community', ({ communityId }) => {
+    const user = socket.data.username;
+    const comm = communities.get(communityId);
+    if (comm && !comm.members.has(user)) {
+      comm.members.set(user, 'member'); // Участник по умолчанию
+      io.to('main-room').emit('communities_updated', getCommunitiesList());
+      socket.emit('community_joined', getCommunityDetails(communityId));
+    }
+  });
+
+  socket.on('leave_community', ({ communityId }) => {
+    const user = socket.data.username;
+    const comm = communities.get(communityId);
+    if (comm && comm.members.has(user)) {
+      if (comm.creator === user) {
+        communities.delete(communityId); // Создатель удаляет сообщество
+      } else {
+        comm.members.delete(user);
+      }
+      io.to('main-room').emit('communities_updated', getCommunitiesList());
+    }
+  });
+
+  socket.on('set_member_role', ({ communityId, targetUser, newRole }) => {
+    const user = socket.data.username;
+    const comm = communities.get(communityId);
+    if (comm && comm.members.get(user) === 'creator') {
+      if (comm.members.has(targetUser) && targetUser !== comm.creator) {
+        comm.members.set(targetUser, newRole); // 'admin' или 'member'
+        io.to('main-room').emit('communities_updated', getCommunitiesList());
+        socket.emit('community_joined', getCommunityDetails(communityId));
+      }
+    }
+  });
+
+  socket.on('get_community_details', ({ communityId }) => {
+    socket.emit('community_joined', getCommunityDetails(communityId));
+  });
+
   // Сообщения чата
   socket.on('chat_message', (data) => {
     const msg = {
       id: Date.now(),
       sender: socket.data.username,
-      recipient: data.recipient || null,
       text: data.text,
       image: data.image || null,
       timestamp: new Date().toLocaleTimeString()
@@ -112,7 +168,7 @@ io.on('connection', (socket) => {
     io.to('main-room').emit('chat_message', msg);
   });
 
-  // Индикаторы печати / отправки фото
+  // Индикаторы печати
   socket.on('typing_status', (statusData) => {
     socket.broadcast.to('main-room').emit('user_typing', {
       username: socket.data.username,
@@ -120,7 +176,7 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Кастомное имя / псевдоним друга
+  // Псевдонимы
   socket.on('set_custom_name', ({ targetUser, customName }) => {
     const user = socket.data.username;
     const key = `${user}:${targetUser}`;
@@ -132,7 +188,7 @@ io.on('connection', (socket) => {
     socket.emit('custom_name_updated', { targetUser, customName });
   });
 
-  // WebRTC Сигнализация (Звонки)
+  // WebRTC Звонки
   socket.on('webrtc_offer', (data) => {
     socket.to(data.target).emit('webrtc_offer', { offer: data.offer, sender: socket.data.username });
   });
@@ -143,34 +199,6 @@ io.on('connection', (socket) => {
 
   socket.on('webrtc_ice_candidate', (data) => {
     socket.to(data.target).emit('webrtc_ice_candidate', { candidate: data.candidate, sender: socket.data.username });
-  });
-
-  // Бесконечный скролл ленты
-  socket.on('load_more_feed', () => {
-    const lastId = feedItems.length > 0 ? feedItems[feedItems.length - 1].id : 0;
-    const newItems = [];
-    for (let i = 1; i <= 5; i++) {
-      const id = lastId + i;
-      newItems.push({
-        id,
-        type: id % 3 === 0 ? 'video' : 'image',
-        url: id % 3 === 0 ? 'https://www.w3schools.com/html/mov_bbb.mp4' : `https://picsum.photos/seed/memeNew${id}/400/600`,
-        caption: `Мем / Видео #${id} из ленты`,
-        author: 'Автоподборка',
-        likes: Math.floor(Math.random() * 50),
-        comments: []
-      });
-    }
-    feedItems.push(...newItems);
-    io.emit('feed_updated', feedItems);
-  });
-
-  socket.on('like_feed_item', ({ itemId }) => {
-    const item = feedItems.find(f => f.id === itemId);
-    if (item) {
-      item.likes++;
-      io.emit('feed_updated', feedItems);
-    }
   });
 
   socket.on('disconnect', () => {
@@ -196,6 +224,34 @@ function broadcastUserData(socket) {
   });
   
   io.to('main-room').emit('users_list', allUsers);
+}
+
+function getCommunitiesList() {
+  const list = [];
+  communities.forEach((comm, id) => {
+    list.push({
+      id,
+      name: comm.name,
+      creator: comm.creator,
+      membersCount: comm.members.size
+    });
+  });
+  return list;
+}
+
+function getCommunityDetails(communityId) {
+  const comm = communities.get(communityId);
+  if (!comm) return null;
+  const membersArr = [];
+  comm.members.forEach((role, username) => {
+    membersArr.push({ username, role });
+  });
+  return {
+    id: comm.id,
+    name: comm.name,
+    creator: comm.creator,
+    members: membersArr
+  };
 }
 
 const PORT = process.env.PORT || 3000;
