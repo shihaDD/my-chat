@@ -8,7 +8,8 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.json());
+// Увеличиваем лимит для JSON, чтобы можно было принимать картинки/файлы в base64
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 3000;
@@ -42,7 +43,7 @@ async function loadDatabase() {
         console.error('Ошибка загрузки с GitHub:', e);
     }
 
-    return { "users": {}, "friends": {}, "messagesStore": {}, "lastSeen": {} };
+    return { "users": {}, "friends": {}, "messagesStore": {}, "lastSeen": {}, "groups": {} };
 }
 
 async function saveDatabase(dbData) {
@@ -71,16 +72,15 @@ app.get('/api/data', async (req, res) => {
     res.json(db);
 });
 
-// Проверка существования логина (нужно для разделения Вход / Регистрация)
 app.get('/api/check-login/:login', async (req, res) => {
     const login = req.params.login.trim().toLowerCase();
     const db = await loadDatabase();
     res.json({ exists: !!db.users?.[login] });
 });
 
-// Регистрация
+// Регистрация с поддержкой аватара
 app.post('/api/register', async (req, res) => {
-    let { login, name, password } = req.body;
+    let { login, name, password, avatar } = req.body;
     if (!login || !name || !password) return res.status(400).json({ success: false, error: 'Заполните все поля' });
     
     login = login.trim().toLowerCase();
@@ -91,12 +91,19 @@ app.post('/api/register', async (req, res) => {
     if (!db.friends) db.friends = {};
     if (!db.messagesStore) db.messagesStore = {};
     if (!db.lastSeen) db.lastSeen = {};
+    if (!db.groups) db.groups = {};
 
     if (db.users[login]) {
         return res.status(400).json({ success: false, error: 'Логин уже занят' });
     }
 
-    db.users[login] = { login, name, password }; // Сохраняем пароль
+    db.users[login] = { 
+        login, 
+        name, 
+        password, 
+        avatar: avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1',
+        lastLoginTime: new Date().toLocaleString()
+    };
     db.friends[login] = [];
     db.messagesStore[login] = {};
     db.lastSeen[login] = Date.now();
@@ -105,7 +112,7 @@ app.post('/api/register', async (req, res) => {
     res.json({ success: true, user: db.users[login], db });
 });
 
-// Вход с проверкой пароля
+// Вход с обновлением последнего времени входа
 app.post('/api/login', async (req, res) => {
     let { login, password } = req.body;
     if (!login || !password) return res.status(400).json({ success: false, error: 'Заполните все поля' });
@@ -118,9 +125,23 @@ app.post('/api/login', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Неверный логин или пароль' });
     }
 
+    user.lastLoginTime = new Date().toLocaleString();
     db.lastSeen[login] = Date.now();
     await saveDatabase(db);
     res.json({ success: true, user, db });
+});
+
+// Обновление профиля (имя, аватар)
+app.post('/api/update-profile', async (req, res) => {
+    let { login, name, avatar } = req.body;
+    let db = await loadDatabase();
+    if (!db.users?.[login]) return res.status(400).json({ success: false, error: 'Пользователь не найден' });
+
+    if (name) db.users[login].name = name.trim();
+    if (avatar) db.users[login].avatar = avatar;
+
+    await saveDatabase(db);
+    res.json({ success: true, user: db.users[login], db });
 });
 
 app.post('/api/ping', async (req, res) => {
@@ -148,28 +169,30 @@ app.post('/api/add-friend', async (req, res) => {
     }
 
     if (!db.friends[login]) db.friends[login] = [];
-    if (!db.friends[login].includes(targetLogin)) {
-        db.friends[login].push(targetLogin);
-    }
+    if (!db.friends[login].includes(targetLogin)) db.friends[login].push(targetLogin);
 
     if (!db.friends[targetLogin]) db.friends[targetLogin] = [];
-    if (!db.friends[targetLogin].includes(login)) {
-        db.friends[targetLogin].push(login);
-    }
+    if (!db.friends[targetLogin].includes(login)) db.friends[targetLogin].push(login);
 
     await saveDatabase(db);
     res.json({ success: true, db });
 });
 
+// Отправка сообщений (с поддержкой медиа: фото, видео, файлы)
 app.post('/api/send-message', async (req, res) => {
-    const { sender, receiver, text } = req.body;
+    const { sender, receiver, text, media } = req.body;
     let db = await loadDatabase();
     
     if (!db.messagesStore) db.messagesStore = {};
     if (!db.messagesStore[sender]) db.messagesStore[sender] = {};
     if (!db.messagesStore[sender][receiver]) db.messagesStore[sender][receiver] = [];
 
-    const messageObj = { sender, text, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+    const messageObj = { 
+        sender, 
+        text: text || '', 
+        media: media || null, // объект { type: 'image'/'video'/'file', url: '...', name: '...' }
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+    };
     
     db.messagesStore[sender][receiver].push(messageObj);
 
@@ -179,6 +202,56 @@ app.post('/api/send-message', async (req, res) => {
         db.messagesStore[receiver][sender].push(messageObj);
     }
 
+    await saveDatabase(db);
+    res.json({ success: true, db });
+});
+
+// Управление группами/сообществами
+app.post('/api/create-group', async (req, res) => {
+    let { name, creator } = req.body;
+    if (!name) return res.status(400).json({ success: false, error: 'Укажите название группы' });
+
+    let db = await loadDatabase();
+    if (!db.groups) db.groups = {};
+
+    const groupId = 'group_' + Date.now();
+    db.groups[groupId] = {
+        id: groupId,
+        name: name.trim(),
+        creator,
+        members: [creator],
+        messages: []
+    };
+
+    await saveDatabase(db);
+    res.json({ success: true, db });
+});
+
+app.post('/api/join-group', async (req, res) => {
+    let { groupId, login } = req.body;
+    let db = await loadDatabase();
+    if (!db.groups?.[groupId]) return res.status(400).json({ success: false, error: 'Группа не найдена' });
+
+    if (!db.groups[groupId].members.includes(login)) {
+        db.groups[groupId].members.push(login);
+        await saveDatabase(db);
+    }
+    res.json({ success: true, db });
+});
+
+app.post('/api/send-group-message', async (req, res) => {
+    let { groupId, sender, text, media } = req.body;
+    let db = await loadDatabase();
+    if (!db.groups?.[groupId]) return res.status(400).json({ success: false });
+
+    const msg = {
+        sender,
+        text: text || '',
+        media: media || null,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    db.groups[groupId].messages.push(msg);
     await saveDatabase(db);
     res.json({ success: true, db });
 });
@@ -199,6 +272,7 @@ app.get('/api/news', async (req, res) => {
     }
 });
 
+// WebRTC сигналинг
 const onlineSockets = {};
 io.on('connection', (socket) => {
     socket.on('register', (login) => { onlineSockets[login] = socket.id; });
@@ -212,7 +286,7 @@ io.on('connection', (socket) => {
         if (onlineSockets[to]) io.to(onlineSockets[to]).emit('ice-candidate', { candidate });
     });
     socket.on('hang-up', ({ to }) => {
-        if (onlineSockets[to]) io.to(onlineSockets[to]).emit('call-ended');
+        if (onlineSockets[to]) io.to(onlineSockets[to]).emit('hang-up');
     });
     socket.on('disconnect', () => {
         for (const [login, id] of Object.entries(onlineSockets)) {
