@@ -12,10 +12,8 @@ const io = new Server(server, {
 
 app.use(express.static('public'));
 
-// Путь к файлу базы данных
 const DB_FILE = path.join(__dirname, 'database.json');
 
-// Функция загрузки данных с диска
 function loadDatabase() {
     if (fs.existsSync(DB_FILE)) {
         try {
@@ -25,7 +23,8 @@ function loadDatabase() {
                 registeredUsers: data.registeredUsers || {},
                 groups: data.groups || [],
                 communities: data.communities || [],
-                messages: data.messages || {}
+                messages: data.messages || {},
+                mutedChats: data.mutedChats || {} // Хранилище заглушенных чатов: { phone: [chatId1, chatId2] }
             };
         } catch (e) {
             console.error('Ошибка чтения базы данных, создаем новую:', e);
@@ -36,32 +35,32 @@ function loadDatabase() {
         registeredUsers: {},
         groups: [],
         communities: [],
-        messages: {}
+        messages: {},
+        mutedChats: {}
     };
 }
 
-// Функция сохранения данных на диск
 function saveDatabase() {
     const data = {
         pendingCodes,
         registeredUsers,
         groups,
         communities,
-        messages
+        messages,
+        mutedChats
     };
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
 }
 
-// Инициализация данных из файла
 let db = loadDatabase();
 const pendingCodes = db.pendingCodes;
 const registeredUsers = db.registeredUsers;
-const activeUsers = {}; // Активные сессии сокетов храним в памяти (они сбрасываются при перезапуске)
+const activeUsers = {}; 
 let groups = db.groups;
 let communities = db.communities;
 const messages = db.messages;
+const mutedChats = db.mutedChats;
 
-// Функция обновления списков + автоматическое сохранение в файл
 function updateAllLists() {
     saveDatabase();
     io.emit('groups_list', groups);
@@ -71,9 +70,15 @@ function updateAllLists() {
 io.on('connection', (socket) => {
     console.log('Пользователь подключился:', socket.id);
 
-    // При подключении сразу отправляем актуальные списки групп и сообществ
     socket.emit('groups_list', groups);
     socket.emit('communities_list', communities);
+
+    function getPhoneBySocket(sId) {
+        for (const [phone, id] of Object.entries(activeUsers)) {
+            if (id === sId) return phone;
+        }
+        return null;
+    }
 
     socket.on('request_code', ({ phone }) => {
         const code = Math.floor(1000 + Math.random() * 9000).toString();
@@ -89,6 +94,7 @@ io.on('connection', (socket) => {
             activeUsers[phone] = socket.id;
             socket.emit('verification_result', { success: true });
             socket.emit('all_messages', messages);
+            socket.emit('muted_chats_list', mutedChats[phone] || []);
             updateAllLists();
         } else {
             socket.emit('verification_result', { success: false, message: 'Неверный код подтверждения!' });
@@ -99,8 +105,33 @@ io.on('connection', (socket) => {
         if (phone && name) {
             registeredUsers[phone] = { name, phone, isOnline: true };
             activeUsers[phone] = socket.id;
+            socket.emit('muted_chats_list', mutedChats[phone] || []);
             updateAllLists();
         }
+    });
+
+    // Управление уведомлениями (мут/анмут чата)
+    socket.on('toggle_mute_chat', ({ chatId }) => {
+        const phone = getPhoneBySocket(socket.id);
+        if (!phone) return;
+
+        if (!mutedChats[phone]) {
+            mutedChats[phone] = [];
+        }
+
+        const index = mutedChats[phone].indexOf(chatId);
+        let isMuted = false;
+
+        if (index > -1) {
+            mutedChats[phone].splice(index, 1);
+            isMuted = false;
+        } else {
+            mutedChats[phone].push(chatId);
+            isMuted = true;
+        }
+
+        saveDatabase();
+        socket.emit('chat_mute_status', { chatId, isMuted });
     });
 
     socket.on('check_contact', ({ phone, autoAdd }) => {
@@ -228,44 +259,38 @@ io.on('connection', (socket) => {
     });
 
     socket.on('private_message', ({ toPhone, message, file }) => {
-        const senderSocketId = socket.id;
-        let senderPhone = null;
+        const senderPhone = getPhoneBySocket(socket.id);
         let senderName = 'Пользователь';
-        for (const [phone, sId] of Object.entries(activeUsers)) {
-            if (sId === senderSocketId) {
-                senderPhone = phone;
-                if (registeredUsers[phone]) senderName = registeredUsers[phone].name;
-                break;
-            }
+        if (senderPhone && registeredUsers[senderPhone]) {
+            senderName = registeredUsers[senderPhone].name;
         }
         if (!senderPhone) return;
+
         const chatKey = [senderPhone, toPhone].sort().join('_');
         if (!messages[chatKey]) messages[chatKey] = [];
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const msgData = { fromPhone: senderPhone, fromName: senderName, text: message, file, time };
                 
         messages[chatKey].push(msgData);
-        saveDatabase(); // Сохраняем историю сообщений
+        saveDatabase();
 
         const targetSocketId = activeUsers[toPhone];
         if (targetSocketId) {
-            io.to(targetSocketId).emit('message', msgData);
+            const recipientMuted = mutedChats[toPhone] && mutedChats[toPhone].includes(chatKey);
+            io.to(targetSocketId).emit('message', { ...msgData, isMuted: recipientMuted });
         } else if (senderPhone === toPhone) {
             socket.emit('message', msgData);
         }
     });
 
     socket.on('group_message', ({ groupId, message, file }) => {
-        let senderPhone = null;
+        const senderPhone = getPhoneBySocket(socket.id);
         let senderName = 'Пользователь';
-        for (const [phone, sId] of Object.entries(activeUsers)) {
-            if (sId === socket.id) {
-                senderPhone = phone;
-                if (registeredUsers[phone]) senderName = registeredUsers[phone].name;
-                break;
-            }
+        if (senderPhone && registeredUsers[senderPhone]) {
+            senderName = registeredUsers[senderPhone].name;
         }
         if (!senderPhone) return;
+
         const chatKey = `group_${groupId}`;
         if (!messages[chatKey]) messages[chatKey] = [];
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -278,22 +303,22 @@ io.on('connection', (socket) => {
         if (group) {
             group.members.forEach(phone => {
                 const sId = activeUsers[phone];
-                if (sId) io.to(sId).emit('message', msgData);
+                if (sId) {
+                    const recipientMuted = mutedChats[phone] && mutedChats[phone].includes(chatKey);
+                    io.to(sId).emit('message', { ...msgData, isMuted: recipientMuted });
+                }
             });
         }
     });
 
     socket.on('community_message', ({ communityId, message, file }) => {
-        let senderPhone = null;
+        const senderPhone = getPhoneBySocket(socket.id);
         let senderName = 'Пользователь';
-        for (const [phone, sId] of Object.entries(activeUsers)) {
-            if (sId === socket.id) {
-                senderPhone = phone;
-                if (registeredUsers[phone]) senderName = registeredUsers[phone].name;
-                break;
-            }
+        if (senderPhone && registeredUsers[senderPhone]) {
+            senderName = registeredUsers[senderPhone].name;
         }
         if (!senderPhone) return;
+
         const chatKey = `community_${communityId}`;
         if (!messages[chatKey]) messages[chatKey] = [];
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -306,18 +331,19 @@ io.on('connection', (socket) => {
         if (com) {
             com.subscribers.forEach(phone => {
                 const sId = activeUsers[phone];
-                if (sId) io.to(sId).emit('message', msgData);
+                if (sId) {
+                    const recipientMuted = mutedChats[phone] && mutedChats[phone].includes(chatKey);
+                    io.to(sId).emit('message', { ...msgData, isMuted: recipientMuted });
+                }
             });
         }
     });
 
     socket.on('disconnect', () => {
-        for (const [phone, sId] of Object.entries(activeUsers)) {
-            if (sId === socket.id) {
-                delete activeUsers[phone];
-                if (registeredUsers[phone]) registeredUsers[phone].isOnline = false;
-                break;
-            }
+        const phone = getPhoneBySocket(socket.id);
+        if (phone) {
+            delete activeUsers[phone];
+            if (registeredUsers[phone]) registeredUsers[phone].isOnline = false;
         }
         updateAllLists();
     });
