@@ -35,7 +35,11 @@ function loadDB() {
 }
 
 function saveDB(db) {
-    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf8');
+    try {
+        fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf8');
+    } catch (e) {
+        console.error('Ошибка сохранения database.json:', e);
+    }
 }
 
 let db = loadDB();
@@ -48,7 +52,7 @@ app.get('/api/data', (req, res) => {
 // Регистрация
 app.post('/api/register', (req, res) => {
     const { login, name, password, email, avatar } = req.body;
-    const cleanLogin = login.trim().toLowerCase();
+    const cleanLogin = login ? login.trim().toLowerCase() : '';
 
     if (!cleanLogin || !name || !password) {
         return res.json({ success: false, error: 'Заполните обязательные поля!' });
@@ -60,16 +64,16 @@ app.post('/api/register', (req, res) => {
     db.users[cleanLogin] = {
         login: cleanLogin,
         name: name.trim(),
-        password,
+        password: password,
         email: email ? email.trim() : '',
         avatar: avatar || '',
         lastLoginTime: new Date().toLocaleString()
     };
 
-    db.friends[cleanLogin] = [];
-    db.friendRequests[cleanLogin] = [];
-    db.messagesStore[cleanLogin] = {};
-    db.nicknames[cleanLogin] = {};
+    if (!db.friends[cleanLogin]) db.friends[cleanLogin] = [];
+    if (!db.friendRequests[cleanLogin]) db.friendRequests[cleanLogin] = [];
+    if (!db.messagesStore[cleanLogin]) db.messagesStore[cleanLogin] = {};
+    if (!db.nicknames[cleanLogin]) db.nicknames[cleanLogin] = {};
 
     saveDB(db);
     res.json({ success: true, user: db.users[cleanLogin], db });
@@ -78,11 +82,14 @@ app.post('/api/register', (req, res) => {
 // Вход
 app.post('/api/login', (req, res) => {
     const { login, password } = req.body;
-    const cleanLogin = login.trim().toLowerCase();
+    const cleanLogin = login ? login.trim().toLowerCase() : '';
 
     const user = db.users[cleanLogin];
-    if (!user || user.password !== password) {
-        return res.json({ success: false, error: 'Неверный логин или пароль!' });
+    if (!user) {
+        return res.json({ success: false, error: 'Пользователь с таким логином не найден!' });
+    }
+    if (user.password !== password) {
+        return res.json({ success: false, error: 'Неверный пароль!' });
     }
 
     user.lastLoginTime = new Date().toLocaleString();
@@ -103,7 +110,7 @@ app.post('/api/ping', (req, res) => {
 // Добавить в друзья (отправить заявку)
 app.post('/api/add-friend', (req, res) => {
     const { login, targetLogin } = req.body;
-    const cleanTarget = targetLogin.trim().toLowerCase();
+    const cleanTarget = targetLogin ? targetLogin.trim().toLowerCase() : '';
 
     if (!db.users[cleanTarget]) {
         return res.json({ success: false, error: 'Пользователь не найден!' });
@@ -247,7 +254,7 @@ app.post('/api/set-group-role', (req, res) => {
 
 // Обновление настроек группы
 app.post('/api/update-group', (req, res) => {
-    const { groupId, login, name, avatar } = req.body;
+    const { groupId, login, name } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false });
 
@@ -257,7 +264,6 @@ app.post('/api/update-group', (req, res) => {
     }
 
     if (name) group.name = name.trim();
-    if (avatar !== undefined) group.avatar = avatar;
 
     saveDB(db);
     res.json({ success: true, db });
@@ -267,7 +273,7 @@ app.post('/api/update-group', (req, res) => {
 app.post('/api/set-nickname', (req, res) => {
     const { login, targetLogin, nickname } = req.body;
     if (!db.nicknames[login]) db.nicknames[login] = {};
-    db.nicknames[login][targetLogin] = nickname.trim();
+    db.nicknames[login][targetLogin] = nickname ? nickname.trim() : '';
     saveDB(db);
     res.json({ success: true, db });
 });
@@ -275,7 +281,7 @@ app.post('/api/set-nickname', (req, res) => {
 // WebRTC Signaling
 io.on('connection', (socket) => {
     socket.on('register', (login) => {
-        socket.join(login);
+        if (login) socket.join(login);
     });
 
     socket.on('call-user', ({ to, offer, from }) => {
