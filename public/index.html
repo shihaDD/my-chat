@@ -84,14 +84,15 @@
         #users-list li { padding: 12px 15px; cursor: pointer; display: flex; align-items: center; gap: 15px; border-bottom: 1px solid #f0f2f5; transition: background 0.15s; }
         #users-list li:hover { background: #f5f6f6; }
         #users-list li.active { background: #f0f2f5; }
-        .contact-info { display: flex; flex-direction: column; }
+        .contact-info { display: flex; flex-direction: column; flex: 1; }
         .contact-name { font-size: 16px; color: #111b21; }
         .contact-status { font-size: 13px; color: #667781; margin-top: 2px; }
 
         .chat-area, .settings-area { display: flex; flex-direction: column; height: 100%; background: #efeae2; position: relative; overflow: hidden; }
         .settings-area { background: #f0f2f5; display: none; }
         
-        .chat-header { height: 60px; min-height: 60px; padding: 10px 16px; background: #f0f2f5; display: flex; align-items: center; gap: 15px; border-bottom: 1px solid #d1d7db; }
+        .chat-header { height: 60px; min-height: 60px; padding: 10px 16px; background: #f0f2f5; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #d1d7db; }
+        .chat-header-left { display: flex; align-items: center; gap: 15px; }
 
         .messages-container { flex: 1; padding: 20px 7%; overflow-y: auto; background-color: #efeae2; background-image: radial-gradient(#d8d2c9 0.85px, transparent 0.85px); background-size: 17px 17px; display: flex; flex-direction: column; gap: 4px; min-height: 0; }
         .message { max-width: 65%; padding: 6px 7px 8px 9px; border-radius: 7.5px; font-size: 14.2px; line-height: 1.4; word-break: break-word; position: relative; box-shadow: 0 1px 0.5px rgba(0,0,0,0.13); margin-bottom: 2px; flex-shrink: 0; }
@@ -122,7 +123,7 @@
         .save-settings-btn { padding: 12px; background: #00a884; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: 600; margin-top: 10px; }
         .save-settings-btn:hover { background: #008f72; }
 
-        /* Кастомное красивое всплывающее уведомление (вместо стандартного alert) */
+        /* Всплывающее уведомление (тост) */
         #custom-toast {
             position: fixed;
             top: 20px;
@@ -183,7 +184,7 @@
                     <span id="my-avatar-label">Я</span>
                 </div>
                 <div class="sidebar-icons">
-                    <button class="icon-btn" id="settings-btn" title="Настройки профиля">⚙️️</button>
+                    <button class="icon-btn" id="settings-btn" title="Настройки профиля">⚙</button>
                 </div>
             </div>
             <div class="search-container">
@@ -194,12 +195,17 @@
         
         <div class="chat-area" id="chat-main-container">
             <div class="chat-header">
-                <div class="user-avatar" id="active-avatar-container">
-                    <span id="active-avatar-label">💬</span>
+                <div class="chat-header-left">
+                    <div class="user-avatar" id="active-avatar-container">
+                        <span id="active-avatar-label">💬</span>
+                    </div>
+                    <div>
+                        <div style="font-weight: 500; color: #111b21; font-size: 16px;" id="active-chat-title">Выберите чат</div>
+                        <div style="font-size: 12px; color: #667781;" id="active-chat-phone"></div>
+                    </div>
                 </div>
                 <div>
-                    <div style="font-weight: 500; color: #111b21; font-size: 16px;" id="active-chat-title">Выберите чат</div>
-                    <div style="font-size: 12px; color: #667781;" id="active-chat-phone"></div>
+                    <button class="icon-btn" id="rename-contact-btn" title="Изменить имя контакта" style="display: none; font-size: 18px;">✏️</button>
                 </div>
             </div>
             
@@ -251,10 +257,11 @@
         let activeRecipientPhone = null;
         let generatedPopupCode = ''; 
         let messagesStore = JSON.parse(localStorage.getItem('whatsapp_messages') || '{}');
+        let customNames = JSON.parse(localStorage.getItem('whatsapp_custom_names') || '{}');
         let tempAvatarBase64 = null;
         let toastTimeout = null;
+        let latestUsersData = [];
 
-        // Функция красивого уведомления вместо alert
         function showNotification(text) {
             const toast = document.getElementById('custom-toast');
             const toastText = document.getElementById('custom-toast-text');
@@ -264,7 +271,7 @@
             if (toastTimeout) clearTimeout(toastTimeout);
             toastTimeout = setTimeout(() => {
                 toast.classList.remove('show');
-            }, 3500); // Окно само пропадет через 3.5 секунды
+            }, 3500);
         }
 
         const authScreen = document.getElementById('auth-screen');
@@ -286,6 +293,7 @@
         const inputArea = document.getElementById('input-area');
         const messageInput = document.getElementById('message-input');
         const sendBtn = document.getElementById('send-btn');
+        const renameContactBtn = document.getElementById('rename-contact-btn');
 
         const settingsBtn = document.getElementById('settings-btn');
         const closeSettingsBtn = document.getElementById('close-settings-btn');
@@ -327,8 +335,6 @@
             if (!name) return showNotification('Введите ваше имя!');
 
             generatedPopupCode = Math.floor(1000 + Math.random() * 9000).toString();
-            
-            // Выводим наш красивый вылетающий тост с кодом!
             showNotification('Ваш проверочный код: ' + generatedPopupCode);
 
             stepPhoneBlock.style.display = 'none';
@@ -420,15 +426,51 @@
             showNotification('Профиль успешно обновлен!');
         };
 
+        // Кнопка переименования друга (карандашик в шапке чата)
+        renameContactBtn.onclick = () => {
+            if (!activeRecipientPhone) return;
+            const currentDisplayName = customNames[activeRecipientPhone] || 
+                (latestUsersData.find(u => u.phone === activeRecipientPhone)?.name || '');
+            
+            const newName = prompt('Введите новое имя для этого контакта:', currentDisplayName);
+            if (newName === null) return; // Нажали отмену
+
+            const trimmed = newName.trim();
+            if (!trimmed) {
+                // Если стерли имя, удаляем кастомное имя, возвращается оригинальное
+                delete customNames[activeRecipientPhone];
+            } else {
+                customNames[activeRecipientPhone] = trimmed;
+            }
+
+            localStorage.setItem('whatsapp_custom_names', JSON.stringify(customNames));
+            
+            // Обновляем шапку и список чатов
+            updateActiveChatHeader(activeRecipientPhone);
+            renderUsersList(latestUsersData);
+            showNotification('Имя контакта изменено!');
+        };
+
+        function getContactName(phone, originalName) {
+            return customNames[phone] || originalName || phone;
+        }
+
         socket.on('users_list', (users) => {
             if (!myData) return;
+            latestUsersData = users;
+            renderUsersList(users);
+        });
+
+        function renderUsersList(users) {
             usersList.innerHTML = '';
             users.forEach(user => {
                 if (user.phone === myData.phone) return;
                 const li = document.createElement('li');
                 if (user.phone === activeRecipientPhone) li.classList.add('active');
                 
-                let avatarHtml = `<div class="user-avatar"><span>${user.name.charAt(0).toUpperCase()}</span></div>`;
+                const displayName = getContactName(user.phone, user.name);
+
+                let avatarHtml = `<div class="user-avatar"><span>${displayName.charAt(0).toUpperCase()}</span></div>`;
                 if (user.avatar) {
                     avatarHtml = `<div class="user-avatar"><img src="${user.avatar}" alt="Avatar"></div>`;
                 }
@@ -436,30 +478,39 @@
                 li.innerHTML = `
                     ${avatarHtml}
                     <div class="contact-info">
-                        <span class="contact-name">${user.name}</span>
+                        <span class="contact-name">${displayName}</span>
                         <span class="contact-status">${user.phone}</span>
                     </div>
                 `;
                 
                 li.onclick = () => {
                     activeRecipientPhone = user.phone;
-                    activeChatTitle.textContent = user.name;
-                    activeChatPhone.textContent = user.phone;
-                    
+                    updateActiveChatHeader(user.phone);
+
                     if (user.avatar) {
                         activeAvatarContainer.innerHTML = `<img src="${user.avatar}" alt="Avatar">`;
                     } else {
-                        activeAvatarContainer.innerHTML = `<span>${user.name.charAt(0).toUpperCase()}</span>`;
+                        activeAvatarContainer.innerHTML = `<span>${displayName.charAt(0).toUpperCase()}</span>`;
                     }
 
                     inputArea.style.display = 'flex';
+                    renameContactBtn.style.display = 'flex';
                     document.querySelectorAll('#users-list li').forEach(el => el.classList.remove('active'));
                     li.classList.add('active');
                     renderMessages();
                 };
                 usersList.appendChild(li);
             });
-        });
+        }
+
+        function updateActiveChatHeader(phone) {
+            const user = latestUsersData.find(u => u.phone === phone);
+            const origName = user ? user.name : phone;
+            const displayName = getContactName(phone, origName);
+
+            activeChatTitle.textContent = displayName;
+            activeChatPhone.textContent = phone;
+        }
 
         socket.on('message', (data) => {
             if (!messagesStore[data.fromPhone]) messagesStore[data.fromPhone] = [];
