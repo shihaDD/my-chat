@@ -5,7 +5,7 @@ const { Server } = require('socket.io');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-    maxHttpBufferSize: 20 * 1024 * 1024 // Увеличен лимит для передачи файлов до 20 МБ
+    maxHttpBufferSize: 20 * 1024 * 1024
 });
 
 app.use(express.static('public'));
@@ -13,8 +13,8 @@ app.use(express.static('public'));
 const pendingCodes = {}; 
 const registeredUsers = {}; 
 const activeUsers = {};     
-const groups = [];       
-const communities = [];  
+let groups = [];       
+let communities = [];  
 const messages = {};     
 
 io.on('connection', (socket) => {
@@ -48,13 +48,17 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('check_contact', ({ phone }) => {
+    socket.on('check_contact', ({ phone, autoAdd }) => {
         const targetUser = registeredUsers[phone];
         if (targetUser) {
+            const contactData = { phone: targetUser.phone, name: targetUser.name, isOnline: !!activeUsers[phone] };
             socket.emit('contact_check_result', {
                 exists: true,
-                contact: { phone: targetUser.phone, name: targetUser.name, isOnline: !!activeUsers[phone] }
+                contact: contactData
             });
+            if (autoAdd) {
+                socket.emit('auto_added_contact', contactData);
+            }
         } else {
             socket.emit('contact_check_result', { exists: false });
         }
@@ -72,6 +76,42 @@ io.on('connection', (socket) => {
         const newCom = { id: comId, name, description: description || '', avatar: '', creator, subscribers: [creator] };
         communities.push(newCom);
         updateAllLists();
+    });
+
+    socket.on('delete_group', ({ groupId, myPhone }) => {
+        const group = groups.find(g => g.id === groupId);
+        if (group && group.creator === myPhone) {
+            groups = groups.filter(g => g.id !== groupId);
+            delete messages[`group_${groupId}`];
+            updateAllLists();
+        }
+    });
+
+    socket.on('delete_community', ({ communityId, myPhone }) => {
+        const com = communities.find(c => c.id === communityId);
+        if (com && com.creator === myPhone) {
+            communities = communities.filter(c => c.id !== communityId);
+            delete messages[`community_${communityId}`];
+            updateAllLists();
+        }
+    });
+
+    socket.on('join_group_by_link', ({ groupId, myPhone }) => {
+        const group = groups.find(g => g.id === groupId);
+        if (group && !group.members.includes(myPhone)) {
+            group.members.push(myPhone);
+            updateAllLists();
+            io.emit('group_updated', group);
+        }
+    });
+
+    socket.on('join_community_by_link', ({ communityId, myPhone }) => {
+        const com = communities.find(c => c.id === communityId);
+        if (com && !com.subscribers.includes(myPhone)) {
+            com.subscribers.push(myPhone);
+            updateAllLists();
+            io.emit('community_updated', com);
+        }
     });
 
     socket.on('update_group_info', ({ groupId, name, description, avatar, myPhone }) => {
@@ -158,6 +198,9 @@ io.on('connection', (socket) => {
         const targetSocketId = activeUsers[toPhone];
         if (targetSocketId) {
             io.to(targetSocketId).emit('message', msgData);
+        } else if (senderPhone === toPhone) {
+            // Для избранного отправляем сообщение обратно текущему сокету, чтобы оно отрисовалось через событие message
+            socket.emit('message', msgData);
         }
     });
 
@@ -217,7 +260,7 @@ io.on('connection', (socket) => {
         const com = communities.find(c => c.id === communityId);
         if (com) {
             com.subscribers.forEach(phone => {
-                const sId = activeUsers[phone];
+        const sId = activeUsers[phone];
                 if (sId) io.to(sId).emit('message', msgData);
             });
         }
