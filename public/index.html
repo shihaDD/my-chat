@@ -709,10 +709,13 @@
                 <label>Название и описание:</label>
                 <input type="text" id="editChatNameInput" placeholder="Название...">
                 <textarea id="editChatDescInput" placeholder="Описание..." rows="2" style="resize: none;"></textarea>
-                <label>Аватарка:</label>
-                <label class="upload-file-label" for="editChatAvatarInput">📁 Загрузить аватарку чата</label>
+                <label>Аватарка чата:</label>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div class="avatar" id="editChatAvatarPreview" style="width: 48px; height: 48px; font-size: 18px;">?</div>
+                    <label class="upload-file-label" for="editChatAvatarInput" style="flex: 1; margin: 0;">📁 Выбрать картинку</label>
+                </div>
                 <input type="file" id="editChatAvatarInput" class="file-avatar-input" accept="image/*">
-                <button id="saveChatInfoBtn" class="main-action-btn" style="padding: 10px; font-size: 13px;">Сохранить изменения</button>
+                <button id="saveChatInfoBtn" class="main-action-btn" style="padding: 12px; font-size: 14px; margin-top: 5px;">СОХРАНИТЬ ИЗМЕНЕНИЯ</button>
             </div>
 
             <div id="membersManagementSection">
@@ -723,7 +726,7 @@
             </div>
 
             <div class="modal-buttons-row" style="margin-top: 10px;">
-                <button id="closeManageModalBtn" class="main-action-btn">ГОТОВО</button>
+                <button id="closeManageModalBtn" class="main-action-btn" style="background: #222230;">ЗАКРЫТЬ</button>
             </div>
         </div>
     </div>
@@ -867,6 +870,22 @@
             }
         }
 
+        function applyAvatar(el, avatarValue, fallbackText) {
+            if (!avatarValue) {
+                el.style.background = 'linear-gradient(135deg, #ff2a5f, #7b2cbf)';
+                el.innerText = fallbackText ? fallbackText.charAt(0).toUpperCase() : '?';
+                return;
+            }
+            if (avatarValue.startsWith('url(') || avatarValue.startsWith('data:image')) {
+                const bgValue = avatarValue.startsWith('url(') ? avatarValue : `url(${avatarValue})`;
+                el.style.background = bgValue;
+                el.innerText = '';
+            } else {
+                el.style.background = avatarValue;
+                el.innerText = fallbackText ? fallbackText.charAt(0).toUpperCase() : '?';
+            }
+        }
+
         const toggleAddMenuBtn = document.getElementById('toggleAddMenuBtn');
         const addDropdownMenu = document.getElementById('addDropdownMenu');
 
@@ -980,6 +999,7 @@
                 const reader = new FileReader();
                 reader.onload = function(event) {
                     currentEditingAvatar = event.target.result;
+                    applyAvatar(document.getElementById('editChatAvatarPreview'), currentEditingAvatar, '💬');
                     showToast('Аватарка выбрана!');
                 };
                 reader.readAsDataURL(file);
@@ -995,6 +1015,7 @@
                 document.getElementById('editChatNameInput').value = group.name;
                 document.getElementById('editChatDescInput').value = group.description || '';
                 currentEditingAvatar = group.avatar || '';
+                applyAvatar(document.getElementById('editChatAvatarPreview'), currentEditingAvatar, '👥');
 
                 const isCreator = group.creator === myPhone;
                 document.getElementById('editChatInfoSection').style.display = isCreator ? 'flex' : 'none';
@@ -1047,6 +1068,7 @@
                 document.getElementById('editChatNameInput').value = com.name;
                 document.getElementById('editChatDescInput').value = com.description || '';
                 currentEditingAvatar = com.avatar || '';
+                applyAvatar(document.getElementById('editChatAvatarPreview'), currentEditingAvatar, '📢');
 
                 const isCreator = com.creator === myPhone;
                 document.getElementById('editChatInfoSection').style.display = isCreator ? 'flex' : 'none';
@@ -1385,7 +1407,6 @@
             const listEl = document.getElementById('contactsList');
             listEl.innerHTML = '';
 
-            // Раздел «Избранное»
             const savedItem = document.createElement('div');
             savedItem.className = `contact-item ${activeChatId === myPhone && activeChatType === 'private' ? 'active' : ''}`;
             savedItem.innerHTML = `
