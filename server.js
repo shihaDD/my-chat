@@ -21,7 +21,7 @@ let db = {
     friendRequests: {}, 
     nicknames: {},      
     groups: {},         
-    settings: {},       // Настройки пользователя (клавиши, мышь)
+    settings: {},       
     lastSeen: {}        
 };
 
@@ -56,7 +56,7 @@ app.post('/api/register', (req, res) => {
         return res.json({ success: false, error: 'Пользователь уже существует!' });
     }
 
-    db.users[cleanLogin] = { login: cleanLogin, name, password, email: email || '', avatar: avatar || '' };
+    db.users[cleanLogin] = { login: cleanLogin, name: name.trim(), password, email: email || '', avatar: avatar || '' };
     db.friends[cleanLogin] = [];
     db.friendRequests[cleanLogin] = [];
     db.settings[cleanLogin] = { keybinds: { mute: 'M', call: 'Enter' }, mouseDevice: 'Стандартная мышь' };
