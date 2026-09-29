@@ -13,8 +13,6 @@ const REPO_OWNER = 'shihaDD';
 const REPO_NAME = 'Chat-Database';
 const FILE_PATH = 'database.json';
 
-const verificationCodes = {};
-
 async function loadDatabase() {
     try {
         if (fs.existsSync(FILE_PATH)) {
@@ -44,10 +42,10 @@ async function loadDatabase() {
 
     return {
         "users": [],
-        "userPhones": {},
-        "userContacts": {},
-        "messagesStore": {},
+        "userIds": {},       // username -> uniqueId
+        "idToUser": {},       // uniqueId -> username
         "friends": {},
+        "messagesStore": {},
         "lastSeen": {}
     };
 }
@@ -123,49 +121,45 @@ app.get('/api/news', async (req, res) => {
     }
 });
 
-app.post('/api/send-code', (req, res) => {
-    const { name, phone } = req.body;
-    if (!name || !phone) return res.status(400).json({ error: 'Заполните имя и телефон' });
-
-    const code = Math.floor(1000 + Math.random() * 9000).toString();
-    verificationCodes[phone] = { code, name };
-
-    console.log(`[SMS] Код для ${name} (${phone}): ${code}`);
-    res.json({ success: true, debugCode: code });
-});
-
-app.post('/api/verify-code', async (req, res) => {
-    const { phone, code } = req.body;
-    const record = verificationCodes[phone];
-
-    if (!record || record.code !== code) {
-        return res.status(400).json({ error: 'Неверный код' });
+// Авторизация по никнейму с генерацией ID
+app.post('/api/login', async (req, res) => {
+    const { username } = req.body;
+    if (!username || !username.trim()) {
+        return res.status(400).json({ success: false, error: 'Введите никнейм' });
     }
 
-    const username = record.name;
     let db = await loadDatabase();
-
     if (!db.users) db.users = [];
-    if (!db.userPhones) db.userPhones = {};
+    if (!db.userIds) db.userIds = {};
+    if (!db.idToUser) db.idToUser = {};
     if (!db.friends) db.friends = {};
     if (!db.messagesStore) db.messagesStore = {};
     if (!db.lastSeen) db.lastSeen = {};
 
-    db.userPhones[phone] = username;
-    db.lastSeen[username] = Date.now();
+    let userTag = db.userIds[username];
+    let isNew = false;
 
-    if (!db.users.includes(username)) {
+    if (!userTag) {
+        isNew = true;
+        // Генерируем уникальный 6-значный ID
+        do {
+            userTag = Math.floor(100000 + Math.random() * 900000).toString();
+        } while (db.idToUser[userTag]);
+
+        db.userIds[username] = userTag;
+        db.idToUser[userTag] = username;
         db.users.push(username);
         db.friends[username] = [];
         db.messagesStore[username] = {};
     }
 
+    db.lastSeen[username] = Date.now();
     await saveDatabase(db);
-    delete verificationCodes[phone];
-    res.json({ success: true, username, db });
+
+    res.json({ success: true, username, userId: userTag, isNew, db });
 });
 
-// Пинг для обновления статуса «в сети»
+// Пинг статуса
 app.post('/api/ping', async (req, res) => {
     const { username } = req.body;
     if (!username) return res.sendStatus(400);
@@ -176,14 +170,14 @@ app.post('/api/ping', async (req, res) => {
     res.json({ success: true });
 });
 
-// Добавление в друзья по номеру телефона
-app.post('/api/add-friend-by-phone', async (req, res) => {
-    const { username, phone } = req.body;
+// Добавление в друзья по ID
+app.post('/api/add-friend-by-id', async (req, res) => {
+    const { username, targetId } = req.body;
     let db = await loadDatabase();
 
-    const targetUser = db.userPhones?.[phone];
+    const targetUser = db.idToUser?.[targetId];
     if (!targetUser || targetUser === username) {
-        return res.status(400).json({ success: false, error: 'Пользователь с таким номером не найден' });
+        return res.status(400).json({ success: false, error: 'Пользователь с таким ID не найден' });
     }
 
     if (!db.friends[username]) db.friends[username] = [];
@@ -195,6 +189,7 @@ app.post('/api/add-friend-by-phone', async (req, res) => {
     res.json({ success: true, db, friendName: targetUser });
 });
 
+// Отправка сообщения
 app.post('/api/send-message', async (req, res) => {
     const { sender, receiver, text } = req.body;
     if (!sender || !receiver || !text) return res.status(400).json({ error: 'Ошибка' });
