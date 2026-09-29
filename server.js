@@ -71,15 +71,18 @@ app.get('/api/data', async (req, res) => {
     res.json(db);
 });
 
+// Проверка существования логина (нужно для разделения Вход / Регистрация)
 app.get('/api/check-login/:login', async (req, res) => {
     const login = req.params.login.trim().toLowerCase();
     const db = await loadDatabase();
-    res.json({ available: !db.users?.[login] });
+    res.json({ exists: !!db.users?.[login] });
 });
 
-app.post('/api/auth', async (req, res) => {
-    let { login, name } = req.body;
-    if (!login || !name) return res.status(400).json({ success: false });
+// Регистрация
+app.post('/api/register', async (req, res) => {
+    let { login, name, password } = req.body;
+    if (!login || !name || !password) return res.status(400).json({ success: false, error: 'Заполните все поля' });
+    
     login = login.trim().toLowerCase();
     name = name.trim();
 
@@ -89,16 +92,35 @@ app.post('/api/auth', async (req, res) => {
     if (!db.messagesStore) db.messagesStore = {};
     if (!db.lastSeen) db.lastSeen = {};
 
-    if (!db.users[login]) {
-        db.users[login] = { login, name };
-        db.friends[login] = [];
-        db.messagesStore[login] = {};
-    } else {
-        db.users[login].name = name;
+    if (db.users[login]) {
+        return res.status(400).json({ success: false, error: 'Логин уже занят' });
     }
+
+    db.users[login] = { login, name, password }; // Сохраняем пароль
+    db.friends[login] = [];
+    db.messagesStore[login] = {};
     db.lastSeen[login] = Date.now();
+
     await saveDatabase(db);
     res.json({ success: true, user: db.users[login], db });
+});
+
+// Вход с проверкой пароля
+app.post('/api/login', async (req, res) => {
+    let { login, password } = req.body;
+    if (!login || !password) return res.status(400).json({ success: false, error: 'Заполните все поля' });
+
+    login = login.trim().toLowerCase();
+    let db = await loadDatabase();
+
+    const user = db.users?.[login];
+    if (!user || user.password !== password) {
+        return res.status(400).json({ success: false, error: 'Неверный логин или пароль' });
+    }
+
+    db.lastSeen[login] = Date.now();
+    await saveDatabase(db);
+    res.json({ success: true, user, db });
 });
 
 app.post('/api/ping', async (req, res) => {
@@ -130,7 +152,6 @@ app.post('/api/add-friend', async (req, res) => {
         db.friends[login].push(targetLogin);
     }
 
-    // Двухстороннее добавление в друзья для удобства общения
     if (!db.friends[targetLogin]) db.friends[targetLogin] = [];
     if (!db.friends[targetLogin].includes(login)) {
         db.friends[targetLogin].push(login);
@@ -140,7 +161,6 @@ app.post('/api/add-friend', async (req, res) => {
     res.json({ success: true, db });
 });
 
-// Исправленная отправка сообщений без дублирования
 app.post('/api/send-message', async (req, res) => {
     const { sender, receiver, text } = req.body;
     let db = await loadDatabase();
