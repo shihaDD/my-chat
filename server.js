@@ -36,10 +36,13 @@ async function loadDataFromGitHub() {
         });
         const content = Buffer.from(response.data.content, 'base64').toString('utf8');
         db = JSON.parse(content);
+        if (!db.userContacts) db.userContacts = {};
+        if (!db.users) db.users = [];
+        if (!db.messagesStore) db.messagesStore = {};
         console.log('Данные успешно загружены с GitHub!');
     } catch (e) {
         console.log('Файл на GitHub еще не создан или ошибка загрузки, используем пустую базу.', e.message);
-        await saveDataToGitHub(); // Создадим пустой файл, если его нет
+        await saveDataToGitHub();
     }
 }
 
@@ -57,9 +60,7 @@ async function saveDataToGitHub() {
                 path: FILE_PATH,
             });
             sha = fileData.data.sha;
-        } catch (err) {
-            // Файла еще может не быть
-        }
+        } catch (err) {}
 
         const contentBase64 = Buffer.from(JSON.stringify(db, null, 2)).toString('base64');
 
@@ -101,9 +102,11 @@ io.on('connection', (socket) => {
                 isOnline: true,
                 lastSeen: null
             });
-            if (!db.userContacts[userData.phone]) {
-                db.userContacts[userData.phone] = [];
-            }
+        }
+
+        // Гарантируем, что у пользователя есть массив контактов
+        if (!db.userContacts[userData.phone]) {
+            db.userContacts[userData.phone] = [];
         }
 
         saveDataToGitHub();
@@ -157,6 +160,7 @@ io.on('connection', (socket) => {
             return;
         }
 
+        // Добавляем контакт навсегда
         db.userContacts[ownerPhone].push({
             phone: targetUser.phone,
             name: targetUser.name,
