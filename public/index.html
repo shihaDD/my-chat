@@ -197,22 +197,22 @@
             phoneInput.value = val.length === 0 ? '' : res;
         };
 
-        // Кнопка «Получить код»: генерирует код локально в браузере и показывает в alert
+        // Кнопка «Получить код»: генерирует случайный код прямо в браузере и выводит в alert
         getCodeBtn.onclick = () => {
             const phone = phoneInput.value.trim();
             const name = nameInput.value.trim();
             const cleanDigits = phone.replace(/\D/g, '');
 
-            if (cleanDigits.length < 11) return alert('Введите полный номер телефона!');
+            if (cleanDigits.length < 10) return alert('Введите полный номер телефона!');
             if (!name) return alert('Введите ваше имя!');
 
-            // Генерируем случайный 4-значный код
+            // Генерация случайного 4-значного кода
             generatedPopupCode = Math.floor(1000 + Math.random() * 9000).toString();
 
-            // Показываем код прямо в браузере
-            alert(`Ваш проверочный код: ${generatedPopupCode}`);
+            // Выводим код во всплывающем окне
+            alert('Ваш проверочный код: ' + generatedPopupCode);
 
-            // Переключаем интерфейс на ввод кода
+            // Переключаем блоки интерфейса
             stepPhoneBlock.style.display = 'none';
             stepCodeBlock.style.display = 'block';
         };
