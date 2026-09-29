@@ -10,9 +10,9 @@ const io = new Server(server);
 app.use(express.static('public'));
 
 // ==========================================
-// НАСТРОЙКИ GITHUB (замените токен на свой)
+// НАСТРОЙКИ GITHUB
 // ==========================================
-const GITHUB_TOKEN = 'ВАШ_GITHUB_PERSONAL_ACCESS_TOKEN'; 
+const GITHUB_TOKEN = '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'; 
 const REPO_OWNER = 'shihaDD';
 const REPO_NAME = 'Chat-Database';
 const FILE_PATH = 'database.json';
