@@ -33,7 +33,6 @@
             position: relative;
         }
 
-        /* Верхнее плавающее окошко с кодом */
         .top-code-banner {
             position: fixed;
             top: 20px;
@@ -360,7 +359,7 @@
             align-items: center;
         }
 
-        input, button, select {
+        input, button, select, textarea {
             outline: none;
             border: none;
             border-radius: 8px;
@@ -407,12 +406,6 @@
             justify-content: center;
             align-items: center;
             z-index: 1000;
-            animation: fadeInOverlay 0.25s ease-out;
-        }
-
-        @keyframes fadeInOverlay {
-            from { opacity: 0; }
-            to { opacity: 1; }
         }
 
         .auth-card {
@@ -427,12 +420,6 @@
             flex-direction: column;
             gap: 20px;
             box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 40px rgba(255, 42, 95, 0.2);
-            animation: scaleUpModal 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        @keyframes scaleUpModal {
-            from { transform: scale(0.9); opacity: 0; }
-            to { transform: scale(1); opacity: 1; }
         }
 
         .auth-card h2 {
@@ -441,7 +428,6 @@
             margin-bottom: 2px;
             text-transform: uppercase;
             font-size: 22px;
-            letter-spacing: 0.5px;
         }
 
         .auth-card p {
@@ -451,7 +437,7 @@
             line-height: 1.5;
         }
 
-        .auth-card input[type="text"] {
+        .auth-card input[type="text"], .auth-card textarea {
             width: 100%;
             padding: 14px 16px;
             background: #1a1a24;
@@ -459,12 +445,10 @@
             color: var(--text-main);
             border-radius: 10px;
             font-size: 15px;
-            transition: all 0.2s;
         }
 
-        .auth-card input[type="text"]:focus {
+        .auth-card input[type="text"]:focus, .auth-card textarea:focus {
             border-color: var(--accent-color);
-            box-shadow: 0 0 10px rgba(255, 42, 95, 0.2);
         }
 
         .settings-group {
@@ -548,15 +532,11 @@
             font-weight: 700;
             border-radius: 10px;
             cursor: pointer;
-            transition: background 0.2s, transform 0.1s;
+            transition: background 0.2s;
         }
 
         .auth-card button.main-action-btn:hover {
             background: var(--accent-hover);
-        }
-
-        .auth-card button.main-action-btn:active {
-            transform: scale(0.98);
         }
 
         .modal-buttons-row {
@@ -573,7 +553,6 @@
             justify-content: center;
             align-items: center;
             z-index: 2000;
-            animation: fadeInOverlay 0.2s ease-out;
         }
 
         .custom-toast-card {
@@ -586,8 +565,7 @@
             display: flex;
             flex-direction: column;
             gap: 18px;
-            box-shadow: 0 15px 40px rgba(0,0,0,0.6), 0 0 25px rgba(255, 42, 95, 0.25);
-            animation: scaleUpModal 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.6);
         }
 
         .custom-toast-card p {
@@ -603,17 +581,11 @@
             font-weight: 700;
             border-radius: 10px;
             cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        .custom-toast-card button:hover {
-            background: var(--accent-hover);
         }
     </style>
 </head>
 <body>
 
-    <!-- Верхний баннер с кодом -->
     <div class="top-code-banner" id="topCodeBanner">
         <span>🔐 Код подтверждения:</span>
         <b id="displayCodeValue">----</b>
@@ -642,7 +614,7 @@
         </div>
     </div>
 
-    <!-- Всплывающее окно ввода кода -->
+    <!-- Окно ввода кода -->
     <div id="codeModal" class="modal-overlay" style="display: none;">
         <div class="auth-card">
             <h2>Код подтверждения</h2>
@@ -693,10 +665,11 @@
         <div class="auth-card">
             <h2>Создать группу</h2>
             <input type="text" id="groupNameInput" placeholder="Название группы...">
+            <textarea id="groupDescInput" placeholder="Описание группы..." rows="2" style="resize: none;"></textarea>
             <p style="text-align: left;">Выберите участников:</p>
-            <div id="groupMembersList" style="max-height: 140px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;"></div>
+            <div id="groupMembersList" style="max-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;"></div>
             <div class="modal-buttons-row">
-                <button id="createGroupConfirmBtn" class="main-action-btn">СОЗДАТЬ</button>
+                <button id="createGroupConfirmBtn" class="main-action-btn">СОХРАНИТЬ</button>
                 <button id="createGroupCancelBtn" class="main-action-btn" style="background: #222230;">ОТМЕНА</button>
             </div>
         </div>
@@ -707,9 +680,9 @@
         <div class="auth-card">
             <h2>Создать сообщество</h2>
             <input type="text" id="communityNameInput" placeholder="Название сообщества...">
-            <input type="text" id="communityDescInput" placeholder="Описание сообщества...">
+            <textarea id="communityDescInput" placeholder="Описание сообщества..." rows="3" style="resize: none;"></textarea>
             <div class="modal-buttons-row">
-                <button id="createCommunityConfirmBtn" class="main-action-btn">СОЗДАТЬ</button>
+                <button id="createCommunityConfirmBtn" class="main-action-btn">СОХРАНИТЬ</button>
                 <button id="createCommunityCancelBtn" class="main-action-btn" style="background: #222230;">ОТМЕНА</button>
             </div>
         </div>
@@ -727,14 +700,40 @@
         </div>
     </div>
 
+    <!-- Модалка управления участниками и настройками группы/сообщества -->
+    <div id="manageMembersModal" class="modal-overlay" style="display: none;">
+        <div class="auth-card">
+            <h2 id="manageModalTitle">Управление</h2>
+            
+            <div class="settings-group" id="editChatInfoSection">
+                <label>Название и описание:</label>
+                <input type="text" id="editChatNameInput" placeholder="Название...">
+                <textarea id="editChatDescInput" placeholder="Описание..." rows="2" style="resize: none;"></textarea>
+                <label>Аватарка:</label>
+                <label class="upload-file-label" for="editChatAvatarInput">📁 Загрузить аватарку чата</label>
+                <input type="file" id="editChatAvatarInput" class="file-avatar-input" accept="image/*">
+                <button id="saveChatInfoBtn" class="main-action-btn" style="padding: 10px; font-size: 13px;">Сохранить изменения</button>
+            </div>
+
+            <div id="membersManagementSection">
+                <div id="manageMembersContainer" style="max-height: 150px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; margin-top: 5px;"></div>
+                <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 10px 0;">
+                <p style="text-align: left;" id="inviteSectionTitle">Пригласить участника:</p>
+                <div id="inviteMembersContainer" style="max-height: 100px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;"></div>
+            </div>
+
+            <div class="modal-buttons-row" style="margin-top: 10px;">
+                <button id="closeManageModalBtn" class="main-action-btn">ГОТОВО</button>
+            </div>
+        </div>
+    </div>
+
     <div class="app-container">
-        <!-- Левая колонка -->
         <div class="sidebar">
             <div class="sidebar-header">
                 <span>⚡ В одно ебало</span>
             </div>
             
-            <!-- Профиль пользователя -->
             <div class="my-profile-info" id="myProfileInfo">
                 <div class="my-profile-left">
                     <div class="avatar" id="myAvatar">Я</div>
@@ -749,7 +748,6 @@
                 </div>
             </div>
 
-            <!-- Шапка раздела чатов с кнопкой плюса и выпадающим меню -->
             <div class="chats-section-header">
                 <span>Чаты и сообщества</span>
                 <button class="icon-btn" id="toggleAddMenuBtn" title="Создать...">+</button>
@@ -761,19 +759,20 @@
                 </div>
             </div>
 
-            <div class="contacts-list" id="contactsList">
-                <!-- Контакты, группы и сообщества будут здесь -->
-            </div>
+            <div class="contacts-list" id="contactsList"></div>
         </div>
 
-        <!-- Правая колонка (Чат) -->
         <div class="chat-area">
             <div class="chat-header" id="chatHeader">
                 <div class="chat-header-left">
                     <div class="avatar" id="activeAvatar" style="display: none; width: 32px; height: 32px; font-size: 14px;">?</div>
-                    <span id="chatHeaderText">Выберите чат слева</span>
+                    <div>
+                        <div id="chatHeaderText">Выберите чат слева</div>
+                        <div id="chatHeaderDesc" style="font-size: 11px; color: var(--text-muted); font-weight: normal;"></div>
+                    </div>
                 </div>
                 <div class="chat-header-actions" id="chatHeaderActions" style="display: none;">
+                    <button class="icon-btn" id="manageChatBtn" title="Управление чатом" style="display: none;">⚙️</button>
                     <button class="icon-btn" id="clearChatBtn" title="Очистить чат">🧹</button>
                     <button class="icon-btn" id="blockContactBtn" title="Заблокировать">🚫</button>
                 </div>
@@ -784,7 +783,7 @@
             <div class="chat-input-area" id="inputArea" style="display: none;">
                 <button class="icon-btn" id="attachFileBtn" title="Прикрепить файл">📎</button>
                 <input type="text" id="messageInput" placeholder="Написать сообщение...">
-                <button class="send-btn" id="sendBtn">SEND</button>
+                <button class="send-btn" id="sendBtn">ОТПРАВИТЬ</button>
             </div>
         </div>
     </div>
@@ -800,9 +799,10 @@
         let activeChatId = null;
         let activeChatType = 'private';
         let allMessages = {};
-        let contacts = [];
+        let myContacts = JSON.parse(localStorage.getItem('chat_my_contacts') || '[]');
         let groups = [];
         let communities = [];
+        let currentEditingAvatar = '';
 
         function showToast(text, callback) {
             const overlay = document.createElement('div');
@@ -867,22 +867,6 @@
             }
         }
 
-        function applyAvatar(el, avatarValue, nameText) {
-            if (!avatarValue) {
-                el.style.background = 'linear-gradient(135deg, #ff2a5f, #7b2cbf)';
-                el.innerText = nameText ? nameText.charAt(0).toUpperCase() : '?';
-                return;
-            }
-            if (avatarValue.startsWith('url(') || avatarValue.startsWith('data:image')) {
-                const bgValue = avatarValue.startsWith('url(') ? avatarValue : `url(${avatarValue})`;
-                el.style.background = bgValue;
-                el.innerText = '';
-            } else {
-                el.style.background = avatarValue;
-                el.innerText = nameText ? nameText.charAt(0).toUpperCase() : '?';
-            }
-        }
-
         const toggleAddMenuBtn = document.getElementById('toggleAddMenuBtn');
         const addDropdownMenu = document.getElementById('addDropdownMenu');
 
@@ -902,7 +886,7 @@
         document.getElementById('menuCreateGroup').addEventListener('click', () => {
             const listEl = document.getElementById('groupMembersList');
             listEl.innerHTML = '';
-            contacts.forEach(c => {
+            myContacts.forEach(c => {
                 const label = document.createElement('label');
                 label.style.display = 'flex';
                 label.style.alignItems = 'center';
@@ -935,13 +919,33 @@
                 showToast('Введите полный номер телефона контакта!');
                 return;
             }
-            socket.emit('add_contact', { myPhone, targetPhone });
-            document.getElementById('targetPhoneInput').value = '';
-            document.getElementById('addContactModal').style.display = 'none';
+            if (targetPhone === myPhone) {
+                showToast('Нельзя добавить свой собственный номер!');
+                return;
+            }
+            socket.emit('check_contact', { phone: targetPhone });
+        });
+
+        socket.on('contact_check_result', (res) => {
+            if (res.exists) {
+                if (!myContacts.some(c => c.phone === res.contact.phone)) {
+                    myContacts.push(res.contact);
+                    localStorage.setItem('chat_my_contacts', JSON.stringify(myContacts));
+                    renderSidebar();
+                    showToast('Контакт успешно добавлен!');
+                } else {
+                    showToast('Этот контакт уже есть в вашем списке!');
+                }
+                document.getElementById('targetPhoneInput').value = '';
+                document.getElementById('addContactModal').style.display = 'none';
+            } else {
+                showToast('Пользователь с таким номером еще не зарегистрирован в системе!');
+            }
         });
 
         document.getElementById('createGroupConfirmBtn').addEventListener('click', () => {
             const name = document.getElementById('groupNameInput').value.trim();
+            const description = document.getElementById('groupDescInput').value.trim();
             if (!name) {
                 showToast('Введите название группы!');
                 return;
@@ -950,8 +954,9 @@
             const members = Array.from(checkboxes).map(cb => cb.value);
             members.push(myPhone);
 
-            socket.emit('create_group', { name, members, creator: myPhone });
+            socket.emit('create_group', { name, description, members, creator: myPhone });
             document.getElementById('groupNameInput').value = '';
+            document.getElementById('groupDescInput').value = '';
             document.getElementById('groupModal').style.display = 'none';
         });
 
@@ -967,6 +972,191 @@
             document.getElementById('communityNameInput').value = '';
             document.getElementById('communityDescInput').value = '';
             document.getElementById('communityModal').style.display = 'none';
+        });
+
+        document.getElementById('editChatAvatarInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    currentEditingAvatar = event.target.result;
+                    showToast('Аватарка выбрана!');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        document.getElementById('manageChatBtn').addEventListener('click', () => {
+            if (activeChatType === 'group') {
+                const group = groups.find(g => g.id === activeChatId);
+                if (!group) return;
+                
+                document.getElementById('manageModalTitle').innerText = `Управление группой`;
+                document.getElementById('editChatNameInput').value = group.name;
+                document.getElementById('editChatDescInput').value = group.description || '';
+                currentEditingAvatar = group.avatar || '';
+
+                const isCreator = group.creator === myPhone;
+                document.getElementById('editChatInfoSection').style.display = isCreator ? 'flex' : 'none';
+
+                const membersContainer = document.getElementById('manageMembersContainer');
+                membersContainer.innerHTML = '<b style="font-size:12px; color:var(--text-muted);">Текущие участники:</b>';
+                
+                group.members.forEach(phone => {
+                    const contact = myContacts.find(c => c.phone === phone) || { name: phone === myPhone ? 'Я' : phone, phone };
+                    const row = document.createElement('div');
+                    row.style.display = 'flex';
+                    row.style.justifyContent = 'space-between';
+                    row.style.alignItems = 'center';
+                    row.style.padding = '6px 8px';
+                    row.style.background = '#1a1a24';
+                    row.style.borderRadius = '6px';
+                    row.innerHTML = `
+                        <span style="font-size:13px;">${contact.name} (${phone})</span>
+                        ${isCreator && phone !== myPhone ? `<button class="icon-btn" style="width:24px; height:24px; font-size:11px;" onclick="removeMemberFromGroup('${group.id}', '${phone}')">✕</button>` : ''}
+                    `;
+                    membersContainer.appendChild(row);
+                });
+
+                const inviteContainer = document.getElementById('inviteMembersContainer');
+                inviteContainer.innerHTML = '';
+                myContacts.forEach(c => {
+                    if (!group.members.includes(c.phone)) {
+                        const row = document.createElement('div');
+                        row.style.display = 'flex';
+                        row.style.justifyContent = 'space-between';
+                        row.style.alignItems = 'center';
+                        row.style.padding = '6px 8px';
+                        row.style.background = '#161622';
+                        row.style.borderRadius = '6px';
+                        row.innerHTML = `
+                            <span style="font-size:13px;">${c.name} (${c.phone})</span>
+                            <button class="icon-btn" style="width:24px; height:24px; font-size:11px;" onclick="addMemberToGroup('${group.id}', '${c.phone}')">+</button>
+                        `;
+                        inviteContainer.appendChild(row);
+                    }
+                });
+
+                document.getElementById('manageMembersModal').style.display = 'flex';
+
+            } else if (activeChatType === 'community') {
+                const com = communities.find(c => c.id === activeChatId);
+                if (!com) return;
+
+                document.getElementById('manageModalTitle').innerText = `Управление сообществом`;
+                document.getElementById('editChatNameInput').value = com.name;
+                document.getElementById('editChatDescInput').value = com.description || '';
+                currentEditingAvatar = com.avatar || '';
+
+                const isCreator = com.creator === myPhone;
+                document.getElementById('editChatInfoSection').style.display = isCreator ? 'flex' : 'none';
+
+                const membersContainer = document.getElementById('manageMembersContainer');
+                membersContainer.innerHTML = `<b style="font-size:12px; color:var(--text-muted);">Подписчиков: ${com.subscribers.length}</b>`;
+                
+                com.subscribers.forEach(phone => {
+                    const contact = myContacts.find(c => c.phone === phone) || { name: phone === myPhone ? 'Я' : phone, phone };
+                    const row = document.createElement('div');
+                    row.style.display = 'flex';
+                    row.style.justifyContent = 'space-between';
+                    row.style.alignItems = 'center';
+                    row.style.padding = '6px 8px';
+                    row.style.background = '#1a1a24';
+                    row.style.borderRadius = '6px';
+                    row.innerHTML = `
+                        <span style="font-size:13px;">${contact.name} (${phone})</span>
+                        ${isCreator && phone !== myPhone ? `<button class="icon-btn" style="width:24px; height:24px; font-size:11px;" onclick="removeMemberFromCommunity('${com.id}', '${phone}')">✕</button>` : ''}
+                    `;
+                    membersContainer.appendChild(row);
+                });
+
+                const inviteContainer = document.getElementById('inviteMembersContainer');
+                inviteContainer.innerHTML = '';
+                myContacts.forEach(c => {
+                    if (!com.subscribers.includes(c.phone)) {
+                        const row = document.createElement('div');
+                        row.style.display = 'flex';
+                        row.style.justifyContent = 'space-between';
+                        row.style.alignItems = 'center';
+                        row.style.padding = '6px 8px';
+                        row.style.background = '#161622';
+                        row.style.borderRadius = '6px';
+                        row.innerHTML = `
+                            <span style="font-size:13px;">${c.name} (${c.phone})</span>
+                            <button class="icon-btn" style="width:24px; height:24px; font-size:11px;" onclick="addMemberToCommunity('${com.id}', '${c.phone}')">+</button>
+                        `;
+                        inviteContainer.appendChild(row);
+                    }
+                });
+
+                document.getElementById('manageMembersModal').style.display = 'flex';
+            }
+        });
+
+        document.getElementById('saveChatInfoBtn').addEventListener('click', () => {
+            const newName = document.getElementById('editChatNameInput').value.trim();
+            const newDesc = document.getElementById('editChatDescInput').value.trim();
+            if (!newName) {
+                showToast('Название не может быть пустым!');
+                return;
+            }
+
+            if (activeChatType === 'group') {
+                socket.emit('update_group_info', {
+                    groupId: activeChatId,
+                    name: newName,
+                    description: newDesc,
+                    avatar: currentEditingAvatar,
+                    myPhone
+                });
+            } else if (activeChatType === 'community') {
+                socket.emit('update_community_info', {
+                    communityId: activeChatId,
+                    name: newName,
+                    description: newDesc,
+                    avatar: currentEditingAvatar,
+                    myPhone
+                });
+            }
+            document.getElementById('manageMembersModal').style.display = 'none';
+        });
+
+        document.getElementById('closeManageModalBtn').addEventListener('click', () => {
+            document.getElementById('manageMembersModal').style.display = 'none';
+        });
+
+        window.removeMemberFromGroup = function(groupId, phone) {
+            socket.emit('remove_group_member', { groupId, phone, myPhone });
+        };
+
+        window.addMemberToGroup = function(groupId, phone) {
+            socket.emit('add_group_member', { groupId, phone, myPhone });
+        };
+
+        window.removeMemberFromCommunity = function(communityId, phone) {
+            socket.emit('remove_community_member', { communityId, phone, myPhone });
+        };
+
+        window.addMemberToCommunity = function(communityId, phone) {
+            socket.emit('add_community_member', { communityId, phone, myPhone });
+        };
+
+        socket.on('group_updated', (updatedGroup) => {
+            const idx = groups.findIndex(g => g.id === updatedGroup.id);
+            if (idx !== -1) groups[idx] = updatedGroup;
+            renderSidebar();
+            if (activeChatId === updatedGroup.id) {
+                selectChat(updatedGroup.id, 'group', updatedGroup.name);
+            }
+        });
+
+        socket.on('community_updated', (updatedCom) => {
+            const idx = communities.findIndex(c => c.id === updatedCom.id);
+            if (idx !== -1) communities[idx] = updatedCom;
+            renderSidebar();
+            if (activeChatId === updatedCom.id) {
+                selectChat(updatedCom.id, 'community', updatedCom.name);
+            }
         });
 
         let selectedAvatarStyle = myAvatarData;
@@ -1100,6 +1290,7 @@
         }
 
         setupPhoneMask(document.getElementById('authPhone'));
+        setupPhoneMask(document.getElementById('targetPhoneInput'));
 
         const authModal = document.getElementById('authModal');
         const codeModal = document.getElementById('codeModal');
@@ -1136,7 +1327,6 @@
             codeModal.style.display = 'flex';
         });
 
-        // Получаем код от сервера и показываем его вверху экрана
         socket.on('code_sent_debug', (data) => {
             if (data && data.code) {
                 displayCodeValue.innerText = data.code;
@@ -1162,8 +1352,9 @@
                 localStorage.setItem('chat_avatar', myAvatarData);
                 authModal.style.display = 'none';
                 codeModal.style.display = 'none';
-                topCodeBanner.classList.remove('show'); // Скрываем верхний баннер
+                topCodeBanner.classList.remove('show');
                 loginUser(myName, myPhone, myAvatarData);
+                socket.emit('register_session', { phone: myPhone, name: myName });
             } else {
                 showToast(res.message || 'Неверный код!');
             }
@@ -1177,16 +1368,8 @@
             document.getElementById('myPhoneDisplay').innerText = phone;
             const myAvatarEl = document.getElementById('myAvatar');
             applyAvatar(myAvatarEl, avatar, name);
+            socket.emit('register_session', { phone: myPhone, name: myName });
         }
-
-        socket.on('add_contact_response', (res) => {
-            showToast(res.message);
-        });
-
-        socket.on('contacts_list', (list) => {
-            contacts = list;
-            renderSidebar();
-        });
 
         socket.on('groups_list', (list) => {
             groups = list;
@@ -1202,6 +1385,21 @@
             const listEl = document.getElementById('contactsList');
             listEl.innerHTML = '';
 
+            // Раздел «Избранное»
+            const savedItem = document.createElement('div');
+            savedItem.className = `contact-item ${activeChatId === myPhone && activeChatType === 'private' ? 'active' : ''}`;
+            savedItem.innerHTML = `
+                <div class="contact-left">
+                    <div class="avatar" style="width: 36px; height: 36px; background: linear-gradient(135deg, #7b2cbf, #4361ee); font-size: 14px;">⭐</div>
+                    <div class="contact-info">
+                        <div class="contact-name">Избранное</div>
+                        <div class="contact-status">Заметки и сообщения себе</div>
+                    </div>
+                </div>
+            `;
+            savedItem.onclick = () => selectChat(myPhone, 'private', 'Избранное');
+            listEl.appendChild(savedItem);
+
             if (communities.length > 0) {
                 const header = document.createElement('div');
                 header.style.padding = '8px 20px';
@@ -1212,14 +1410,20 @@
                 listEl.appendChild(header);
 
                 communities.forEach(com => {
+                    if (!com.subscribers.includes(myPhone)) return;
                     const item = document.createElement('div');
                     item.className = `contact-item ${activeChatId === com.id && activeChatType === 'community' ? 'active' : ''}`;
+                    
+                    const avatarHtml = com.avatar 
+                        ? `<div class="avatar" style="width: 36px; height: 36px; background: url(${com.avatar}) center/cover no-repeat;"></div>`
+                        : `<div class="avatar" style="width: 36px; height: 36px; font-size: 14px;">📢</div>`;
+
                     item.innerHTML = `
                         <div class="contact-left">
-                            <div class="avatar" style="width: 36px; height: 36px; font-size: 14px;">📢</div>
+                            ${avatarHtml}
                             <div class="contact-info">
                                 <div class="contact-name">${com.name}</div>
-                                <div class="contact-status">${com.subscribersCount || 0} участников</div>
+                                <div class="contact-status">${com.subscribers.length} участников</div>
                             </div>
                         </div>
                     `;
@@ -1238,11 +1442,17 @@
                 listEl.appendChild(header);
 
                 groups.forEach(g => {
+                    if (!g.members.includes(myPhone)) return;
                     const item = document.createElement('div');
                     item.className = `contact-item ${activeChatId === g.id && activeChatType === 'group' ? 'active' : ''}`;
+                    
+                    const avatarHtml = g.avatar 
+                        ? `<div class="avatar" style="width: 36px; height: 36px; background: url(${g.avatar}) center/cover no-repeat;"></div>`
+                        : `<div class="avatar" style="width: 36px; height: 36px; font-size: 14px;">👥</div>`;
+
                     item.innerHTML = `
                         <div class="contact-left">
-                            <div class="avatar" style="width: 36px; height: 36px; font-size: 14px;">👥</div>
+                            ${avatarHtml}
                             <div class="contact-info">
                                 <div class="contact-name">${g.name}</div>
                                 <div class="contact-status">${g.members.length} участника</div>
@@ -1262,7 +1472,9 @@
             headerC.innerText = 'Личные чаты';
             listEl.appendChild(headerC);
 
-            contacts.forEach(c => {
+            myContacts.forEach(c => {
+                if (c.phone === myPhone) return;
+
                 const item = document.createElement('div');
                 item.className = `contact-item ${activeChatId === c.phone && activeChatType === 'private' ? 'active' : ''}`;
                 item.innerHTML = `
@@ -1271,7 +1483,7 @@
                         <div class="contact-info">
                             <div class="contact-name">${c.name}</div>
                             <div class="contact-status ${c.isOnline ? 'online' : ''}">
-                                ${c.isOnline ? '● в сети' : (c.lastSeen ? 'был в ' + c.lastSeen : 'не в сети')}
+                                ${c.isOnline ? '● в сети' : 'не в сети'}
                             </div>
                         </div>
                     </div>
@@ -1287,13 +1499,41 @@
             
             const activeAvatar = document.getElementById('activeAvatar');
             activeAvatar.style.display = 'flex';
-            if (type === 'group') activeAvatar.innerText = '👥';
-            else if (type === 'community') activeAvatar.innerText = '📢';
-            else activeAvatar.innerText = name ? name.charAt(0).toUpperCase() : '?';
+            
+            let descText = '';
+            if (id === myPhone && type === 'private') {
+                activeAvatar.style.background = 'linear-gradient(135deg, #7b2cbf, #4361ee)';
+                activeAvatar.innerText = '⭐';
+                name = 'Избранное';
+                descText = 'Личные заметки';
+            } else if (type === 'group') {
+                const g = groups.find(item => item.id === id);
+                if (g) {
+                    activeAvatar.style.background = g.avatar ? `url(${g.avatar}) center/cover no-repeat` : 'linear-gradient(135deg, #ff2a5f, #7b2cbf)';
+                    activeAvatar.innerText = g.avatar ? '' : '👥';
+                    name = g.name;
+                    descText = g.description || '';
+                }
+            } else if (type === 'community') {
+                const c = communities.find(item => item.id === id);
+                if (c) {
+                    activeAvatar.style.background = c.avatar ? `url(${c.avatar}) center/cover no-repeat` : 'linear-gradient(135deg, #ff2a5f, #7b2cbf)';
+                    activeAvatar.innerText = c.avatar ? '' : '📢';
+                    name = c.name;
+                    descText = c.description || '';
+                }
+            } else {
+                activeAvatar.style.background = 'linear-gradient(135deg, #ff2a5f, #7b2cbf)';
+                activeAvatar.innerText = name ? name.charAt(0).toUpperCase() : '?';
+            }
 
             document.getElementById('chatHeaderText').innerText = name;
+            document.getElementById('chatHeaderDesc').innerText = descText;
             document.getElementById('chatHeaderActions').style.display = 'flex';
             document.getElementById('inputArea').style.display = 'flex';
+
+            const manageBtn = document.getElementById('manageChatBtn');
+            manageBtn.style.display = (type === 'private') ? 'none' : 'flex';
             
             renderSidebar();
             renderMessages();
