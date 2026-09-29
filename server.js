@@ -25,12 +25,11 @@ let db = {
     lastSeen: {}        // login -> timestamp
 };
 
-// Загрузка базы данных с диска, если она есть
+// Загрузка базы данных с диска
 if (fs.existsSync(DB_FILE)) {
     try {
         const data = fs.readFileSync(DB_FILE, 'utf8');
-        const parsed = JSON.parse(data);
-        db = { ...db, ...parsed };
+        db = { ...db, ...JSON.parse(data) };
     } catch (e) {
         console.error('Ошибка чтения database.json, используется пустая база:', e);
     }
@@ -47,6 +46,58 @@ function saveDb() {
 // REST API эндпоинты
 app.get('/api/data', (req, res) => {
     res.json(db);
+});
+
+// Актуальная лента новостей
+app.get('/api/news', async (req, res) => {
+    try {
+        const response = await fetch('https://saurav.tech/NewsAPI/top-headlines/category/technology/in.json');
+        if (response.ok) {
+            const data = await response.json();
+            if (data.articles && data.articles.length > 0) {
+                const formatted = data.articles.slice(0, 10).map(item => ({
+                    title: item.title || 'Новость без названия',
+                    description: item.description || 'Описание отсутствует',
+                    url: item.url || '#',
+                    image: item.urlToImage || '',
+                    publishedAt: new Date(item.publishedAt || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    source: item.source?.name || 'Технологии'
+                }));
+                return res.json({ success: true, articles: formatted });
+            }
+        }
+    } catch (e) {}
+
+    // Резервная актуальная лента новостей
+    res.json({
+        success: true,
+        articles: [
+            {
+                title: '⚡ В мессенджере запущены совместные групповые звонки и синхронизация TikTok',
+                description: 'Теперь пользователи могут общаться несколькими участниками в одном звонке и вместе смотреть видео в реальном времени.',
+                url: '#',
+                image: '',
+                publishedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                source: 'Новости Мессенджера'
+            },
+            {
+                title: '🚀 Развитие технологий совместного просмотра контента',
+                description: 'Синхронный скролл медиалент становится основным трендом среди современных платформ общения.',
+                url: '#',
+                image: '',
+                publishedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                source: 'Tech Today'
+            },
+            {
+                title: '🎮 Обновления и новинки в игровой индустрии',
+                description: 'Анонсированы свежие игры и сетевые режимы для совместной игры с друзьями.',
+                url: '#',
+                image: '',
+                publishedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                source: 'Игровые Вести'
+            }
+        ]
+    });
 });
 
 app.post('/api/register', (req, res) => {
@@ -217,12 +268,10 @@ app.post('/api/send-message', (req, res) => {
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const msgObj = { sender, text: text || '', media: media || null, time, edited: false };
 
-    // Сохранение для отправителя
     if (!db.messagesStore[sender]) db.messagesStore[sender] = {};
     if (!db.messagesStore[sender][receiver]) db.messagesStore[sender][receiver] = [];
     db.messagesStore[sender][receiver].push(msgObj);
 
-    // Сохранение для получателя (если это не чат с самим собой)
     if (sender !== receiver) {
         if (!db.messagesStore[receiver]) db.messagesStore[receiver] = {};
         if (!db.messagesStore[receiver][sender]) db.messagesStore[receiver][sender] = [];
@@ -310,13 +359,16 @@ app.post('/api/delete-group-message', (req, res) => {
     res.json({ success: true, db });
 });
 
-// Socket.io для сигнализации звонков, статусов и индикатора ввода
-const activeSockets = {};
+// Socket.io для мульти-звонков, статусов, совместного скролла и ввода
+const activeSockets = {}; // login -> socket.id
+const socketUsers = {};   // socket.id -> login
+const callRooms = {};     // roomId -> Set of logins
 
 io.on('connection', (socket) => {
     socket.on('register', (login) => {
         if (login) {
             activeSockets[login] = socket.id;
+            socketUsers[socket.id] = login;
             db.lastSeen[login] = Date.now();
         }
     });
@@ -343,40 +395,62 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('call-user', ({ to, offer, from }) => {
+    // --- ЛОГИКА ГРУППОВЫХ И СОВМЕСТНЫХ ЗВОНКОВ ---
+    socket.on('join-call-room', ({ roomId, login }) => {
+        socket.join(roomId);
+        if (!callRooms[roomId]) callRooms[roomId] = new Set();
+        
+        const existingMembers = Array.from(callRooms[roomId]);
+        callRooms[roomId].add(login);
+
+        // Отправляем подключившемуся список участников
+        socket.emit('call-room-members', { members: existingMembers, roomId });
+
+        // Оповещаем остальных в комнате о новом пользователе
+        socket.to(roomId).emit('user-joined-call', { login, roomId });
+    });
+
+    socket.on('invite-user-to-call', ({ to, roomId, fromLogin, fromName }) => {
         const targetSocketId = activeSockets[to];
         if (targetSocketId) {
-            io.to(targetSocketId).emit('incoming-call', { from, offer });
+            io.to(targetSocketId).emit('incoming-call-invite', { from: fromLogin, fromName, roomId });
         }
     });
 
-    socket.on('call-accepted', ({ to, answer }) => {
-        const targetSocketId = activeSockets[to];
+    socket.on('call-signal', ({ targetLogin, signal, fromLogin, roomId }) => {
+        const targetSocketId = activeSockets[targetLogin];
         if (targetSocketId) {
-            io.to(targetSocketId).emit('call-answered', { answer });
+            io.to(targetSocketId).emit('call-signal', { signal, fromLogin, roomId });
         }
     });
 
-    socket.on('ice-candidate', ({ to, candidate }) => {
-        const targetSocketId = activeSockets[to];
-        if (targetSocketId) {
-            io.to(targetSocketId).emit('ice-candidate', { candidate });
+    socket.on('leave-call-room', ({ roomId, login }) => {
+        socket.leave(roomId);
+        if (callRooms[roomId]) {
+            callRooms[roomId].delete(login);
+            if (callRooms[roomId].size === 0) delete callRooms[roomId];
         }
+        socket.to(roomId).emit('user-left-call', { login, roomId });
     });
 
-    socket.on('hang-up', ({ to }) => {
-        const targetSocketId = activeSockets[to];
-        if (targetSocketId) {
-            io.to(targetSocketId).emit('hang-up');
-        }
+    // --- СОВМЕСТНЫЙ СКРОЛЛ TIKTOK ---
+    socket.on('tiktok-sync-scroll', ({ videoIndex, sender }) => {
+        socket.broadcast.emit('tiktok-scroll-event', { videoIndex, sender });
     });
 
     socket.on('disconnect', () => {
-        for (const [login, sId] of Object.entries(activeSockets)) {
-            if (sId === socket.id) {
-                db.lastSeen[login] = Date.now();
-                delete activeSockets[login];
-                break;
+        const login = socketUsers[socket.id];
+        if (login) {
+            db.lastSeen[login] = Date.now();
+            delete activeSockets[login];
+            delete socketUsers[socket.id];
+
+            for (const [roomId, members] of Object.entries(callRooms)) {
+                if (members.has(login)) {
+                    members.delete(login);
+                    socket.to(roomId).emit('user-left-call', { login, roomId });
+                    if (members.size === 0) delete callRooms[roomId];
+                }
             }
         }
         saveDb();
