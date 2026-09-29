@@ -21,7 +21,7 @@
         .hidden { display: none !important; }
         
         .modal-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(11, 12, 16, 0.95); display: flex; justify-content: center; align-items: center; z-index: 2000; border-radius: 0; }
-        .modal { background: #1f2833; padding: 35px; border-radius: 12px; width: 400px; border: 1px solid #66fcf1; box-shadow: 0 0 30px rgba(102, 252, 241, 0.4); text-align: center; display: flex; flex-direction: column; gap: 12px; max-height: 95vh; overflow-y: auto; }
+        .modal { background: #1f2833; padding: 35px; border-radius: 12px; width: 420px; border: 1px solid #66fcf1; box-shadow: 0 0 30px rgba(102, 252, 241, 0.4); text-align: center; display: flex; flex-direction: column; gap: 12px; max-height: 95vh; overflow-y: auto; }
         .modal h3 { color: #66fcf1; margin-top: 0; text-transform: uppercase; letter-spacing: 2px; }
         
         .auth-tabs { display: flex; gap: 10px; margin-bottom: 5px; }
@@ -235,7 +235,7 @@
         </div>
     </div>
 
-    <!-- ОКНО НАСТРОЕК ПРОФИЛЯ С КНОПКОЙ МИКРОФОНА -->
+    <!-- ОКНО НАСТРОЕК ПРОФИЛЯ -->
     <div id="profileModal" class="modal-overlay hidden">
         <div class="modal">
             <h3>Настройки профиля</h3>
@@ -250,6 +250,25 @@
             <div style="display: flex; gap: 10px; margin-top: 10px;">
                 <button onclick="saveProfile()" style="flex: 1;">Сохранить</button>
                 <button onclick="toggleProfileModal()" style="flex: 1; background: #333; color:#fff;">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ОКНО НАСТРОЕК СООБЩЕСТВА И УПРАВЛЕНИЯ РОЛЯМИ -->
+    <div id="groupSettingsModal" class="modal-overlay hidden">
+        <div class="modal" style="width: 480px;">
+            <h3>Настройки сообщества</h3>
+            <input type="text" id="editGroupNameInput" placeholder="Название сообщества...">
+            <p style="font-size: 12px; margin: 0; color: #aaa; text-align: left;">Аватар сообщества:</p>
+            <input type="file" id="editGroupAvatarFile" accept="image/*" style="font-size:12px; padding:6px;" onchange="previewGroupAvatar(event)">
+            <img id="editGroupAvatarPreview" class="avatar-lg" src="" alt="group avatar" style="margin-top:5px;">
+
+            <h4 style="margin: 10px 0 5px 0; text-align:left; font-size:13px;">Участники и роли:</h4>
+            <div id="groupMembersList" style="max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; text-align: left; background: #0b0c10; padding: 8px; border-radius: 6px; border: 1px solid #45a29e;"></div>
+
+            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                <button onclick="saveGroupSettings()" style="flex: 1;">Сохранить</button>
+                <button onclick="closeGroupSettingsModal()" style="flex: 1; background: #333; color:#fff;">Закрыть</button>
             </div>
         </div>
     </div>
@@ -289,7 +308,6 @@
             </div>
             <div id="lastLoginInfo" style="font-size: 9px; color: #777;">Последний вход: <span id="lastLoginText"></span></div>
             
-            <!-- КНОПКА ШЕСТЕРЕНКИ И КНОПКА ВЫХОДА -->
             <div style="display: flex; gap: 4px; margin-top: 4px;">
                 <button class="nav-btn" onclick="toggleProfileModal()" style="flex: 1; text-align: center; border-color: #45a29e; color: #66fcf1; font-size: 18px; padding: 8px;" title="Настройки">⚙</button>
                 <button class="nav-btn" onclick="logout()" style="flex: 1; text-align: center; border-color: #ff007f; color: #ff007f;">Выйти</button>
@@ -312,9 +330,12 @@
         <div class="content-area">
             <div class="chat-header">
                 <h4 id="contentTitle" style="margin: 0;">Выбери чат</h4>
-                <div id="callButtons" class="call-buttons hidden">
-                    <button onclick="startCall(false)">📞 Звонок</button>
-                    <button onclick="startCall(true)">🖥 Демо</button>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <button id="groupSettingsBtn" class="hidden" onclick="openGroupSettingsModal()" style="padding: 6px 12px; font-size: 11px; background: #66fcf1; color: #0b0c10;">⚙ Настройки сообщества</button>
+                    <div id="callButtons" class="call-buttons hidden">
+                        <button onclick="startCall(false)">📞 Звонок</button>
+                        <button onclick="startCall(true)">🖥 Демо</button>
+                    </div>
                 </div>
             </div>
             
@@ -330,7 +351,7 @@
                 <div id="filePreviewHint" style="font-size: 11px; color: #66fcf1; display:none; padding: 2px 0;"></div>
             </div>
 
-            <!-- Вкладка для Мемов и Ленты -->
+            <!-- Лента новостей и мемы -->
             <div id="newsContainer" class="hidden" style="overflow-y: auto; height: 100%; padding-right: 5px;">
                 <div id="newsList">Загрузка...</div>
             </div>
@@ -347,6 +368,8 @@
     let memeList = [];
     let selectedAvatarUrl = 'https://api.iconify.design/lucide:cat.svg?color=%2366fcf1';
     let attachedMedia = null;
+    let editingGroupId = '';
+    let newGroupAvatarEditUrl = '';
 
     let peerConnection;
     let localStream;
@@ -479,7 +502,13 @@
         dbData = newData;
         if (currentUserLogin && dbData.users && dbData.users[currentUserLogin]) {
             updateTabContent();
-            if (currentPartner) renderMessages();
+            if (currentPartner) {
+                if (isGroupChat) {
+                    const g = dbData.groups?.[currentPartner];
+                    if (g) document.getElementById('contentTitle').textContent = `🏠 Сообщество: ${g.name}`;
+                }
+                renderMessages();
+            }
             if (currentTab === 'news' || currentTab === 'feed') renderContentList();
         }
     }
@@ -735,6 +764,107 @@
         }
     }
 
+    // Настройки сообщества и роли
+    function openGroupSettingsModal() {
+        if (!isGroupChat || !currentPartner) return;
+        editingGroupId = currentPartner;
+        const g = dbData.groups[editingGroupId];
+        if (!g) return;
+
+        const myRole = g.roles?.[currentUserLogin] || (g.creator === currentUserLogin ? 'Создатель' : 'Участник');
+        if (g.creator !== currentUserLogin && myRole !== 'Администратор') {
+            return showNeonAlert('Ошибка', 'У вас нет прав администратора для изменения настроек этого сообщества!');
+        }
+
+        document.getElementById('editGroupNameInput').value = g.name;
+        document.getElementById('editGroupAvatarPreview').src = g.avatar || 'https://api.iconify.design/lucide:users.svg?color=%2366fcf1';
+        newGroupAvatarEditUrl = '';
+
+        const membersListEl = document.getElementById('groupMembersList');
+        membersListEl.innerHTML = '';
+
+        g.members.forEach(mLogin => {
+            const mUser = dbData.users[mLogin];
+            const mName = mUser ? mUser.name : mLogin;
+            const role = g.roles?.[mLogin] || (g.creator === mLogin ? 'Создатель' : 'Участник');
+
+            const row = document.createElement('div');
+            row.style.display = 'flex';
+            row.style.alignItems = 'center';
+            row.style.justifyContent = 'space-between';
+            row.style.padding = '4px 0';
+            row.style.borderBottom = '1px solid #1f2833';
+
+            let roleControl = `<span style="color:#66fcf1; font-size:12px;">${role}</span>`;
+            // Только Создатель может менять чужие роли (кроме себя)
+            if (g.creator === currentUserLogin && mLogin !== g.creator) {
+                roleControl = `
+                    <select onchange="changeMemberRole('${editingGroupId}', '${mLogin}', this.value)" style="font-size:11px; padding:4px; background:#1f2833;">
+                        <option value="Участник" ${role === 'Участник' ? 'selected' : ''}>Участник</option>
+                        <option value="Администратор" ${role === 'Администратор' ? 'selected' : ''}>Администратор</option>
+                    </select>
+                `;
+            }
+
+            row.innerHTML = `<span style="font-size:12px;">${mName} (@${mLogin})</span> ${roleControl}`;
+            membersListEl.appendChild(row);
+        });
+
+        document.getElementById('groupSettingsModal').classList.remove('hidden');
+    }
+
+    function closeGroupSettingsModal() {
+        document.getElementById('groupSettingsModal').classList.add('hidden');
+        editingGroupId = '';
+    }
+
+    function previewGroupAvatar(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            newGroupAvatarEditUrl = e.target.result;
+            document.getElementById('editGroupAvatarPreview').src = newGroupAvatarEditUrl;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    async function changeMemberRole(groupId, targetLogin, newRole) {
+        const res = await fetch('/api/set-group-role', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ groupId, login: currentUserLogin, targetLogin, newRole })
+        });
+        const data = await res.json();
+        if (data.success) {
+            dbData = data.db;
+        } else {
+            showNeonAlert('Ошибка', data.error || 'Не удалось изменить роль');
+        }
+    }
+
+    async function saveGroupSettings() {
+        if (!editingGroupId) return;
+        const newName = document.getElementById('editGroupNameInput').value.trim();
+        const g = dbData.groups[editingGroupId];
+        const avatarToSave = newGroupAvatarEditUrl || g.avatar;
+
+        const res = await fetch('/api/update-group', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ groupId: editingGroupId, login: currentUserLogin, name: newName, avatar: avatarToSave })
+        });
+        const data = await res.json();
+        if (data.success) {
+            dbData = data.db;
+            selectPartner(editingGroupId, true);
+            closeGroupSettingsModal();
+            showNeonAlert('Успешно', 'Настройки сообщества сохранены!');
+        } else {
+            showNeonAlert('Ошибка', data.error || 'Ошибка сохранения');
+        }
+    }
+
     function openContactInfo(targetLogin, event) {
         event?.stopPropagation();
         editingContactLogin = targetLogin;
@@ -818,6 +948,7 @@
         document.getElementById('addFriendBox').classList.add('hidden');
         document.getElementById('addGroupBox').classList.add('hidden');
         document.getElementById('callButtons').classList.add('hidden');
+        document.getElementById('groupSettingsBtn').classList.add('hidden');
 
         if (tab === 'news' || tab === 'feed') {
             document.getElementById('paneTitle').textContent = tab === 'news' ? 'Мемы' : 'Лента';
@@ -903,10 +1034,16 @@
             }
             groupKeys.forEach(gId => {
                 const g = groups[gId];
+                if (!g || !g.members) return;
                 const isMember = g.members.includes(currentUserLogin);
+                const myRole = g.roles?.[currentUserLogin] || (g.creator === currentUserLogin ? 'Создатель' : 'Участник');
                 const div = document.createElement('div');
                 div.className = `item-card ${currentPartner === gId ? 'active' : ''}`;
-                div.innerHTML = `<span>🏠 ${g.name}</span> <small style="color:${isMember?'#66fcf1':'#888'}">${isMember ? 'Участник' : 'Вступить'}</small>`;
+                div.innerHTML = `
+                    <img class="avatar-sm" src="${g.avatar || 'https://api.iconify.design/lucide:users.svg?color=%2366fcf1'}">
+                    <span style="flex-grow:1;">🏠 ${g.name}<br><small style="color:#66fcf1">${myRole}</small></span> 
+                    <small style="color:${isMember?'#66fcf1':'#888'}">${isMember ? '' : 'Вступить'}</small>
+                `;
                 div.onclick = () => {
                     if (!isMember) {
                         joinGroup(gId);
@@ -996,10 +1133,12 @@
             const groupObj = dbData.groups[targetId];
             document.getElementById('contentTitle').textContent = `🏠 Сообщество: ${groupObj?.name}`;
             document.getElementById('callButtons').classList.add('hidden');
+            document.getElementById('groupSettingsBtn').classList.remove('hidden');
         } else {
             const displayName = getDisplayName(targetId);
             const titleText = targetId === currentUserLogin ? '⭐ Избранное (Заметки)' : `Чат с: ${displayName} (@${targetId})`;
             document.getElementById('contentTitle').textContent = titleText;
+            document.getElementById('groupSettingsBtn').classList.add('hidden');
             
             if (targetId !== currentUserLogin) {
                 document.getElementById('callButtons').classList.remove('hidden');
@@ -1017,8 +1156,10 @@
         messagesBox.innerHTML = '';
         
         let chatHistory = [];
+        let groupObj = null;
         if (isGroupChat) {
-            chatHistory = dbData.groups && dbData.groups[currentPartner] ? dbData.groups[currentPartner].messages : [];
+            groupObj = dbData.groups && dbData.groups[currentPartner] ? dbData.groups[currentPartner] : null;
+            chatHistory = groupObj ? groupObj.messages : [];
         } else {
             chatHistory = dbData.messagesStore && dbData.messagesStore[currentUserLogin] && dbData.messagesStore[currentUserLogin][currentPartner] ? dbData.messagesStore[currentUserLogin][currentPartner] : [];
         }
@@ -1031,8 +1172,13 @@
         chatHistory.forEach(m => {
             const div = document.createElement('div');
             const isMe = (m.sender === currentUserLogin);
-            div.className = `msg ${isMe && currentPartner !== currentUserLogin ? 'me' : 'other'}`;
-            const senderName = getDisplayName(m.sender);
+            div.className = `msg ${isMe && currentPartner !== currentUserLogin && !isGroupChat ? 'me' : 'other'}`;
+            
+            let senderName = getDisplayName(m.sender);
+            if (isGroupChat && groupObj) {
+                const role = groupObj.roles?.[m.sender] || (groupObj.creator === m.sender ? 'Создатель' : 'Участник');
+                senderName = `${senderName} [${role}]`;
+            }
             
             let mediaHtml = '';
             if (m.media) {
@@ -1051,13 +1197,11 @@
         messagesBox.scrollTop = messagesBox.scrollHeight;
     }
 
-    // Раздельный рендер для Мемов и Ленты сообществ
     function renderContentList() {
         const newsList = document.getElementById('newsList');
         newsList.innerHTML = '';
 
         if (currentTab === 'news') {
-            // Вкладка Мемов (только юмор из сети с регулировкой звука для видео)
             if (memeList.length === 0) {
                 newsList.innerHTML = 'Загрузка мемов...';
                 return;
@@ -1079,7 +1223,6 @@
                 newsList.appendChild(div);
             });
         } else if (currentTab === 'feed') {
-            // Вкладка Ленты (только посты и новости из сообществ)
             let feedItems = [];
             if (dbData.groups) {
                 Object.values(dbData.groups).forEach(group => {
