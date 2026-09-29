@@ -132,6 +132,7 @@
             cursor: pointer;
             font-size: 14px;
             transition: all 0.2s;
+            position: relative;
         }
 
         .icon-btn:hover {
@@ -154,6 +155,7 @@
             flex-shrink: 0;
             background-size: cover !important;
             background-position: center !important;
+            background-repeat: no-repeat !important;
         }
 
         .my-details {
@@ -285,6 +287,7 @@
             display: flex;
             flex-direction: column;
             background: var(--panel-bg);
+            position: relative;
         }
 
         .chat-header {
@@ -343,6 +346,28 @@
             box-shadow: 0 4px 15px rgba(255, 42, 95, 0.3);
         }
 
+        .message img, .message video {
+            max-width: 100%;
+            max-height: 250px;
+            border-radius: 8px;
+            margin-top: 5px;
+            display: block;
+            object-fit: contain;
+        }
+
+        .file-attachment {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(0,0,0,0.2);
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin-top: 5px;
+            color: inherit;
+            text-decoration: none;
+            font-size: 13px;
+        }
+
         .message-time {
             font-size: 10px;
             opacity: 0.7;
@@ -357,6 +382,7 @@
             display: flex;
             gap: 10px;
             align-items: center;
+            position: relative;
         }
 
         input, button, select, textarea {
@@ -395,6 +421,42 @@
 
         button.send-btn:active {
             transform: scale(0.97);
+        }
+
+        /* Панель смайликов */
+        .emoji-picker {
+            position: absolute;
+            bottom: 75px;
+            left: 20px;
+            background: #161622;
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 10px;
+            width: 260px;
+            display: none;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 6px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            z-index: 100;
+        }
+
+        .emoji-picker.show {
+            display: grid;
+        }
+
+        .emoji-item {
+            background: #1f1f2e;
+            border: none;
+            font-size: 20px;
+            padding: 6px;
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: center;
+            transition: background 0.2s;
+        }
+
+        .emoji-item:hover {
+            background: var(--accent-color);
         }
 
         .modal-overlay {
@@ -783,8 +845,34 @@
             <div class="messages-container" id="messagesContainer">
                 <div style="color: var(--text-muted); text-align: center; margin-top: auto; margin-bottom: auto;">Выберите контакт для общения</div>
             </div>
+            
             <div class="chat-input-area" id="inputArea" style="display: none;">
+                <!-- Панель смайликов -->
+                <div class="emoji-picker" id="emojiPicker">
+                    <button class="emoji-item">😀</button>
+                    <button class="emoji-item">😂</button>
+                    <button class="emoji-item">😍</button>
+                    <button class="emoji-item">🔥</button>
+                    <button class="emoji-item">👍</button>
+                    <button class="emoji-item">🎉</button>
+                    <button class="emoji-item">😎</button>
+                    <button class="emoji-item">🤔</button>
+                    <button class="emoji-item">😢</button>
+                    <button class="emoji-item">❤️</button>
+                    <button class="emoji-item">⚡</button>
+                    <button class="emoji-item">🚀</button>
+                    <button class="emoji-item">💀</button>
+                    <button class="emoji-item">🎯</button>
+                    <button class="emoji-item">🙌</button>
+                    <button class="emoji-item">⭐</button>
+                    <button class="emoji-item">💩</button>
+                    <button class="emoji-item">💯</button>
+                </div>
+
+                <button class="icon-btn" id="emojiBtn" title="Эмодзи">😊</button>
                 <button class="icon-btn" id="attachFileBtn" title="Прикрепить файл">📎</button>
+                <input type="file" id="chatFileInput" style="display: none;" accept="image/*,video/*,.pdf,.doc,.docx,.txt,.zip">
+                
                 <input type="text" id="messageInput" placeholder="Написать сообщение...">
                 <button class="send-btn" id="sendBtn">ОТПРАВИТЬ</button>
             </div>
@@ -876,15 +964,70 @@
                 el.innerText = fallbackText ? fallbackText.charAt(0).toUpperCase() : '?';
                 return;
             }
-            if (avatarValue.startsWith('url(') || avatarValue.startsWith('data:image')) {
-                const bgValue = avatarValue.startsWith('url(') ? avatarValue : `url(${avatarValue})`;
-                el.style.background = bgValue;
+            if (avatarValue.startsWith('data:image') || avatarValue.startsWith('http') || avatarValue.startsWith('blob:')) {
+                el.style.background = `url(${avatarValue}) center/cover no-repeat`;
+                el.innerText = '';
+            } else if (avatarValue.startsWith('url(')) {
+                el.style.background = `${avatarValue} center/cover no-repeat`;
                 el.innerText = '';
             } else {
                 el.style.background = avatarValue;
                 el.innerText = fallbackText ? fallbackText.charAt(0).toUpperCase() : '?';
             }
         }
+
+        // Логика панели смайликов
+        const emojiBtn = document.getElementById('emojiBtn');
+        const emojiPicker = document.getElementById('emojiPicker');
+        const messageInput = document.getElementById('messageInput');
+
+        emojiBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            emojiPicker.classList.toggle('show');
+        });
+
+        document.addEventListener('click', () => {
+            emojiPicker.classList.remove('show');
+        });
+
+        emojiPicker.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (e.target.classList.contains('emoji-item')) {
+                messageInput.value += e.target.innerText;
+                messageInput.focus();
+            }
+        });
+
+        // Отправка файлов / фото / видео
+        const attachFileBtn = document.getElementById('attachFileBtn');
+        const chatFileInput = document.getElementById('chatFileInput');
+
+        attachFileBtn.addEventListener('click', () => {
+            chatFileInput.click();
+        });
+
+        chatFileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            if (file.size > 15 * 1024 * 1024) {
+                showToast('Файл слишком большой! Максимальный размер 15 МБ.');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const fileData = {
+                    name: file.name,
+                    size: (file.size / 1024).toFixed(1) + ' KB',
+                    type: file.type,
+                    data: event.target.result
+                };
+                sendMessageWithFile(fileData);
+            };
+            reader.readAsDataURL(file);
+            chatFileInput.value = '';
+        });
 
         const toggleAddMenuBtn = document.getElementById('toggleAddMenuBtn');
         const addDropdownMenu = document.getElementById('addDropdownMenu');
@@ -1288,10 +1431,6 @@
             if (activeChatId) showToast('Чат заблокирован.');
         });
 
-        document.getElementById('attachFileBtn').addEventListener('click', () => {
-            showToast('Функция прикрепления файлов в разработке.');
-        });
-
         function setupPhoneMask(input) {
             input.addEventListener('input', (e) => {
                 let value = e.target.value.replace(/\D/g, '');
@@ -1435,19 +1574,21 @@
                     const item = document.createElement('div');
                     item.className = `contact-item ${activeChatId === com.id && activeChatType === 'community' ? 'active' : ''}`;
                     
-                    const avatarHtml = com.avatar 
-                        ? `<div class="avatar" style="width: 36px; height: 36px; background: url(${com.avatar}) center/cover no-repeat;"></div>`
-                        : `<div class="avatar" style="width: 36px; height: 36px; font-size: 14px;">📢</div>`;
+                    const itemAvatar = document.createElement('div');
+                    itemAvatar.className = 'avatar';
+                    itemAvatar.style.width = '36px';
+                    itemAvatar.style.height = '36px';
+                    applyAvatar(itemAvatar, com.avatar, '📢');
 
                     item.innerHTML = `
                         <div class="contact-left">
-                            ${avatarHtml}
                             <div class="contact-info">
                                 <div class="contact-name">${com.name}</div>
                                 <div class="contact-status">${com.subscribers.length} участников</div>
                             </div>
                         </div>
                     `;
+                    item.querySelector('.contact-left').prepend(itemAvatar);
                     item.onclick = () => selectChat(com.id, 'community', com.name);
                     listEl.appendChild(item);
                 });
@@ -1467,19 +1608,21 @@
                     const item = document.createElement('div');
                     item.className = `contact-item ${activeChatId === g.id && activeChatType === 'group' ? 'active' : ''}`;
                     
-                    const avatarHtml = g.avatar 
-                        ? `<div class="avatar" style="width: 36px; height: 36px; background: url(${g.avatar}) center/cover no-repeat;"></div>`
-                        : `<div class="avatar" style="width: 36px; height: 36px; font-size: 14px;">👥</div>`;
+                    const itemAvatar = document.createElement('div');
+                    itemAvatar.className = 'avatar';
+                    itemAvatar.style.width = '36px';
+                    itemAvatar.style.height = '36px';
+                    applyAvatar(itemAvatar, g.avatar, '👥');
 
                     item.innerHTML = `
                         <div class="contact-left">
-                            ${avatarHtml}
                             <div class="contact-info">
                                 <div class="contact-name">${g.name}</div>
                                 <div class="contact-status">${g.members.length} участника</div>
                             </div>
                         </div>
                     `;
+                    item.querySelector('.contact-left').prepend(itemAvatar);
                     item.onclick = () => selectChat(g.id, 'group', g.name);
                     listEl.appendChild(item);
                 });
@@ -1530,16 +1673,14 @@
             } else if (type === 'group') {
                 const g = groups.find(item => item.id === id);
                 if (g) {
-                    activeAvatar.style.background = g.avatar ? `url(${g.avatar}) center/cover no-repeat` : 'linear-gradient(135deg, #ff2a5f, #7b2cbf)';
-                    activeAvatar.innerText = g.avatar ? '' : '👥';
+                    applyAvatar(activeAvatar, g.avatar, '👥');
                     name = g.name;
                     descText = g.description || '';
                 }
             } else if (type === 'community') {
                 const c = communities.find(item => item.id === id);
                 if (c) {
-                    activeAvatar.style.background = c.avatar ? `url(${c.avatar}) center/cover no-repeat` : 'linear-gradient(135deg, #ff2a5f, #7b2cbf)';
-                    activeAvatar.innerText = c.avatar ? '' : '📢';
+                    applyAvatar(activeAvatar, c.avatar, '📢');
                     name = c.name;
                     descText = c.description || '';
                 }
@@ -1576,6 +1717,7 @@
                 fromName: msg.fromName,
                 fromPhone: msg.fromPhone,
                 text: msg.text,
+                file: msg.file,
                 time: msg.time
             });
             renderMessages();
@@ -1585,22 +1727,24 @@
             }
         });
 
-        document.getElementById('sendBtn').addEventListener('click', sendMessage);
+        document.getElementById('sendBtn').addEventListener('click', () => sendMessage());
         document.getElementById('messageInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendMessage();
         });
 
-        function sendMessage() {
+        function sendMessage(fileObj = null) {
             const input = document.getElementById('messageInput');
             const text = input.value.trim();
-            if (!text || !activeChatId) return;
+            if ((!text && !fileObj) || !activeChatId) return;
+
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
             if (activeChatType === 'private') {
-                socket.emit('private_message', { toPhone: activeChatId, message: text });
+                socket.emit('private_message', { toPhone: activeChatId, message: text, file: fileObj });
             } else if (activeChatType === 'group') {
-                socket.emit('group_message', { groupId: activeChatId, message: text });
+                socket.emit('group_message', { groupId: activeChatId, message: text, file: fileObj });
             } else if (activeChatType === 'community') {
-                socket.emit('community_message', { communityId: activeChatId, message: text });
+                socket.emit('community_message', { communityId: activeChatId, message: text, file: fileObj });
             }
 
             let chatKey = '';
@@ -1609,16 +1753,21 @@
             else chatKey = [myPhone, activeChatId].sort().join('_');
 
             if (!allMessages[chatKey]) allMessages[chatKey] = [];
-            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             allMessages[chatKey].push({
                 fromName: myName,
                 fromPhone: myPhone,
                 text: text,
+                file: fileObj,
                 time: time
             });
 
             input.value = '';
+            emojiPicker.classList.remove('show');
             renderMessages();
+        }
+
+        function sendMessageWithFile(fileObj) {
+            sendMessage(fileObj);
         }
 
         function renderMessages() {
@@ -1648,9 +1797,25 @@
                     senderHtml = `<div style="font-size: 11px; font-weight: 700; color: var(--accent-color); margin-bottom: 2px;">${m.fromName || 'Участник'}</div>`;
                 }
 
+                let contentHtml = `<div>${m.text || ''}</div>`;
+
+                if (m.file) {
+                    if (m.file.type.startsWith('image/')) {
+                        contentHtml += `<img src="${m.file.data}" alt="photo">`;
+                    } else if (m.file.type.startsWith('video/')) {
+                        contentHtml += `<video controls src="${m.file.data}"></video>`;
+                    } else {
+                        contentHtml += `
+                            <a class="file-attachment" href="${m.file.data}" download="${m.file.name}">
+                                📄 <span>${m.file.name}</span> <small>(${m.file.size})</small>
+                            </a>
+                        `;
+                    }
+                }
+
                 msgEl.innerHTML = `
                     ${senderHtml}
-                    <div>${m.text}</div>
+                    ${contentHtml}
                     <div class="message-time">${m.time || ''}</div>
                 `;
                 container.appendChild(msgEl);
