@@ -102,9 +102,8 @@
         .message-meta { position: absolute; bottom: 3px; right: 6px; display: flex; align-items: center; gap: 3px; }
         .message .time { font-size: 11px; color: #667781; }
         
-        /* Стили для галочек */
         .message .checks { font-size: 13px; color: #8696a0; font-weight: bold; }
-        .message .checks.read { color: #53bdeb; } /* Синие галочки при прочтении */
+        .message .checks.read { color: #53bdeb; }
 
         .chat-input-area { min-height: 62px; padding: 10px 16px; background: #f0f2f5; display: flex; align-items: center; gap: 10px; }
         .chat-input-area input { flex: 1; padding: 12px 16px; border: none; border-radius: 8px; outline: none; background: #ffffff; font-size: 15px; color: #3b4a54; }
@@ -143,14 +142,8 @@
             align-items: center;
             gap: 12px;
         }
-        #custom-toast.show {
-            right: 20px;
-        }
-        #custom-toast-text {
-            font-size: 14px;
-            line-height: 1.4;
-            word-break: break-word;
-        }
+        #custom-toast.show { right: 20px; }
+        #custom-toast-text { font-size: 14px; line-height: 1.4; word-break: break-word; }
     </style>
 </head>
 <body>
@@ -185,6 +178,7 @@
                     <span id="my-avatar-label">Я</span>
                 </div>
                 <div class="sidebar-icons">
+                    <button class="icon-btn" id="add-contact-btn" title="Добавить контакт">+</button>
                     <button class="icon-btn" id="settings-btn" title="Настройки профиля">⚙</button>
                 </div>
             </div>
@@ -261,9 +255,8 @@
         let customNames = JSON.parse(localStorage.getItem('whatsapp_custom_names') || '{}');
         let tempAvatarBase64 = null;
         let toastTimeout = null;
-        let latestUsersData = [];
+        let latestContactsData = [];
 
-        // Воспроизведение звука уведомления
         function playNotificationSound() {
             try {
                 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -283,7 +276,7 @@
                 osc.start();
                 osc.stop(audioCtx.currentTime + 0.15);
             } catch (e) {
-                console.log('Звук не воспроизведен из-за ограничений браузера', e);
+                console.log('Звук не воспроизведен', e);
             }
         }
 
@@ -319,6 +312,7 @@
         const messageInput = document.getElementById('message-input');
         const sendBtn = document.getElementById('send-btn');
         const renameContactBtn = document.getElementById('rename-contact-btn');
+        const addContactBtn = document.getElementById('add-contact-btn');
 
         const settingsBtn = document.getElementById('settings-btn');
         const closeSettingsBtn = document.getElementById('close-settings-btn');
@@ -398,6 +392,24 @@
             chatScreen.style.display = 'grid';
         }
 
+        // Кнопка добавления контакта
+        addContactBtn.onclick = () => {
+            const phoneInputVal = prompt('Введите номер телефона контакта для добавления:');
+            if (!phoneInputVal) return;
+            const formatted = formatPhone(phoneInputVal);
+            socket.emit('add_contact', { myPhone: myData.phone, targetPhone: formatted || phoneInputVal.trim() });
+        };
+
+        socket.on('add_contact_response', (res) => {
+            showNotification(res.message);
+        });
+
+        socket.on('contacts_list', (contacts) => {
+            if (!myData) return;
+            latestContactsData = contacts;
+            renderUsersList(contacts);
+        });
+
         avatarFileInput.onchange = (e) => {
             const file = e.target.files[0];
             if (!file) return;
@@ -439,7 +451,6 @@
             if (cleanDigits.length < 10) return showNotification('Введите корректный номер телефона!');
 
             const oldPhone = myData.phone;
-            
             myData = { phone: newPhone, name: newName, avatar: tempAvatarBase64 };
             localStorage.setItem('whatsapp_user', JSON.stringify(myData));
             updateMyAvatarDisplay();
@@ -454,7 +465,7 @@
         renameContactBtn.onclick = () => {
             if (!activeRecipientPhone) return;
             const currentDisplayName = customNames[activeRecipientPhone] || 
-                (latestUsersData.find(u => u.phone === activeRecipientPhone)?.name || '');
+                (latestContactsData.find(u => u.phone === activeRecipientPhone)?.name || '');
             
             const newName = prompt('Введите новое имя для этого контакта:', currentDisplayName);
             if (newName === null) return;
@@ -468,7 +479,7 @@
 
             localStorage.setItem('whatsapp_custom_names', JSON.stringify(customNames));
             updateActiveChatHeader(activeRecipientPhone);
-            renderUsersList(latestUsersData);
+            renderUsersList(latestContactsData);
             showNotification('Имя контакта изменено!');
         };
 
@@ -476,16 +487,14 @@
             return customNames[phone] || originalName || phone;
         }
 
-        socket.on('users_list', (users) => {
-            if (!myData) return;
-            latestUsersData = users;
-            renderUsersList(users);
-        });
-
         function renderUsersList(users) {
             usersList.innerHTML = '';
+            if (users.length === 0) {
+                usersList.innerHTML = `<li style="justify-content: center; color: #667781; padding: 20px; text-align: center;">Список контактов пуст.<br>Нажмите «+» сверху, чтобы добавить контакт.</li>`;
+                return;
+            }
+
             users.forEach(user => {
-                if (user.phone === myData.phone) return;
                 const li = document.createElement('li');
                 if (user.phone === activeRecipientPhone) li.classList.add('active');
                 
@@ -496,7 +505,6 @@
                     avatarHtml = `<div class="user-avatar"><img src="${user.avatar}" alt="Avatar"></div>`;
                 }
 
-                // Статус: в сети (зеленый) или время последнего входа
                 let statusText = user.isOnline ? '<span style="color: #00a884;">в сети</span>' : (user.lastSeen ? `был(а) в ${user.lastSeen}` : user.phone);
 
                 li.innerHTML = `
@@ -538,7 +546,7 @@
         }
 
         function updateActiveChatHeader(phone) {
-            const user = latestUsersData.find(u => u.phone === phone);
+            const user = latestContactsData.find(u => u.phone === phone);
             const origName = user ? user.name : phone;
             const displayName = getContactName(phone, origName);
 
