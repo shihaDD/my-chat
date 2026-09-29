@@ -59,11 +59,11 @@
         }
         button:hover { background: #66fcf1; box-shadow: 0 0 12px #66fcf1; }
 
-        /* Модалка кода */
+        /* Модалка приветствия с ID */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(11, 12, 16, 0.85); display: flex; justify-content: center; align-items: center; z-index: 1000; }
-        .modal { background: #1f2833; padding: 30px; border-radius: 12px; width: 340px; border: 1px solid #66fcf1; box-shadow: 0 0 25px rgba(102, 252, 241, 0.4); text-align: center; }
-        .code-input { font-size: 24px; text-align: center; letter-spacing: 12px; width: 80%; margin-bottom: 15px; background: #0b0c10; color: #66fcf1; border: 1px solid #45a29e; }
-        .debug-hint { font-size: 12px; color: #ff007f; background: rgba(255, 0, 127, 0.1); border: 1px solid #ff007f; padding: 8px; border-radius: 4px; margin-bottom: 15px; }
+        .modal { background: #1f2833; padding: 30px; border-radius: 12px; width: 360px; border: 1px solid #66fcf1; box-shadow: 0 0 25px rgba(102, 252, 241, 0.4); text-align: center; }
+        .modal h3 { color: #66fcf1; margin-top: 0; }
+        .id-badge { font-size: 24px; font-weight: bold; color: #66fcf1; background: #0b0c10; padding: 10px; border-radius: 6px; border: 1px solid #45a29e; margin: 15px 0; letter-spacing: 3px; }
 
         /* Главный интерфейс */
         .app-content { display: flex; gap: 15px; height: 100%; overflow: hidden; }
@@ -79,7 +79,6 @@
         .item-card:hover, .item-card.active { border-color: #66fcf1; color: #66fcf1; background: rgba(102, 252, 241, 0.05); }
         .item-card.favorite-item { border-color: #45a29e; background: rgba(69, 162, 158, 0.1); font-weight: bold; }
 
-        /* Индикатор статуса */
         .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
         .status-online { background: #66fcf1; box-shadow: 0 0 6px #66fcf1; }
         .status-offline { background: #555; }
@@ -106,21 +105,19 @@
     <div id="auth-screen">
         <div class="auth-box">
             <h3>В Одно Ебло</h3>
-            <input type="text" id="nameInput" placeholder="Твое имя...">
-            <input type="text" id="phoneInput" placeholder="+7 (___) ___-__-__">
-            <button onclick="requestVerificationCode()">Продолжить</button>
+            <input type="text" id="nameInput" placeholder="Твой никнейм..." onkeypress="if(event.key==='Enter')login()">
+            <button onclick="login()">Войти</button>
         </div>
     </div>
 
-    <!-- МОДАЛКА КОДА -->
-    <div id="codeModal" class="modal-overlay hidden">
+    <!-- МОДАЛКА НОВОГО ПОЛЬЗОВАТЕЛЯ С ID -->
+    <div id="idModal" class="modal-overlay hidden">
         <div class="modal">
-            <h3>Авторизация</h3>
-            <p>Код подтверждения отправлен</p>
-            <div id="debugHint" class="debug-hint"></div>
-            <input type="text" id="codeInput" class="code-input" maxlength="4" placeholder="----">
-            <br>
-            <button onclick="verifyCode()" style="width: 100%;">Войти</button>
+            <h3>Добро пожаловать!</h3>
+            <p style="font-size: 13px; color: #c5c6c7;">Твой уникальный ID для добавления в друзья:</p>
+            <div class="id-badge" id="myAssignedId">123456</div>
+            <p style="font-size: 11px; color: #888;">Сохрани его, друзья смогут добавлять тебя по этому номеру.</p>
+            <button onclick="closeIdModal()" style="width: 100%; margin-top: 10px;">Понятно, в бой</button>
         </div>
     </div>
 
@@ -131,15 +128,19 @@
             <button class="nav-btn active" onclick="switchTab('messages')">💬 Сообщения</button>
             <button class="nav-btn" onclick="switchTab('friends')">👥 Друзья</button>
             <button class="nav-btn" onclick="switchTab('news')">📰 Новости</button>
-            <button class="nav-btn" onclick="logout()" style="margin-top:auto; border-color:#ff007f; color:#ff007f;">Выйти</button>
+            <div style="margin-top:auto; font-size: 11px; color: #45a29e; word-break: break-all;">
+                Ник: <b id="currentUserName"></b><br>
+                ID: <span id="currentUserId" style="color:#66fcf1;"></span>
+            </div>
+            <button class="nav-btn" onclick="logout()" style="border-color:#ff007f; color:#ff007f; margin-top:6px;">Выйти</button>
         </div>
 
         <div class="tab-pane" id="leftPane">
             <h4 id="paneTitle">Сообщения</h4>
-            <!-- Форма добавления друга по номеру (показывается только во вкладке Друзья) -->
+            <!-- Форма добавления друга по ID -->
             <div id="addFriendBox" class="hidden" style="margin-bottom: 10px; display: flex; flex-direction: column; gap: 6px;">
-                <input type="text" id="friendPhoneInput" placeholder="+7 (___) ___-__-__" style="font-size:13px; padding:8px;">
-                <button onclick="addFriendByPhone()" style="font-size:12px; padding:8px;">+ Добавить друга</button>
+                <input type="text" id="friendIdInput" placeholder="Введите 6-значный ID..." style="font-size:13px; padding:8px;">
+                <button onclick="addFriendById()" style="font-size:12px; padding:8px;">+ Добавить друга</button>
             </div>
             <div class="pane-list" id="paneList"></div>
         </div>
@@ -164,41 +165,24 @@
 
 <script>
     let currentUser = localStorage.getItem('v_odno_eblo_user') || '';
+    let currentId = localStorage.getItem('v_odno_eblo_id') || '';
     let currentPartner = '';
     let currentTab = 'messages';
     let dbData = {};
     let googleNews = [];
 
-    // Маски телефонов
-    function applyPhoneMask(inputElement) {
-        inputElement.addEventListener('input', function (e) {
-            let matrix = '+7 (___) ___-__-__',
-                i = 0,
-                val = this.value.replace(/\D/g, '');
-            if (val.length >= 1 && val[0] === '8') val = val.slice(1);
-            if (val.length >= 1 && val[0] === '7') val = val.slice(1);
-
-            let res = matrix.replace(/./g, function (a) {
-                return /[_\d]/.test(a) && i < val ? val.charAt(i++) : i >= val ? '' : a;
-            });
-            this.value = (i === 0) ? '' : res;
-        });
-    }
-
-    applyPhoneMask(document.getElementById('phoneInput'));
-    applyPhoneMask(document.getElementById('friendPhoneInput'));
-
-    // Проверка сохраненной сессии при загрузке
     window.onload = async () => {
         await loadData();
         if (currentUser && dbData.users?.includes(currentUser)) {
             document.getElementById('auth-screen').classList.add('hidden');
             document.getElementById('app-screen').classList.remove('hidden');
-            document.getElementById('currentUserName']?.textContent || '';
+            document.getElementById('currentUserName').textContent = currentUser;
+            document.getElementById('currentUserId').textContent = dbData.userIds?.[currentUser] || currentId;
             switchTab('messages');
             startHeartbeat();
         } else {
             localStorage.removeItem('v_odno_eblo_user');
+            localStorage.removeItem('v_odno_eblo_id');
         }
         fetchNews();
         setInterval(loadData, 3000);
@@ -222,54 +206,53 @@
         if (currentUser) updateTabContent();
     }
 
-    let currentPhone = '';
-    async function requestVerificationCode() {
-        const name = document.getElementById('nameInput').value.trim();
-        const phone = document.getElementById('phoneInput').value.trim();
-        if (!name || phone.length < 18) return alert('Заполни имя и корректный номер телефона!');
+    async function login() {
+        const username = document.getElementById('nameInput').value.trim();
+        if (!username) return alert('Введите никнейм!');
 
-        const res = await fetch('/api/send-code', {
+        const res = await fetch('/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name, phone })
-        });
-        const data = await res.json();
-        if (data.success) {
-            currentPhone = phone;
-            document.getElementById('debugHint').textContent = `Код для входа: ${data.debugCode}`;
-            document.getElementById('codeModal').classList.remove('hidden');
-        }
-    }
-
-    async function verifyCode() {
-        const code = document.getElementById('codeInput').value.trim();
-        if (code.length !== 4) return alert('Введи 4-значный код!');
-
-        const res = await fetch('/api/verify-code', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ phone: currentPhone, code })
+            body: JSON.stringify({ username })
         });
         const data = await res.json();
 
         if (data.success) {
             currentUser = data.username;
+            currentId = data.userId;
             localStorage.setItem('v_odno_eblo_user', currentUser);
+            localStorage.setItem('v_odno_eblo_id', currentId);
             dbData = data.db;
 
-            document.getElementById('codeModal').classList.add('hidden');
             document.getElementById('auth-screen').classList.add('hidden');
-            document.getElementById('app-screen').classList.remove('hidden');
 
-            switchTab('messages');
-            startHeartbeat();
+            if (data.isNew) {
+                document.getElementById('myAssignedId').textContent = currentId;
+                document.getElementById('idModal').classList.remove('hidden');
+            } else {
+                initAppAfterLogin();
+            }
         } else {
-            alert('Неверный код!');
+            alert(data.error || 'Ошибка входа');
         }
+    }
+
+    function closeIdModal() {
+        document.getElementById('idModal').classList.add('hidden');
+        initAppAfterLogin();
+    }
+
+    function initAppAfterLogin() {
+        document.getElementById('app-screen').classList.remove('hidden');
+        document.getElementById('currentUserName').textContent = currentUser;
+        document.getElementById('currentUserId').textContent = currentId;
+        switchTab('messages');
+        startHeartbeat();
     }
 
     function logout() {
         localStorage.removeItem('v_odno_eblo_user');
+        localStorage.removeItem('v_odno_eblo_id');
         location.reload();
     }
 
@@ -286,8 +269,12 @@
 
     function switchTab(tab) {
         currentTab = tab;
-        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-        event.target.classList.add('active');
+        document.querySelectorAll('.nav-btn').forEach(b => {
+            if (!b.getAttribute('onclick')?.includes('logout')) b.classList.remove('active');
+        });
+        
+        // Находим активную кнопку по клику или принудительно
+        event?.target?.classList?.add('active');
 
         document.getElementById('chatContainer').classList.add('hidden');
         document.getElementById('newsContainer').classList.add('hidden');
@@ -313,7 +300,7 @@
 
     function isOnline(username) {
         const last = dbData.lastSeen?.[username] || 0;
-        return (Date.now() - last) < 20000; // в сети, если был пинг менее 20 секунд назад
+        return (Date.now() - last) < 20000;
     }
 
     function updateTabContent() {
@@ -321,15 +308,15 @@
         listDiv.innerHTML = '';
 
         if (currentTab === 'messages') {
-            // 1. Сначала закрепленное Избранное (чат с самим собой)
+            // Закрепленное Избранное сверху
             const favDiv = document.createElement('div');
             favDiv.className = `item-card favorite-item ${currentPartner === currentUser ? 'active' : ''}`;
             favDiv.innerHTML = `<span>⭐ Избранное</span> <span class="status-dot status-online"></span>`;
             favDiv.onclick = () => selectPartner(currentUser);
             listDiv.appendChild(favDiv);
 
-            // 2. Остальные пользователи
-            dbData.users.forEach(user => {
+            // Остальные пользователи
+            dbData.users?.forEach(user => {
                 if (user === currentUser) return;
                 const online = isOnline(user);
                 const div = document.createElement('div');
@@ -341,7 +328,7 @@
         } else if (currentTab === 'friends') {
             const friends = dbData.friends?.[currentUser] || [];
             if (friends.length === 0) {
-                listDiv.innerHTML = '<i style="color:#45a29e; font-size:12px;">Список друзей пуст</i>';
+                listDiv.innerHTML = '<i style="color:#45a29e; font-size:12px; padding:5px;">Список друзей пуст</i>';
                 return;
             }
             friends.forEach(user => {
@@ -355,19 +342,19 @@
         }
     }
 
-    async function addFriendByPhone() {
-        const phone = document.getElementById('friendPhoneInput').value.trim();
-        if (phone.length < 18) return alert('Введите полный номер телефона!');
+    async function addFriendById() {
+        const targetId = document.getElementById('friendIdInput').value.trim();
+        if (!targetId) return alert('Введите ID друга!');
 
-        const res = await fetch('/api/add-friend-by-phone', {
+        const res = await fetch('/api/add-friend-by-id', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username: currentUser, phone })
+            body: JSON.stringify({ username: currentUser, targetId })
         });
         const data = await res.json();
         if (data.success) {
             dbData = data.db;
-            document.getElementById('friendPhoneInput').value = '';
+            document.getElementById('friendIdInput').value = '';
             alert(`Пользователь ${data.friendName} добавлен в друзья!`);
             updateTabContent();
         } else {
