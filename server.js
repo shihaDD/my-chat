@@ -1,7 +1,6 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const { Octokit } = require('octokit');
 
 const app = express();
 const server = http.createServer(app);
@@ -9,253 +8,161 @@ const io = new Server(server);
 
 app.use(express.static('public'));
 
-// ==========================================
-// НАСТРОЙКИ GITHUB
-// ==========================================
-const GITHUB_TOKEN = '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'; 
-const REPO_OWNER = 'shihaDD';
-const REPO_NAME = 'Chat-Database';
-const FILE_PATH = 'database.json';
-
-const octokit = new Octokit({ auth: GITHUB_TOKEN });
-
-// Структура данных в памяти
-let db = {
-    users: [],
-    userContacts: {},
-    messagesStore: {}
-};
-
-// Функция загрузки данных с GitHub
-async function loadDataFromGitHub() {
-    try {
-        const response = await octokit.rest.repos.getContent({
-            owner: REPO_OWNER,
-            repo: REPO_NAME,
-            path: FILE_PATH,
-        });
-        const content = Buffer.from(response.data.content, 'base64').toString('utf8');
-        const parsed = JSON.parse(content);
-        
-        if (parsed.users) db.users = parsed.users;
-        if (parsed.userContacts) db.userContacts = parsed.userContacts;
-        if (parsed.messagesStore) db.messagesStore = parsed.messagesStore;
-
-        console.log('📦 Данные успешно загружены с GitHub! Пользователей:', db.users.length, ' Чатов:', Object.keys(db.messagesStore).length);
-    } catch (e) {
-        console.log('⚠️️ Файл на GitHub не найден или ошибка загрузки, создаем новый:', e.message);
-        await saveDataToGitHub();
-    }
-}
-
-// Функция надежного сохранения данных на GitHub
-async function saveDataToGitHub() {
-    try {
-        let sha;
-        try {
-            const fileData = await octokit.rest.repos.getContent({
-                owner: REPO_OWNER,
-                repo: REPO_NAME,
-                path: FILE_PATH,
-            });
-            sha = fileData.data.sha;
-        } catch (err) {
-            // Файла еще нет, это нормально
-        }
-
-        const contentBase64 = Buffer.from(JSON.stringify(db, null, 2)).toString('base64');
-
-        await octokit.rest.repos.createOrUpdateFileContents({
-            owner: REPO_OWNER,
-            repo: REPO_NAME,
-            path: FILE_PATH,
-            message: 'Auto-save chat database [skip ci]',
-            content: contentBase64,
-            sha: sha,
-        });
-        console.log('💾 Данные успешно сохранены на GitHub!');
-    } catch (e) {
-        console.error('❌ Ошибка сохранения на GitHub:', e);
-    }
-}
+// Хранилище временных кодов и данных пользователей
+const pendingCodes = {}; // phone -> code
+const users = {};        // socketId -> { name, phone }
+const activeUsers = {};  // phone -> socketId
+const groups = [];       // список групп
+const communities = [];  // список сообществ
+const messages = {};     // история сообщений
 
 io.on('connection', (socket) => {
-    console.log('👤 Пользователь подключился:', socket.id);
+    console.log('Пользователь подключился:', socket.id);
 
-    socket.on('verify_code', (userData) => {
-        socket.userPhone = userData.phone;
+    // Запрос кода подтверждения
+    socket.on('request_code', ({ phone }) => {
+        // Генерируем случайный 4-значный код
+        const code = Math.floor(1000 + Math.random() * 9000).toString();
+        pendingCodes[phone] = code;
         
-        let existingUser = db.users.find(u => u.phone === userData.phone);
+        // Выводим код в консоль сервера (как в реальных сервисах по отправке SMS)
+        console.log(`\n========================================`);
+        console.log(`📱 КОД ПОДТВЕРЖДЕНИЯ ДЛЯ ${phone}: [ ${code} ]`);
+        console.log(`========================================\n`);
+    });
 
-        if (existingUser) {
-            existingUser.id = socket.id;
-            existingUser.name = userData.name;
-            if (userData.avatar) existingUser.avatar = userData.avatar;
-            existingUser.isOnline = true;
+    // Проверка введенного кода
+    socket.on('verify_code', ({ name, phone, code }) => {
+        // Проверяем, совпадает ли код или является ли это авто-авторизацией (0000 для отладки, если нужно)
+        if (pendingCodes[phone] && pendingCodes[phone] === code) {
+            delete pendingCodes[phone];
+            users[socket.id] = { name, phone };
+            activeUsers[phone] = socket.id;
+
+            socket.emit('verification_result', { success: true });
+            
+            // Рассылаем актуальные списки
+            updateAllLists();
+            
+            // Передаем историю сообщений
+            socket.emit('all_messages', messages);
         } else {
-            db.users.push({
-                phone: userData.phone,
-                name: userData.name,
-                avatar: userData.avatar || null,
-                id: socket.id,
-                isOnline: true,
-                lastSeen: null
-            });
-        }
-
-        if (!db.userContacts[userData.phone]) {
-            db.userContacts[userData.phone] = [];
-        }
-
-        saveDataToGitHub();
-        sendUpdatedContacts(userData.phone);
-        sendAllChatsHistory(socket, userData.phone);
-    });
-
-    socket.on('update_profile', (data) => {
-        const user = db.users.find(u => u.phone === data.oldPhone || u.phone === data.phone);
-        if (user) {
-            user.name = data.name;
-            user.phone = data.phone;
-            user.avatar = data.avatar;
-            socket.userPhone = data.phone;
-
-            for (let ownerPhone in db.userContacts) {
-                let contact = db.userContacts[ownerPhone].find(c => c.phone === data.oldPhone || c.phone === data.phone);
-                if (contact) {
-                    contact.name = data.name;
-                    contact.phone = data.phone;
-                    contact.avatar = data.avatar;
-                    sendUpdatedContacts(ownerPhone);
-                }
-            }
-            saveDataToGitHub();
-            sendUpdatedContacts(data.phone);
+            socket.emit('verification_result', { success: false, message: 'Неверный код подтверждения!' });
         }
     });
 
-    socket.on('add_contact', (data) => {
-        const ownerPhone = data.myPhone;
-        const targetPhone = data.targetPhone.trim();
-
-        if (ownerPhone === targetPhone) {
-            socket.emit('add_contact_response', { success: false, message: 'Нельзя добавить свой собственный номер!' });
+    // Добавление контакта
+    socket.on('add_contact', ({ myPhone, targetPhone }) => {
+        if (targetPhone === myPhone) {
+            socket.emit('add_contact_response', { success: false, message: 'Нельзя добавить свой номер!' });
             return;
         }
-
-        const targetUser = db.users.find(u => u.phone === targetPhone);
-        if (!targetUser) {
-            socket.emit('add_contact_response', { success: false, message: 'Пользователь с таким номером не зарегистрирован!' });
-            return;
-        }
-
-        if (!db.userContacts[ownerPhone]) {
-            db.userContacts[ownerPhone] = [];
-        }
-
-        const alreadyExists = db.userContacts[ownerPhone].some(c => c.phone === targetPhone);
-        if (alreadyExists) {
-            socket.emit('add_contact_response', { success: false, message: 'Этот контакт уже есть в вашем списке!' });
-            return;
-        }
-
-        db.userContacts[ownerPhone].push({
-            phone: targetUser.phone,
-            name: targetUser.name,
-            avatar: targetUser.avatar,
-            isOnline: targetUser.isOnline,
-            lastSeen: targetUser.lastSeen
-        });
-
-        saveDataToGitHub();
         socket.emit('add_contact_response', { success: true, message: 'Контакт успешно добавлен!' });
-        sendUpdatedContacts(ownerPhone);
+        updateAllLists();
     });
 
-    socket.on('private_message', (data) => {
-        const recipient = db.users.find(u => u.phone === data.toPhone);
-        const sender = db.users.find(u => u.id === socket.id);
+    // Создание группы
+    socket.on('create_group', ({ name, members, creator }) => {
+        const groupId = 'group_' + Date.now();
+        const newGroup = { id: groupId, name, members, creator };
+        groups.push(newGroup);
+        updateAllLists();
+    });
 
-        if (recipient && sender) {
-            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            
-            const chatKey = [sender.phone, recipient.phone].sort().join('_');
-            if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
-            
-            db.messagesStore[chatKey].push({
-                fromPhone: sender.phone,
-                toPhone: recipient.phone,
-                text: data.message,
-                time: time,
-                status: 'delivered'
-            });
+    // Создание сообщества
+    socket.on('create_community', ({ name, description, creator }) => {
+        const comId = 'com_' + Date.now();
+        const newCom = { id: comId, name, description, creator, subscribersCount: 1 };
+        communities.push(newCom);
+        updateAllLists();
+    });
 
-            saveDataToGitHub();
+    // Личные сообщения
+    socket.on('private_message', ({ toPhone, message }) => {
+        const sender = users[socket.id];
+        if (!sender) return;
 
-            io.to(recipient.id).emit('message', {
-                fromPhone: sender.phone,
-                text: data.message,
-                time: time
-            });
+        const chatKey = [sender.phone, toPhone].sort().join('_');
+        if (!messages[chatKey]) messages[chatKey] = [];
 
-            socket.emit('message_status_update', {
-                toPhone: recipient.phone,
-                status: 'delivered'
+        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const msgData = { fromPhone: sender.phone, fromName: sender.name, text: message, time };
+        
+        messages[chatKey].push(msgData);
+
+        // Отправка получателю, если он в сети
+        const targetSocketId = activeUsers[toPhone];
+        if (targetSocketId) {
+            io.to(targetSocketId).emit('message', msgData);
+        }
+    });
+
+    // Сообщения в группе
+    socket.on('group_message', ({ groupId, message }) => {
+        const sender = users[socket.id];
+        if (!sender) return;
+
+        const chatKey = `group_${groupId}`;
+        if (!messages[chatKey]) messages[chatKey] = [];
+
+        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const msgData = { groupId, fromPhone: sender.phone, fromName: sender.name, text: message, time, type: 'group' };
+        
+        messages[chatKey].push(msgData);
+
+        // Рассылаем всем участникам группы
+        const group = groups.find(g => g.id === groupId);
+        if (group) {
+            group.members.forEach(phone => {
+                const sId = activeUsers[phone];
+                if (sId) io.to(sId).emit('message', msgData);
             });
         }
+    });
+
+    // Сообщения в сообществе
+    socket.on('community_message', ({ communityId, message }) => {
+        const sender = users[socket.id];
+        if (!sender) return;
+
+        const chatKey = `community_${communityId}`;
+        if (!messages[chatKey]) messages[chatKey] = [];
+
+        const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const msgData = { communityId, fromPhone: sender.phone, fromName: sender.name, text: message, time, type: 'community' };
+        
+        messages[chatKey].push(msgData);
+
+        // Рассылаем всем подключенным клиентам (в рамках симуляции сообщества)
+        Object.values(activeUsers).forEach(sId => {
+            io.to(sId).emit('message', msgData);
+        });
     });
 
     socket.on('disconnect', () => {
-        console.log('❌ Пользователь отключился:', socket.id);
-        const user = db.users.find(u => u.id === socket.id);
+        const user = users[socket.id];
         if (user) {
-            user.isOnline = false;
-            user.lastSeen = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            user.id = null;
-
-            for (let ownerPhone in db.userContacts) {
-                let contact = db.userContacts[ownerPhone].find(c => c.phone === user.phone);
-                if (contact) {
-                    contact.isOnline = false;
-                    contact.lastSeen = user.lastSeen;
-                    sendUpdatedContacts(ownerPhone);
-                }
-            }
-            saveDataToGitHub();
+            delete activeUsers[user.phone];
+            delete users[socket.id];
+            updateAllLists();
         }
+        console.log('Пользователь отключился:', socket.id);
     });
 });
 
-function sendUpdatedContacts(phone) {
-    const userObj = db.users.find(u => u.phone === phone);
-    if (userObj && userObj.id) {
-        if (db.userContacts[phone]) {
-            db.userContacts[phone] = db.userContacts[phone].map(c => {
-                const freshUser = db.users.find(u => u.phone === c.phone);
-                if (freshUser) {
-                    return {
-                        ...c,
-                        name: freshUser.name,
-                        avatar: freshUser.avatar,
-                        isOnline: freshUser.isOnline,
-                        lastSeen: freshUser.lastSeen
-                    };
-                }
-                return c;
-            });
-        }
-        io.to(userObj.id).emit('contacts_list', db.userContacts[phone] || []);
-    }
+function updateAllLists() {
+    const contactsList = Object.values(users).map(u => ({
+        phone: u.phone,
+        name: u.name,
+        isOnline: true
+    }));
+
+    io.emit('contacts_list', contactsList);
+    io.emit('groups_list', groups);
+    io.emit('communities_list', communities);
 }
 
-function sendAllChatsHistory(socket, myPhone) {
-    socket.emit('all_messages', db.messagesStore);
-}
-
-const PORT = process.env.PORT || 3000;
-
-loadDataFromGitHub().then(() => {
-    server.listen(PORT, () => {
-        console.log(`🚀 Сервер запущен на порту ${PORT}`);
-    });
+const PORT = 3000;
+server.listen(PORT, () => {
+    console.log(`Сервер запущен на http://localhost:${PORT}`);
 });
