@@ -221,42 +221,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('add_group_member', ({ groupId, phone }) => {
-        const group = groups.find(g => g.id === groupId);
-        if (group && !group.members.includes(phone)) {
-            group.members.push(phone);
-            updateAllLists();
-            io.emit('group_updated', group);
-        }
-    });
-
-    socket.on('remove_group_member', ({ groupId, phone }) => {
-        const group = groups.find(g => g.id === groupId);
-        if (group) {
-            group.members = group.members.filter(p => p !== phone);
-            updateAllLists();
-            io.emit('group_updated', group);
-        }
-    });
-
-    socket.on('add_community_member', ({ communityId, phone }) => {
-        const com = communities.find(c => c.id === communityId);
-        if (com && !com.subscribers.includes(phone)) {
-            com.subscribers.push(phone);
-            updateAllLists();
-            io.emit('community_updated', com);
-        }
-    });
-
-    socket.on('remove_community_member', ({ communityId, phone }) => {
-        const com = communities.find(c => c.id === communityId);
-        if (com) {
-            com.subscribers = com.subscribers.filter(p => p !== phone);
-            updateAllLists();
-            io.emit('community_updated', com);
-        }
-    });
-
     socket.on('private_message', ({ toPhone, message, file }) => {
         const senderPhone = getPhoneBySocket(socket.id);
         let senderName = 'Пользователь';
