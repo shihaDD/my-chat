@@ -1,6 +1,8 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
@@ -10,19 +12,73 @@ const io = new Server(server, {
 
 app.use(express.static('public'));
 
-const pendingCodes = {}; 
-const registeredUsers = {}; 
-const activeUsers = {};     
-let groups = [];       
-let communities = [];  
-const messages = {};     
+// Путь к файлу базы данных
+const DB_FILE = path.join(__dirname, 'database.json');
+
+// Функция загрузки данных с диска
+function loadDatabase() {
+    if (fs.existsSync(DB_FILE)) {
+        try {
+            const data = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+            return {
+                pendingCodes: data.pendingCodes || {},
+                registeredUsers: data.registeredUsers || {},
+                groups: data.groups || [],
+                communities: data.communities || [],
+                messages: data.messages || {}
+            };
+        } catch (e) {
+            console.error('Ошибка чтения базы данных, создаем новую:', e);
+        }
+    }
+    return {
+        pendingCodes: {},
+        registeredUsers: {},
+        groups: [],
+        communities: [],
+        messages: {}
+    };
+}
+
+// Функция сохранения данных на диск
+function saveDatabase() {
+    const data = {
+        pendingCodes,
+        registeredUsers,
+        groups,
+        communities,
+        messages
+    };
+    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
+}
+
+// Инициализация данных из файла
+let db = loadDatabase();
+const pendingCodes = db.pendingCodes;
+const registeredUsers = db.registeredUsers;
+const activeUsers = {}; // Активные сессии сокетов храним в памяти (они сбрасываются при перезапуске)
+let groups = db.groups;
+let communities = db.communities;
+const messages = db.messages;
+
+// Функция обновления списков + автоматическое сохранение в файл
+function updateAllLists() {
+    saveDatabase();
+    io.emit('groups_list', groups);
+    io.emit('communities_list', communities);
+}
 
 io.on('connection', (socket) => {
     console.log('Пользователь подключился:', socket.id);
 
+    // При подключении сразу отправляем актуальные списки групп и сообществ
+    socket.emit('groups_list', groups);
+    socket.emit('communities_list', communities);
+
     socket.on('request_code', ({ phone }) => {
         const code = Math.floor(1000 + Math.random() * 9000).toString();
         pendingCodes[phone] = code;
+        saveDatabase();
         socket.emit('code_sent_debug', { code });
     });
 
@@ -31,7 +87,6 @@ io.on('connection', (socket) => {
             delete pendingCodes[phone];
             registeredUsers[phone] = { name, phone, isOnline: true };
             activeUsers[phone] = socket.id;
-
             socket.emit('verification_result', { success: true });
             socket.emit('all_messages', messages);
             updateAllLists();
@@ -176,7 +231,6 @@ io.on('connection', (socket) => {
         const senderSocketId = socket.id;
         let senderPhone = null;
         let senderName = 'Пользователь';
-
         for (const [phone, sId] of Object.entries(activeUsers)) {
             if (sId === senderSocketId) {
                 senderPhone = phone;
@@ -184,22 +238,19 @@ io.on('connection', (socket) => {
                 break;
             }
         }
-
         if (!senderPhone) return;
-
         const chatKey = [senderPhone, toPhone].sort().join('_');
         if (!messages[chatKey]) messages[chatKey] = [];
-
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const msgData = { fromPhone: senderPhone, fromName: senderName, text: message, file, time };
-        
+                
         messages[chatKey].push(msgData);
+        saveDatabase(); // Сохраняем историю сообщений
 
         const targetSocketId = activeUsers[toPhone];
         if (targetSocketId) {
             io.to(targetSocketId).emit('message', msgData);
         } else if (senderPhone === toPhone) {
-            // Для избранного отправляем сообщение обратно текущему сокету, чтобы оно отрисовалось через событие message
             socket.emit('message', msgData);
         }
     });
@@ -207,7 +258,6 @@ io.on('connection', (socket) => {
     socket.on('group_message', ({ groupId, message, file }) => {
         let senderPhone = null;
         let senderName = 'Пользователь';
-
         for (const [phone, sId] of Object.entries(activeUsers)) {
             if (sId === socket.id) {
                 senderPhone = phone;
@@ -215,16 +265,14 @@ io.on('connection', (socket) => {
                 break;
             }
         }
-
         if (!senderPhone) return;
-
         const chatKey = `group_${groupId}`;
         if (!messages[chatKey]) messages[chatKey] = [];
-
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const msgData = { groupId, fromPhone: senderPhone, fromName: senderName, text: message, file, time, type: 'group' };
-        
+                
         messages[chatKey].push(msgData);
+        saveDatabase();
 
         const group = groups.find(g => g.id === groupId);
         if (group) {
@@ -238,7 +286,6 @@ io.on('connection', (socket) => {
     socket.on('community_message', ({ communityId, message, file }) => {
         let senderPhone = null;
         let senderName = 'Пользователь';
-
         for (const [phone, sId] of Object.entries(activeUsers)) {
             if (sId === socket.id) {
                 senderPhone = phone;
@@ -246,21 +293,19 @@ io.on('connection', (socket) => {
                 break;
             }
         }
-
         if (!senderPhone) return;
-
         const chatKey = `community_${communityId}`;
         if (!messages[chatKey]) messages[chatKey] = [];
-
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const msgData = { communityId, fromPhone: senderPhone, fromName: senderName, text: message, file, time, type: 'community' };
-        
+                
         messages[chatKey].push(msgData);
+        saveDatabase();
 
         const com = communities.find(c => c.id === communityId);
         if (com) {
             com.subscribers.forEach(phone => {
-        const sId = activeUsers[phone];
+                const sId = activeUsers[phone];
                 if (sId) io.to(sId).emit('message', msgData);
             });
         }
@@ -277,11 +322,6 @@ io.on('connection', (socket) => {
         updateAllLists();
     });
 });
-
-function updateAllLists() {
-    io.emit('groups_list', groups);
-    io.emit('communities_list', communities);
-}
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
