@@ -64,14 +64,14 @@
 
         .badge { position: absolute; top: 8px; right: 8px; background: #ff007f; color: #fff; font-size: 10px; padding: 2px 6px; border-radius: 10px; font-weight: bold; box-shadow: 0 0 6px #ff007f; }
 
-        .tab-pane { width: 280px; border-right: 1px solid #45a29e; padding-right: 10px; display: flex; flex-direction: column; }
+        .tab-pane { width: 300px; border-right: 1px solid #45a29e; padding-right: 10px; display: flex; flex-direction: column; }
         .pane-list { overflow-y: auto; flex-grow: 1; margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
         
-        .item-card { padding: 12px; cursor: pointer; border-radius: 6px; background: #0b0c10; border: 1px solid transparent; transition: all 0.2s; color: #c5c6c7; font-size: 13px; display: flex; align-items: center; gap: 10px; }
+        .item-card { padding: 10px; cursor: pointer; border-radius: 6px; background: #0b0c10; border: 1px solid transparent; transition: all 0.2s; color: #c5c6c7; font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
         .item-card:hover, .item-card.active { border-color: #66fcf1; color: #66fcf1; background: rgba(102, 252, 241, 0.05); }
-        .item-card.favorite-item { border-color: #45a29e; background: rgba(69, 162, 158, 0.1); font-weight: bold; }
+        .item-card.favorite-item { border-color: #45a29e; background: rgba(69, 162, 158, 0.1); font-weight: bold; flex-direction: row; align-items: center; }
 
-        .avatar-sm { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 1px solid #66fcf1; cursor: pointer; }
+        .avatar-sm { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 1px solid #66fcf1; cursor: pointer; flex-shrink: 0; }
         .avatar-lg { width: 70px; height: 70px; border-radius: 50%; object-fit: cover; border: 2px solid #66fcf1; margin: 0 auto; }
 
         .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-left: auto; }
@@ -130,7 +130,7 @@
         </div>
     </div>
 
-    <!-- ОКНО ПРОФИЛЯ ДРУГА -->
+    <!-- ОКНО ПРОФИЛЯ ДРУГА / ИЗМЕНЕНИЯ ИМЕНИ -->
     <div id="contactInfoModal" class="modal-overlay hidden">
         <div class="modal">
             <h3>Профиль друга</h3>
@@ -271,7 +271,7 @@
     <!-- ОКНО АУДИОЗВОНКА -->
     <div id="callModal" class="call-modal hidden">
         <div style="background: #1f2833; border: 2px solid #66fcf1; box-shadow: 0 0 30px rgba(102, 252, 241, 0.5); padding: 40px; border-radius: 50%; width: 180px; height: 180px; display: flex; justify-content: center; align-items: center; margin-bottom: 25px; animation: pulseGlow 1.5s infinite alternate;">
-            <span style="font-size: 50px;">🎙️️</span>
+            <span style="font-size: 50px;">🎙</span>
         </div>
         <h3 id="callStatusText" style="color: #66fcf1; margin-bottom: 25px; text-transform: uppercase; letter-spacing: 1px;">Идет аудиовызов...</h3>
         <p id="pttStatusIndicator" style="color: #ff007f; font-weight: bold; margin-bottom: 15px;" class="hidden">🔴 МИКРОФОН ВЫКЛЮЧЕН (Зажмите пробел)</p>
@@ -327,7 +327,10 @@
 
         <div class="content-area">
             <div class="chat-header">
-                <h4 id="contentTitle" style="margin: 0;">Выбери чат</h4>
+                <div>
+                    <h4 id="contentTitle" style="margin: 0;">Выбери чат</h4>
+                    <small id="partnerTypingStatus" style="color: #66fcf1; font-size: 11px; display: none;"></small>
+                </div>
                 <div style="display: flex; gap: 8px; align-items: center;">
                     <button id="groupSettingsBtn" class="hidden" onclick="openGroupSettingsModal()" style="padding: 6px 12px; font-size: 11px; background: #66fcf1; color: #0b0c10;">⚙ Настройки</button>
                     <div id="callButtons" class="call-buttons hidden">
@@ -342,7 +345,7 @@
                 <div class="send-panel" id="sendBox">
                     <input type="file" id="mediaFileInput" style="display:none;" onchange="handleFileSelected(event)">
                     <button class="file-btn" onclick="document.getElementById('mediaFileInput').click()" title="Прикрепить файл">📎</button>
-                    <input type="text" id="msgInput" placeholder="Сообщение..." onkeypress="checkEnter(event)">
+                    <input type="text" id="msgInput" placeholder="Сообщение..." oninput="notifyTyping()" onkeypress="checkEnter(event)">
                     <button onclick="sendMessage()">Отправить</button>
                 </div>
                 <div id="filePreviewHint" style="font-size: 11px; color: #66fcf1; display:none; padding: 2px 0;"></div>
@@ -387,6 +390,7 @@
     let incomingCallData = null;
     let callRingerInterval = null;
     let lastRequestCount = 0;
+    let typingTimeout = null;
     const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
     function showNeonAlert(title, text) {
@@ -578,6 +582,19 @@
 
     socket.on('connect', () => { if (currentUserLogin) socket.emit('register', currentUserLogin); });
 
+    // СЛУШАТЕЛИ СТАТУСОВ (ПЕЧАТАЕТ / ОТПРАВЛЯЕТ ФОТО)
+    socket.on('user-typing', ({ from, statusText }) => {
+        if (currentPartner === from && !isGroupChat) {
+            const statusEl = document.getElementById('partnerTypingStatus');
+            statusEl.textContent = statusText;
+            statusEl.style.display = 'block';
+            if (window.typingClearTimer) clearTimeout(window.typingClearTimer);
+            window.typingClearTimer = setTimeout(() => {
+                statusEl.style.display = 'none';
+            }, 3000);
+        }
+    });
+
     socket.on('incoming-call', async ({ from, offer }) => {
         incomingCallData = { from, offer };
         const callerName = (dbData.users && dbData.users[from]) ? dbData.users[from].name : from;
@@ -757,7 +774,7 @@
         }
     }
 
-    // ОТКРЫТИЕ ПРОФИЛЯ ДРУГА ПРИ КЛИКЕ НА ЕГО КАРТОЧКУ ВО ВКЛАДКЕ ДРУЗЬЯ
+    // ОТКРЫТИЕ МОДАЛКИ СМЕНЫ ИМЕНИ/ПСЕВДОНИМА ДРУГА
     function openContactInfo(targetLogin, event) {
         event?.stopPropagation();
         editingContactLogin = targetLogin;
@@ -796,6 +813,25 @@
             closeContactModal();
             showNeonAlert('Успешно', 'Псевдоним контакта сохранен!');
         }
+    }
+
+    // ОПЕРАЦИИ ИЗ ВКЛАДКИ ДРУЗЬЯ (Написать, Позвонить, Изменить имя)
+    function friendActionWrite(login, event) {
+        event.stopPropagation();
+        switchTab('messages');
+        selectPartner(login, false);
+    }
+
+    function friendActionCall(login, event) {
+        event.stopPropagation();
+        switchTab('messages');
+        selectPartner(login, false);
+        startCall();
+    }
+
+    function friendActionRename(login, event) {
+        event.stopPropagation();
+        openContactInfo(login);
     }
 
     function openGroupSettingsModal() {
@@ -956,9 +992,11 @@
                 const div = document.createElement('div');
                 div.className = `item-card ${currentPartner === l ? 'active' : ''}`;
                 div.innerHTML = `
-                    <img class="avatar-sm" src="${u.avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1'}">
-                    <span style="flex-grow:1;">${displayName} <small style="color:#66fcf1">@${u.login}</small></span> 
-                    <span class="status-dot ${online ? 'status-online' : 'status-offline'}"></span>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <img class="avatar-sm" src="${u.avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1'}">
+                        <span style="flex-grow:1;">${displayName} <small style="color:#66fcf1">@${u.login}</small></span> 
+                        <span class="status-dot ${online ? 'status-online' : 'status-offline'}"></span>
+                    </div>
                 `;
                 div.onclick = () => selectPartner(l, false);
                 listDiv.appendChild(div);
@@ -966,6 +1004,10 @@
         } else if (currentTab === 'friends') {
             if (friendsSubTab === 'list') {
                 const friendLogins = (dbData.friends && dbData.friends[currentUserLogin]) ? dbData.friends[currentUserLogin] : [];
+                if (friendLogins.length === 0) {
+                    listDiv.innerHTML = '<i style="color:#45a29e; font-size:12px; padding:5px;">У вас пока нет друзей</i>';
+                    return;
+                }
                 friendLogins.forEach(l => {
                     const u = dbData.users[l];
                     if (!u) return;
@@ -973,12 +1015,17 @@
                     const displayName = getDisplayName(l);
                     const div = document.createElement('div');
                     div.className = `item-card`;
-                    // ПРИ КЛИКЕ НА ДРУГА ВО ВКЛАДКЕ ДРУЗЬЯ ТЕПЕРЬ ОТКРЫВАЕТСЯ ПРОФИЛЬ ДРУГА
-                    div.onclick = () => openContactInfo(l);
                     div.innerHTML = `
-                        <img class="avatar-sm" src="${u.avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1'}">
-                        <span style="flex-grow:1;">${displayName} <small style="color:#66fcf1">@${u.login}</small></span> 
-                        <span class="status-dot ${online ? 'status-online' : 'status-offline'}"></span>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <img class="avatar-sm" src="${u.avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1'}" onclick="openContactInfo('${l}', event)">
+                            <span style="flex-grow:1;">${displayName}<br><small style="color:#66fcf1">@${u.login}</small></span> 
+                            <span class="status-dot ${online ? 'status-online' : 'status-offline'}"></span>
+                        </div>
+                        <div style="display: flex; gap: 4px; margin-top: 4px;">
+                            <button onclick="friendActionWrite('${l}', event)" style="flex:1; font-size:10px; padding:6px; background:#45a29e; color:#0b0c10;" title="Написать сообщение">💬 Написать</button>
+                            <button onclick="friendActionCall('${l}', event)" style="flex:1; font-size:10px; padding:6px; background:#66fcf1; color:#0b0c10;" title="Позвонить">🎙️ Звонок</button>
+                            <button onclick="friendActionRename('${l}', event)" style="flex:1; font-size:10px; padding:6px; background:#1f2833; border:1px solid #45a29e; color:#c5c6c7;" title="Изменить имя">✏️ Имя</button>
+                        </div>
                     `;
                     listDiv.appendChild(div);
                 });
@@ -990,13 +1037,12 @@
                     if (!u) return;
                     const div = document.createElement('div');
                     div.className = 'item-card';
-                    div.style.cssText = 'flex-direction: column; align-items: stretch;';
                     div.innerHTML = `
                         <div style="display:flex; align-items:center; gap:8px;">
                             <img class="avatar-sm" src="${u.avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1'}">
                             <span style="flex-grow:1; font-size:12px;"><b>${u.name}</b><br><small style="color:#66fcf1">@${u.login}</small></span>
                         </div>
-                        <div style="display:flex; gap:6px; margin-top:8px;">
+                        <div style="display:flex; gap:6px; margin-top:4px;">
                             <button onclick="respondFriendRequestFromTab('${reqLogin}', true)" style="flex:1; font-size:10px; padding:6px; background:#45a29e; color:#0b0c10;">Принять</button>
                             <button onclick="respondFriendRequestFromTab('${reqLogin}', false)" style="flex:1; font-size:10px; padding:6px; background:#ff007f; color:#fff;">Отклонить</button>
                         </div>
@@ -1017,8 +1063,10 @@
                     const div = document.createElement('div');
                     div.className = 'item-card';
                     div.innerHTML = `
-                        <img class="avatar-sm" src="${u.avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1'}">
-                        <span style="flex-grow:1;">${u.name}<br><small style="color:#66fcf1">⏳ Ожидает ответа (@${u.login})</small></span>
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <img class="avatar-sm" src="${u.avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1'}">
+                            <span style="flex-grow:1;">${u.name}<br><small style="color:#66fcf1">⏳ Ожидает ответа (@${u.login})</small></span>
+                        </div>
                     `;
                     listDiv.appendChild(div);
                 });
@@ -1038,9 +1086,11 @@
                 const div = document.createElement('div');
                 div.className = `item-card ${currentPartner === gId ? 'active' : ''}`;
                 div.innerHTML = `
-                    <img class="avatar-sm" src="${g.avatar || 'https://api.iconify.design/lucide:users.svg?color=%2366fcf1'}">
-                    <span style="flex-grow:1;">🏠 ${g.name}<br><small style="color:#aaa;">👥 ${memberCount} уч. | <span style="color:#66fcf1">${isMember ? myRole : 'Рекомендация'}</span></small></span> 
-                    <small style="color:${isMember?'#66fcf1':'#ff007f'}">${isMember ? '' : 'Вступить'}</small>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <img class="avatar-sm" src="${g.avatar || 'https://api.iconify.design/lucide:users.svg?color=%2366fcf1'}">
+                        <span style="flex-grow:1;">🏠 ${g.name}<br><small style="color:#aaa;">👥 ${memberCount} уч. | <span style="color:#66fcf1">${isMember ? myRole : 'Рекомендация'}</span></small></span> 
+                        <small style="color:${isMember?'#66fcf1':'#ff007f'}">${isMember ? '' : 'Вступить'}</small>
+                    </div>
                 `;
                 div.onclick = () => { if (!isMember) { joinGroup(gId); } else { selectPartner(gId, true); } };
                 listDiv.appendChild(div);
@@ -1100,6 +1150,7 @@
         currentPartner = targetId; isGroupChat = isGroup;
         const sendBoxEl = document.getElementById('sendBox');
         const sendHintEl = document.getElementById('filePreviewHint');
+        document.getElementById('partnerTypingStatus').style.display = 'none';
 
         if (isGroup) {
             const groupObj = dbData.groups[targetId];
@@ -1200,6 +1251,12 @@
         });
     }
 
+    // ОТПРАВКА СТАТУСА ПЕЧАТИ
+    function notifyTyping() {
+        if (!currentPartner || isGroupChat || currentPartner === currentUserLogin) return;
+        socket.emit('typing', { to: currentPartner, from: currentUserLogin, statusText: 'печатает...' });
+    }
+
     async function sendMessage() {
         const input = document.getElementById('msgInput');
         const text = input.value.trim();
@@ -1230,6 +1287,12 @@
     function handleFileSelected(event) {
         const file = event.target.files[0];
         if (!file) return;
+
+        // Отправляем статус "отправляет фото..." собеседнику
+        if (currentPartner && !isGroupChat && currentPartner !== currentUserLogin) {
+            socket.emit('typing', { to: currentPartner, from: currentUserLogin, statusText: 'отправляет фото...' });
+        }
+
         const reader = new FileReader();
         reader.onload = function(e) {
             let type = file.type.startsWith('video/') ? 'video' : 'image';
