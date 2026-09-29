@@ -37,12 +37,11 @@ async function loadDataFromGitHub() {
         const content = Buffer.from(response.data.content, 'base64').toString('utf8');
         const parsed = JSON.parse(content);
         
-        // Объединяем, чтобы точно сохранить структуру
         if (parsed.users) db.users = parsed.users;
         if (parsed.userContacts) db.userContacts = parsed.userContacts;
         if (parsed.messagesStore) db.messagesStore = parsed.messagesStore;
 
-        console.log('📦 Данные успешно загружены с GitHub! Пользователей:', db.users.length, ' Чатов со смещениями:', Object.keys(db.messagesStore).length);
+        console.log('📦 Данные успешно загружены с GitHub! Пользователей:', db.users.length, ' Чатов:', Object.keys(db.messagesStore).length);
     } catch (e) {
         console.log('⚠️ Файл на GitHub не найден или ошибка загрузки, создаем новый:', e.message);
         await saveDataToGitHub();
@@ -83,7 +82,6 @@ async function saveDataToGitHub() {
 io.on('connection', (socket) => {
     console.log('👤 Пользователь подключился:', socket.id);
 
-    // При подключении сразу отправляем ему его актуальные контакты, если он уже был в базе
     socket.on('verify_code', (userData) => {
         socket.userPhone = userData.phone;
         
@@ -111,8 +109,6 @@ io.on('connection', (socket) => {
 
         saveDataToGitHub();
         sendUpdatedContacts(userData.phone);
-        
-        // Отправляем историю сообщений со всеми контактами, если она есть
         sendAllChatsHistory(socket, userData.phone);
     });
 
@@ -196,7 +192,6 @@ io.on('connection', (socket) => {
 
             saveDataToGitHub();
 
-            // Отправляем получателю, если он онлайн
             io.to(recipient.id).emit('message', {
                 fromPhone: sender.phone,
                 text: data.message,
@@ -254,11 +249,9 @@ function sendUpdatedContacts(phone) {
 }
 
 function sendAllChatsHistory(socket, myPhone) {
-    // Если на фронтенде есть логика запроса истории сообщений, отправляем её пакетно
     socket.emit('all_messages', db.messagesStore);
 }
 
-// Порт для Render или локального запуска
 const PORT = process.env.PORT || 3000;
 
 loadDataFromGitHub().then(() => {
