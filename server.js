@@ -8,7 +8,6 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-// Увеличиваем лимит для JSON, чтобы можно было принимать картинки/файлы в base64
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -18,6 +17,8 @@ const GITHUB_TOKEN = process.env.GITHUB_TOKEN || 'ghp_UcKSKqtpHrt2tZvBHVjgnwmHn0
 const REPO_OWNER = 'shihaDD';
 const REPO_NAME = 'Chat-Database';
 const FILE_PATH = 'database.json';
+
+const resetCodes = {};
 
 async function loadDatabase() {
     try {
@@ -78,13 +79,13 @@ app.get('/api/check-login/:login', async (req, res) => {
     res.json({ exists: !!db.users?.[login] });
 });
 
-// Регистрация с поддержкой аватара
 app.post('/api/register', async (req, res) => {
-    let { login, name, password, avatar } = req.body;
-    if (!login || !name || !password) return res.status(400).json({ success: false, error: 'Заполните все поля' });
+    let { login, name, password, avatar, email } = req.body;
+    if (!login || !name || !password || !email) return res.status(400).json({ success: false, error: 'Заполните все поля, включая почту' });
     
     login = login.trim().toLowerCase();
     name = name.trim();
+    email = email.trim().toLowerCase();
 
     let db = await loadDatabase();
     if (!db.users) db.users = {};
@@ -101,6 +102,7 @@ app.post('/api/register', async (req, res) => {
         login, 
         name, 
         password, 
+        email,
         avatar: avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1',
         lastLoginTime: new Date().toLocaleString()
     };
@@ -112,7 +114,6 @@ app.post('/api/register', async (req, res) => {
     res.json({ success: true, user: db.users[login], db });
 });
 
-// Вход с обновлением последнего времени входа
 app.post('/api/login', async (req, res) => {
     let { login, password } = req.body;
     if (!login || !password) return res.status(400).json({ success: false, error: 'Заполните все поля' });
@@ -131,14 +132,60 @@ app.post('/api/login', async (req, res) => {
     res.json({ success: true, user, db });
 });
 
-// Обновление профиля (имя, аватар)
+app.post('/api/forgot-password', async (req, res) => {
+    let { email } = req.body;
+    if (!email) return res.status(400).json({ success: false, error: 'Введите email' });
+    email = email.trim().toLowerCase();
+
+    let db = await loadDatabase();
+    let targetLogin = null;
+    for (const [l, u] of Object.entries(db.users || {})) {
+        if (u.email === email) {
+            targetLogin = l;
+            break;
+        }
+    }
+
+    if (!targetLogin) {
+        return res.status(400).json({ success: false, error: 'Пользователь с такой почтой не найден' });
+    }
+
+    const code = Math.floor(1000 + Math.random() * 9000).toString();
+    resetCodes[email] = { code, login: targetLogin };
+
+    console.log(`[MAIL RESUME] Код для восстановления ${email}: ${code}`);
+    res.json({ success: true, debugCode: code });
+});
+
+app.post('/api/reset-password', async (req, res) => {
+    let { email, code, newPassword } = req.body;
+    if (!email || !code || !newPassword) return res.status(400).json({ success: false, error: 'Заполните все поля' });
+    email = email.trim().toLowerCase();
+
+    const record = resetCodes[email];
+    if (!record || record.code !== code) {
+        return res.status(400).json({ success: false, error: 'Неверный код подтверждения' });
+    }
+
+    let db = await loadDatabase();
+    if (db.users?.[record.login]) {
+        db.users[record.login].password = newPassword;
+        await saveDatabase(db);
+        delete resetCodes[email];
+        return res.json({ success: true });
+    }
+
+    res.status(400).json({ success: false, error: 'Ошибка сброса пароля' });
+});
+
 app.post('/api/update-profile', async (req, res) => {
-    let { login, name, avatar } = req.body;
+    let { login, name, avatar, email } = req.body;
     let db = await loadDatabase();
     if (!db.users?.[login]) return res.status(400).json({ success: false, error: 'Пользователь не найден' });
 
     if (name) db.users[login].name = name.trim();
     if (avatar) db.users[login].avatar = avatar;
+    if (email) db.users[login].email = email.trim().toLowerCase();
 
     await saveDatabase(db);
     res.json({ success: true, user: db.users[login], db });
@@ -178,7 +225,6 @@ app.post('/api/add-friend', async (req, res) => {
     res.json({ success: true, db });
 });
 
-// Отправка сообщений (с поддержкой медиа: фото, видео, файлы)
 app.post('/api/send-message', async (req, res) => {
     const { sender, receiver, text, media } = req.body;
     let db = await loadDatabase();
@@ -190,7 +236,7 @@ app.post('/api/send-message', async (req, res) => {
     const messageObj = { 
         sender, 
         text: text || '', 
-        media: media || null, // объект { type: 'image'/'video'/'file', url: '...', name: '...' }
+        media: media || null, 
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
     };
     
@@ -206,7 +252,6 @@ app.post('/api/send-message', async (req, res) => {
     res.json({ success: true, db });
 });
 
-// Управление группами/сообществами
 app.post('/api/create-group', async (req, res) => {
     let { name, creator } = req.body;
     if (!name) return res.status(400).json({ success: false, error: 'Укажите название группы' });
@@ -272,7 +317,6 @@ app.get('/api/news', async (req, res) => {
     }
 });
 
-// WebRTC сигналинг
 const onlineSockets = {};
 io.on('connection', (socket) => {
     socket.on('register', (login) => { onlineSockets[login] = socket.id; });
