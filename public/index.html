@@ -61,21 +61,6 @@
             border-bottom: 1px solid var(--border-color);
             display: flex;
             align-items: center;
-            justify-content: space-between;
-        }
-
-        .settings-btn {
-            background: transparent;
-            border: none;
-            color: var(--text-muted);
-            cursor: pointer;
-            font-size: 18px;
-            transition: color 0.2s, transform 0.2s;
-        }
-
-        .settings-btn:hover {
-            color: var(--text-main);
-            transform: rotate(45deg);
         }
 
         .my-profile-info {
@@ -241,11 +226,6 @@
 
         .contact-status.online {
             color: #00ff88;
-        }
-
-        .contact-actions {
-            display: flex;
-            gap: 5px;
         }
 
         .chat-area {
@@ -557,7 +537,6 @@
         <div class="sidebar">
             <div class="sidebar-header">
                 <span>⚡ В одно ебало</span>
-                <button class="settings-btn" id="settingsOpenBtn" title="Настройки профиля">⚙️</button>
             </div>
             
             <!-- Профиль пользователя с кнопками управления -->
@@ -645,7 +624,7 @@
             }
         });
 
-        // Открытие настроек профиля (из шапки сайдбара и из блока профиля)
+        // Открытие настроек профиля из блока профиля
         let settingsAvatarStyle = myAvatarData;
         const settingsPresetAvs = document.querySelectorAll('#settingsPresetsGrid .preset-av');
         
@@ -662,7 +641,6 @@
             document.getElementById('settingsModal').style.display = 'flex';
         }
 
-        document.getElementById('settingsOpenBtn').addEventListener('click', openSettingsModal);
         document.getElementById('profileSettingsBtn').addEventListener('click', openSettingsModal);
 
         settingsPresetAvs.forEach(av => {
@@ -702,7 +680,6 @@
             
             document.getElementById('settingsModal').style.display = 'none';
             loginUser(myName, myPhone, myAvatarData);
-            socket.emit('verify_code', { name: myName, phone: myPhone, code: '0000' });
         });
 
         // Кнопка выхода (Logout)
@@ -792,7 +769,7 @@
                 return;
             }
             
-            myAvatarData = selectedAvatarStyle;
+            myAvatarData = selectedAvatarStyle; // Сохраняем выбранную аватарку во временную переменную
             socket.emit('request_code', { phone: tempPhone });
             authModal.style.display = 'none';
             codeModal.style.display = 'flex';
@@ -813,7 +790,7 @@
                 myName = tempName;
                 localStorage.setItem('chat_name', myName);
                 localStorage.setItem('chat_phone', myPhone);
-                localStorage.setItem('chat_avatar', myAvatarData);
+                localStorage.setItem('chat_avatar', myAvatarData); // Сохраняем в localStorage
                 codeModal.style.display = 'none';
                 loginUser(myName, myPhone, myAvatarData);
             } else {
