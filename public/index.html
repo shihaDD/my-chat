@@ -255,7 +255,7 @@
 
     <div class="whatsapp-bg-top"></div>
 
-    <!-- Экран авторизации (Телефон + Имя) -->
+    <!-- Экран авторизации -->
     <div id="auth-screen">
         <h2>WhatsApp Web</h2>
         <p>Введите номер телефона и ваше имя</p>
@@ -301,7 +301,9 @@
         const socket = io();
         let myData = null;
         let activeRecipientPhone = null;
-        const messagesStore = {};
+        
+        // Загружаем сохраненную историю переписки из localStorage, если она есть
+        let messagesStore = JSON.parse(localStorage.getItem('whatsapp_messages') || '{}');
 
         const authScreen = document.getElementById('auth-screen');
         const chatScreen = document.getElementById('chat-screen');
@@ -317,6 +319,13 @@
         const inputArea = document.getElementById('input-area');
         const messageInput = document.getElementById('message-input');
         const sendBtn = document.getElementById('send-btn');
+
+        // Проверяем, был ли пользователь уже авторизован ранее
+        const savedUser = localStorage.getItem('whatsapp_user');
+        if (savedUser) {
+            myData = JSON.parse(savedUser);
+            startChatSession();
+        }
 
         // Маска ввода номера телефона
         phoneInput.oninput = (e) => {
@@ -347,16 +356,24 @@
             socket.emit('register', { phone, name }, (response) => {
                 if (response.success) {
                     myData = response.user;
-                    myAvatarLabel.textContent = myData.name.charAt(0).toUpperCase();
-                    authScreen.style.display = 'none';
-                    chatScreen.style.display = 'grid';
+                    localStorage.setItem('whatsapp_user', JSON.stringify(myData));
+                    startChatSession();
                 } else {
                     alert(response.message);
                 }
             });
         };
 
+        function startChatSession() {
+            // Регистрируем на сервере при повторном входе
+            socket.emit('register', { phone: myData.phone, name: myData.name }, () => {});
+            myAvatarLabel.textContent = myData.name.charAt(0).toUpperCase();
+            authScreen.style.display = 'none';
+            chatScreen.style.display = 'grid';
+        }
+
         socket.on('users_list', (users) => {
+            if (!myData) return;
             usersList.innerHTML = '';
             users.forEach(user => {
                 if (user.phone === myData.phone) return;
@@ -388,6 +405,7 @@
         socket.on('message', (data) => {
             if (!messagesStore[data.fromPhone]) messagesStore[data.fromPhone] = [];
             messagesStore[data.fromPhone].push({ text: data.text, time: data.time, incoming: true });
+            saveMessages();
             if (activeRecipientPhone === data.fromPhone) renderMessages();
         });
 
@@ -401,10 +419,15 @@
             if (!messagesStore[activeRecipientPhone]) messagesStore[activeRecipientPhone] = [];
             const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             messagesStore[activeRecipientPhone].push({ text, time, incoming: false });
+            saveMessages();
 
             socket.emit('private_message', { toPhone: activeRecipientPhone, message: text });
             messageInput.value = '';
             renderMessages();
+        }
+
+        function saveMessages() {
+            localStorage.setItem('whatsapp_messages', JSON.stringify(messagesStore));
         }
 
         function renderMessages() {
