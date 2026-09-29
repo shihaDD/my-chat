@@ -114,16 +114,27 @@ app.post('/api/ping', async (req, res) => {
     res.json({ success: true });
 });
 
+// Исправленный и надежный поиск пользователя по логину
 app.post('/api/add-friend', async (req, res) => {
-    const { login, targetLogin } = req.body;
-    const cleanTarget = targetLogin ? targetLogin.trim().toLowerCase() : '';
+    let { login, targetLogin } = req.body;
+    login = login ? login.trim().toLowerCase() : '';
+    targetLogin = targetLogin ? targetLogin.trim().toLowerCase().replace('@', '') : '';
+    
     let db = await loadDatabase();
-    if (!db.users?.[cleanTarget] || cleanTarget === login) return res.status(400).json({ success: false, error: 'Пользователь не найден' });
+
+    if (!db.users?.[targetLogin]) {
+        return res.status(400).json({ success: false, error: `Пользователь @${targetLogin} не найден в системе!` });
+    }
+    if (targetLogin === login) {
+        return res.status(400).json({ success: false, error: 'Нельзя добавить самого себя!' });
+    }
+
     if (!db.friends[login]) db.friends[login] = [];
-    if (!db.friends[login].includes(cleanTarget)) {
-        db.friends[login].push(cleanTarget);
+    if (!db.friends[login].includes(targetLogin)) {
+        db.friends[login].push(targetLogin);
         await saveDatabase(db);
     }
+
     res.json({ success: true, db });
 });
 
@@ -143,79 +154,46 @@ app.post('/api/send-message', async (req, res) => {
     res.json({ success: true, db });
 });
 
+// Мемы и картинки из интернета (Reddit API / Memes)
 app.get('/api/news', async (req, res) => {
     try {
-        const rssRes = await fetch('https://news.google.com/rss?hl=ru&gl=RU&ceid=RU:ru');
-        const rssText = await rssRes.text();
-        const items = [];
-        const itemMatches = rssText.match(/<item>([\s\S]*?)<\/item>/g) || [];
-        for (let i = 0; i < Math.min(15, itemMatches.length); i++) {
-            const item = itemMatches[i];
-            const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
-            const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
-            const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
-            if (titleMatch) {
-                items.push({
-                    title: titleMatch[1].replace('<![CDATA[', '').replace(']]>', '').trim(),
-                    link: linkMatch ? linkMatch[1].replace('<![CDATA[', '').replace(']]>', '').trim() : '#',
-                    date: dateMatch ? new Date(dateMatch[1]).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''
-                });
-            }
-        }
-        res.json({ success: true, news: items });
+        const response = await fetch('https://meme-api.com/gimme/20');
+        const data = await response.json();
+        const memes = (data.memes || []).map(m => ({
+            title: m.title,
+            image: m.url,
+            author: m.author,
+            link: m.postLink
+        }));
+        res.json({ success: true, memes });
     } catch (e) {
-        res.json({ success: false, news: [] });
+        res.json({ success: false, memes: [] });
     }
 });
 
-// Карта активных пользователей для WebRTC сокетов (login -> socketId)
+// WebRTC сигналинг
 const onlineSockets = {};
-
 io.on('connection', (socket) => {
-    socket.on('register', (login) => {
-        onlineSockets[login] = socket.id;
-    });
-
-    // Пересылка звонка / WebRTC сигналов
+    socket.on('register', (login) => { onlineSockets[login] = socket.id; });
     socket.on('call-user', ({ to, offer, from, callType }) => {
-        const targetSocketId = onlineSockets[to];
-        if (targetSocketId) {
-            io.to(targetSocketId).emit('incoming-call', { from, offer, callType });
-        }
+        if (onlineSockets[to]) io.to(onlineSockets[to]).emit('incoming-call', { from, offer, callType });
     });
-
     socket.on('call-accepted', ({ to, answer }) => {
-        const targetSocketId = onlineSockets[to];
-        if (targetSocketId) {
-            io.to(targetSocketId).emit('call-answered', { answer });
-        }
+        if (onlineSockets[to]) io.to(onlineSockets[to]).emit('call-answered', { answer });
     });
-
     socket.on('ice-candidate', ({ to, candidate }) => {
-        const targetSocketId = onlineSockets[to];
-        if (targetSocketId) {
-            io.to(targetSocketId).emit('ice-candidate', { candidate });
-        }
+        if (onlineSockets[to]) io.to(onlineSockets[to]).emit('ice-candidate', { candidate });
     });
-
     socket.on('hang-up', ({ to }) => {
-        const targetSocketId = onlineSockets[to];
-        if (targetSocketId) {
-            io.to(targetSocketId).emit('call-ended');
-        }
+        if (onlineSockets[to]) io.to(onlineSockets[to]).emit('call-ended');
     });
-
     socket.on('disconnect', () => {
         for (const [login, id] of Object.entries(onlineSockets)) {
-            if (id === socket.id) {
-                delete onlineSockets[login];
-                break;
-            }
+            if (id === socket.id) { delete onlineSockets[login]; break; }
         }
     });
 });
 
-server.PORT = PORT;
 server.listen(PORT, () => {
-    console.log(`Сервер и WebRTC сигналинг запущены на порту ${PORT}`);
+    console.log(`Сервер запущен на порту ${PORT}`);
 });
