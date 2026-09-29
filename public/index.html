@@ -363,29 +363,42 @@
             transform: scale(0.97);
         }
 
+        /* Красивые всплывающие модальные окна */
         .modal-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(11, 11, 14, 0.85);
-            backdrop-filter: blur(8px);
+            background: rgba(11, 11, 14, 0.75);
+            backdrop-filter: blur(10px);
             display: flex;
             justify-content: center;
             align-items: center;
             z-index: 1000;
+            animation: fadeInOverlay 0.25s ease-out;
+        }
+
+        @keyframes fadeInOverlay {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
 
         .auth-card {
             background: #13131a;
-            border: 1px solid var(--border-color);
-            padding: 30px;
-            border-radius: 16px;
+            border: 1px solid rgba(255, 42, 95, 0.3);
+            padding: 35px;
+            border-radius: 20px;
             width: 420px;
             max-height: 90vh;
             overflow-y: auto;
             display: flex;
             flex-direction: column;
-            gap: 18px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 0 30px rgba(255, 42, 95, 0.15);
+            gap: 20px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 40px rgba(255, 42, 95, 0.2);
+            animation: scaleUpModal 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes scaleUpModal {
+            from { transform: scale(0.9); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
         }
 
         .auth-card h2 {
@@ -393,28 +406,31 @@
             text-align: center;
             margin-bottom: 2px;
             text-transform: uppercase;
-            font-size: 20px;
+            font-size: 22px;
+            letter-spacing: 0.5px;
         }
 
         .auth-card p {
             color: var(--text-muted);
             font-size: 13px;
             text-align: center;
-            line-height: 1.4;
+            line-height: 1.5;
         }
 
         .auth-card input[type="text"] {
             width: 100%;
-            padding: 12px 14px;
+            padding: 14px 16px;
             background: #1a1a24;
             border: 1px solid var(--border-color);
             color: var(--text-main);
-            border-radius: 8px;
-            font-size: 14px;
+            border-radius: 10px;
+            font-size: 15px;
+            transition: all 0.2s;
         }
 
         .auth-card input[type="text"]:focus {
             border-color: var(--accent-color);
+            box-shadow: 0 0 10px rgba(255, 42, 95, 0.2);
         }
 
         .settings-group {
@@ -431,11 +447,11 @@
 
         .settings-select {
             width: 100%;
-            padding: 11px 12px;
+            padding: 12px 14px;
             background: #1a1a24;
             border: 1px solid var(--border-color);
             color: var(--text-main);
-            border-radius: 8px;
+            border-radius: 10px;
             font-size: 13px;
             cursor: pointer;
         }
@@ -474,7 +490,7 @@
             padding: 12px;
             background: #1a1a24;
             border: 1px dashed var(--border-color);
-            border-radius: 8px;
+            border-radius: 10px;
             color: var(--text-muted);
             font-size: 13px;
             cursor: pointer;
@@ -492,17 +508,21 @@
 
         .auth-card button.main-action-btn {
             width: 100%;
-            padding: 12px;
+            padding: 14px;
             background: var(--accent-color);
             color: white;
             font-weight: 700;
-            border-radius: 8px;
+            border-radius: 10px;
             cursor: pointer;
             transition: background 0.2s, transform 0.1s;
         }
 
         .auth-card button.main-action-btn:hover {
             background: var(--accent-hover);
+        }
+
+        .auth-card button.main-action-btn:active {
+            transform: scale(0.98);
         }
 
         .modal-buttons-row {
@@ -513,40 +533,47 @@
         .custom-toast-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(11, 11, 14, 0.7);
-            backdrop-filter: blur(4px);
+            background: rgba(11, 11, 14, 0.75);
+            backdrop-filter: blur(6px);
             display: flex;
             justify-content: center;
             align-items: center;
             z-index: 2000;
+            animation: fadeInOverlay 0.2s ease-out;
         }
 
         .custom-toast-card {
             background: #13131a;
-            border: 1px solid var(--border-color);
-            padding: 24px 28px;
-            border-radius: 14px;
-            width: 340px;
+            border: 1px solid rgba(255, 42, 95, 0.4);
+            padding: 28px 32px;
+            border-radius: 16px;
+            width: 360px;
             text-align: center;
             display: flex;
             flex-direction: column;
-            gap: 16px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5), 0 0 20px rgba(255, 42, 95, 0.2);
+            gap: 18px;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.6), 0 0 25px rgba(255, 42, 95, 0.25);
+            animation: scaleUpModal 0.25s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .custom-toast-card p {
             color: var(--text-main);
-            font-size: 14px;
+            font-size: 15px;
             line-height: 1.5;
         }
 
         .custom-toast-card button {
             background: var(--accent-color);
             color: white;
-            padding: 10px;
+            padding: 12px;
             font-weight: 700;
-            border-radius: 8px;
+            border-radius: 10px;
             cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .custom-toast-card button:hover {
+            background: var(--accent-hover);
         }
     </style>
 </head>
@@ -575,12 +602,12 @@
         </div>
     </div>
 
-    <!-- Окно подтверждения по коду -->
+    <!-- Всплывающее окно ввода кода -->
     <div id="codeModal" class="modal-overlay" style="display: none;">
         <div class="auth-card">
             <h2>Код подтверждения</h2>
-            <p>Введите код авторизации (для теста можно ввести <b>0000</b>)</p>
-            <input type="text" id="codeCodeInput" placeholder="Введите код...">
+            <p>Введите полученный код авторизации</p>
+            <input type="text" id="codeCodeInput" placeholder="Введите код..." autocomplete="off">
             <button id="codeBtn" class="main-action-btn">ПОДТВЕРДИТЬ</button>
         </div>
     </div>
@@ -1051,7 +1078,6 @@
         let tempName = '';
         let tempPhone = '';
 
-        // Проверка авторизации при загрузке
         if (myPhone && myName) {
             authModal.style.display = 'none';
             codeModal.style.display = 'none';
@@ -1071,7 +1097,7 @@
             myAvatarData = selectedAvatarStyle;
             socket.emit('request_code', { phone: tempPhone });
             authModal.style.display = 'none';
-            codeModal.style.display = 'flex'; // Показываем окно кода
+            codeModal.style.display = 'flex';
         });
 
         codeBtn.addEventListener('click', () => {
@@ -1091,7 +1117,7 @@
                 localStorage.setItem('chat_phone', myPhone);
                 localStorage.setItem('chat_avatar', myAvatarData);
                 authModal.style.display = 'none';
-                codeModal.style.display = 'none'; // Надежно скрываем окно кода
+                codeModal.style.display = 'none';
                 loginUser(myName, myPhone, myAvatarData);
             } else {
                 showToast(res.message || 'Неверный код!');
@@ -1105,7 +1131,6 @@
             document.getElementById('myPhoneDisplay').innerText = phone;
             const myAvatarEl = document.getElementById('myAvatar');
             applyAvatar(myAvatarEl, avatar, name);
-            socket.emit('verify_code', { name, phone, code: '0000' });
         }
 
         socket.on('add_contact_response', (res) => {
