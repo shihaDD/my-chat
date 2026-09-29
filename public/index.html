@@ -25,7 +25,6 @@
         .modal { background: #1f2833; padding: 35px; border-radius: 12px; width: 400px; border: 1px solid #66fcf1; box-shadow: 0 0 30px rgba(102, 252, 241, 0.4); text-align: center; display: flex; flex-direction: column; gap: 12px; max-height: 95vh; overflow-y: auto; }
         .modal h3 { color: #66fcf1; margin-top: 0; text-transform: uppercase; letter-spacing: 2px; }
         .login-status { font-size: 12px; text-align: left; margin-top: -6px; min-height: 15px; }
-
         .pass-status { font-size: 12px; text-align: left; min-height: 15px; font-weight: bold; }
 
         .call-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 3000; display: flex; flex-direction: column; justify-content: center; align-items: center; }
@@ -83,10 +82,12 @@
         .meme-card img { max-width: 100%; max-height: 300px; border-radius: 6px; margin-top: 8px; border: 1px solid #45a29e; }
         .meme-card p { color: #66fcf1; font-size: 14px; margin: 0 0 6px 0; font-weight: bold; }
 
-        /* Профиль и выбор аватаров */
         .preset-avatars { display: flex; gap: 10px; justify-content: center; margin: 5px 0; }
         .preset-avatars img { width: 45px; height: 45px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
         .preset-avatars img.selected { border-color: #66fcf1; box-shadow: 0 0 8px #66fcf1; }
+
+        .link-btn { background: none; border: none; color: #66fcf1; cursor: pointer; font-size: 12px; text-decoration: underline; text-transform: none; padding: 0; margin-top: 5px; }
+        .link-btn:hover { color: #fff; box-shadow: none; }
 
         h4 { color: #66fcf1; margin-top: 0; }
         b { color: #66fcf1; }
@@ -98,15 +99,15 @@
     <!-- ОКНО АВТОРИЗАЦИИ / РЕГИСТРАЦИИ -->
     <div id="authModal" class="modal-overlay">
         <div class="modal">
-            <h3 id="modalTitle">Вход / Регистрация</h3>
-            <p id="modalSubtitle" style="font-size: 12px; color: #aaa; margin: 0;">Введите ваш логин</p>
+            <h3 id="modalTitle">Вход в систему</h3>
             
-            <input type="text" id="loginInput" placeholder="Логин..." oninput="handleLoginInput()">
+            <input type="text" id="loginInput" placeholder="Введите логин..." oninput="handleLoginInput()">
             <div id="loginStatus" class="login-status"></div>
 
             <!-- Поля регистрации -->
             <div id="registerFields" class="hidden" style="display: flex; flex-direction: column; gap: 10px;">
                 <input type="text" id="nameInput" placeholder="Ваше имя...">
+                <input type="email" id="emailInput" placeholder="Электронная почта (email)...">
                 
                 <p style="font-size: 12px; margin: 0; color: #aaa; text-align: left;">Выберите аватар:</p>
                 <div class="preset-avatars">
@@ -125,9 +126,29 @@
             <!-- Поле входа -->
             <div id="loginFields" class="hidden" style="display: flex; flex-direction: column; gap: 10px;">
                 <input type="password" id="passLoginInput" placeholder="Введите пароль...">
+                <button class="link-btn" onclick="showForgotModal()">Забыли пароль?</button>
             </div>
 
             <button id="authBtn" onclick="submitAuth()" disabled>Продолжить</button>
+        </div>
+    </div>
+
+    <!-- ОКНО ВОССТАНОВЛЕНИЯ ПАРОЛЯ -->
+    <div id="forgotModal" class="modal-overlay hidden">
+        <div class="modal">
+            <h3>Восстановление пароля</h3>
+            <p style="font-size: 12px; color: #aaa;">Введите привязанную почту</p>
+            <input type="email" id="forgotEmailInput" placeholder="Ваш email...">
+            <div id="forgotHint" style="font-size: 11px; color: #ff9800; display:none;"></div>
+            
+            <div id="resetCodeBlock" class="hidden" style="display: flex; flex-direction: column; gap: 10px; margin-top: 5px;">
+                <input type="text" id="resetCodeInput" placeholder="4-значный код из письма...">
+                <input type="password" id="newPassInput" placeholder="Новый пароль...">
+                <button onclick="confirmResetPassword()">Сбросить пароль</button>
+            </div>
+
+            <button id="sendCodeBtn" onclick="requestResetCode()">Отправить код</button>
+            <button class="link-btn" onclick="hideForgotModal()">Назад к входу</button>
         </div>
     </div>
 
@@ -137,6 +158,7 @@
             <h3>Редактирование профиля</h3>
             <img id="editAvatarPreview" class="avatar-lg" src="" alt="avatar">
             <input type="text" id="editNameInput" placeholder="Новое имя...">
+            <input type="email" id="editEmailInput" placeholder="Электронная почта...">
             <p style="font-size: 12px; margin: 0; color: #aaa; text-align: left;">Сменить аватар:</p>
             <input type="file" id="editAvatarFile" accept="image/*" style="font-size:12px; padding:6px;" onchange="previewEditAvatar(event)">
             <div style="display: flex; gap: 10px; margin-top: 10px;">
@@ -146,9 +168,9 @@
         </div>
     </div>
 
-    <!-- ОКНО ЗВОНКА -->
+    <!-- ОКНО ЗВОНКА ( С ЗАПРОСОМ ДОСТУПА К МИКРОФОНУ И КАМЕРЕ ) -->
     <div id="callModal" class="call-modal hidden">
-        <h3 id="callStatusText" style="color: #66fcf1; margin-bottom: 20px;">Соединение...</h3>
+        <h3 id="callStatusText" style="color: #66fcf1; margin-bottom: 20px;">Запрос доступа к микрофону...</h3>
         <div class="call-videos">
             <div>
                 <p style="font-size:12px; text-align:center; color:#aaa;">Вы</p>
@@ -207,7 +229,6 @@
             <div id="chatContainer" class="hidden" style="display: flex; flex-direction: column; height: 100%;">
                 <div class="messages" id="messagesBox"></div>
                 
-                <!-- Панель отправки с прикреплением файлов -->
                 <div class="send-panel" id="sendBox">
                     <input type="file" id="mediaFileInput" style="display:none;" onchange="handleFileSelected(event)">
                     <button class="file-btn" onclick="document.getElementById('mediaFileInput').click()" title="Прикрепить файл, фото или видео">📎</button>
@@ -233,7 +254,7 @@
     let memeList = [];
     let isUserExists = false;
     let selectedAvatarUrl = 'https://api.iconify.design/lucide:cat.svg?color=%2366fcf1';
-    let attachedMedia = null; // { type, url, name }
+    let attachedMedia = null;
 
     let peerConnection;
     let localStream;
@@ -331,14 +352,12 @@
         }
     }
 
-    // Выбор аватара из пресетов
     function selectPresetAvatar(imgElement) {
         document.querySelectorAll('.preset-avatars img').forEach(img => img.classList.remove('selected'));
         imgElement.classList.add('selected');
         selectedAvatarUrl = imgElement.src;
     }
 
-    // Загрузка своего аватара из файлов при регистрации
     function previewCustomAvatar(event) {
         const file = event.target.files[0];
         if (!file) return;
@@ -350,7 +369,6 @@
         reader.readAsDataURL(file);
     }
 
-    // Обработка прикрепления медиа (фото, видео, файлы)
     function handleFileSelected(event) {
         const file = event.target.files[0];
         if (!file) return;
@@ -360,11 +378,7 @@
             if (file.type.startsWith('image/')) type = 'image';
             else if (file.type.startsWith('video/')) type = 'video';
 
-            attachedMedia = {
-                type: type,
-                url: e.target.result,
-                name: file.name
-            };
+            attachedMedia = { type: type, url: e.target.result, name: file.name };
             const hint = document.getElementById('filePreviewHint');
             hint.textContent = `Прикреплен файл: ${file.name}`;
             hint.style.display = 'block';
@@ -406,16 +420,16 @@
                 statusEl.style.color = '#ff9800';
                 regFields.classList.remove('hidden');
                 logFields.classList.add('hidden');
-                checkPasswordsMatch(); // Проверяем пароли для разблокировки кнопки
+                checkPasswordsMatch();
             }
         }, 300);
     }
 
-    // Проверка совпадения паролей в реальном времени с галочками
     function checkPasswordsMatch() {
         if (isUserExists) return;
         const p1 = document.getElementById('pass1Input').value;
         const p2 = document.getElementById('pass2Input').value;
+        const email = document.getElementById('emailInput').value.trim();
         const statusEl = document.getElementById('passStatus');
         const authBtn = document.getElementById('authBtn');
 
@@ -425,12 +439,12 @@
             return;
         }
 
-        if (p1 === p2 && p1.length >= 3) {
+        if (p1 === p2 && p1.length >= 3 && email.includes('@')) {
             statusEl.textContent = '✔ Пароли совпадают верно';
             statusEl.style.color = '#66fcf1';
             authBtn.disabled = false;
         } else {
-            statusEl.textContent = '✖ Пароли не совпадают или слишком короткие';
+            statusEl.textContent = '✖ Проверьте почту и совпадение паролей';
             statusEl.style.color = '#ff007f';
             authBtn.disabled = true;
         }
@@ -461,10 +475,11 @@
             }
         } else {
             const name = document.getElementById('nameInput').value.trim();
+            const email = document.getElementById('emailInput').value.trim();
             const pass1 = document.getElementById('pass1Input').value;
             const pass2 = document.getElementById('pass2Input').value;
 
-            if (!name || pass1 !== pass2) {
+            if (!name || !email || pass1 !== pass2) {
                 alert('Проверьте правильность заполнения полей!');
                 authBtn.disabled = false;
                 return;
@@ -473,7 +488,7 @@
             const res = await fetch('/api/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login, name, password: pass1, avatar: selectedAvatarUrl })
+                body: JSON.stringify({ login, name, password: pass1, email, avatar: selectedAvatarUrl })
             });
             const data = await res.json();
             if (data.success) {
@@ -489,6 +504,57 @@
         }
     }
 
+    function showForgotModal() {
+        document.getElementById('authModal').classList.add('hidden');
+        document.getElementById('forgotModal').classList.remove('hidden');
+    }
+
+    function hideForgotModal() {
+        document.getElementById('forgotModal').classList.add('hidden');
+        document.getElementById('authModal').classList.remove('hidden');
+    }
+
+    async function requestResetCode() {
+        const email = document.getElementById('forgotEmailInput').value.trim();
+        if (!email) return alert('Введите email!');
+
+        const res = await fetch('/api/forgot-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+        });
+        const data = await res.json();
+        if (data.success) {
+            document.getElementById('forgotHint').style.display = 'block';
+            document.getElementById('forgotHint').textContent = `[Тестовый режим] Код восстановления: ${data.debugCode}`;
+            document.getElementById('resetCodeBlock').classList.remove('hidden');
+            document.getElementById('sendCodeBtn').classList.add('hidden');
+        } else {
+            alert(data.error || 'Ошибка');
+        }
+    }
+
+    async function confirmResetPassword() {
+        const email = document.getElementById('forgotEmailInput').value.trim();
+        const code = document.getElementById('resetCodeInput').value.trim();
+        const newPassword = document.getElementById('newPassInput').value;
+
+        if (!code || !newPassword) return alert('Заполните все поля!');
+
+        const res = await fetch('/api/reset-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, code, newPassword })
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert('Пароль успешно изменен! Теперь вы можете войти.');
+            hideForgotModal();
+        } else {
+            alert(data.error || 'Неверный код');
+        }
+    }
+
     function initApp() {
         const userData = dbData.users[currentUserLogin];
         document.getElementById('currentUserName').textContent = userData.name;
@@ -501,13 +567,13 @@
         startHeartbeat();
     }
 
-    // Управление окном профиля
     function toggleProfileModal() {
         const modal = document.getElementById('profileModal');
         modal.classList.toggle('hidden');
         if (!modal.classList.contains('hidden')) {
             const userData = dbData.users[currentUserLogin];
             document.getElementById('editNameInput').value = userData.name;
+            document.getElementById('editEmailInput').value = userData.email || '';
             document.getElementById('editAvatarPreview').src = userData.avatar;
         }
     }
@@ -526,13 +592,14 @@
 
     async function saveProfile() {
         const newName = document.getElementById('editNameInput').value.trim();
+        const newEmail = document.getElementById('editEmailInput').value.trim();
         const userData = dbData.users[currentUserLogin];
         const avatarToSave = newAvatarEditUrl || userData.avatar;
 
         const res = await fetch('/api/update-profile', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ login: currentUserLogin, name: newName, avatar: avatarToSave })
+            body: JSON.stringify({ login: currentUserLogin, name: newName, email: newEmail, avatar: avatarToSave })
         });
         const data = await res.json();
         if (data.success) {
@@ -836,7 +903,6 @@
         if (e.key === 'Enter') sendMessage();
     }
 
-    // WebRTC звонки
     async function createPeerConnection(toLogin) {
         peerConnection = new RTCPeerConnection(rtcConfig);
         remoteStream = new MediaStream();
@@ -856,15 +922,17 @@
     async function startCall(isScreenShare) {
         if (!currentPartner || currentPartner === currentUserLogin || isGroupChat) return alert('Выберите собеседника');
         document.getElementById('callModal').classList.remove('hidden');
-        document.getElementById('callStatusText').textContent = isScreenShare ? 'Запуск демонстрации...' : 'Вызов...';
+        document.getElementById('callStatusText').textContent = 'Разрешите доступ к микрофону...';
 
         try {
             if (isScreenShare) {
                 localStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
             } else {
+                // Прямой запрос доступа к микрофону и камере от браузера
                 localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
             }
             document.getElementById('localVideo').srcObject = localStream;
+            document.getElementById('callStatusText').textContent = 'Вызов...';
 
             await createPeerConnection(currentPartner);
             const offer = await peerConnection.createOffer();
@@ -872,18 +940,19 @@
 
             socket.emit('call-user', { to: currentPartner, offer, from: currentUserLogin, callType: isScreenShare });
         } catch (e) {
-            alert('Ошибка доступа к камере/экрану');
+            alert('Не удалось получить доступ к микрофону/камере. Проверьте разрешения браузера.');
             closeCall();
         }
     }
 
     async function acceptCall(offer, isScreenShare) {
         document.getElementById('callModal').classList.remove('hidden');
-        document.getElementById('callStatusText').textContent = 'Подключение...';
+        document.getElementById('callStatusText').textContent = 'Разрешите доступ к микрофону...';
 
         try {
             localStream = await navigator.mediaDevices.getUserMedia({ video: !isScreenShare, audio: true });
             document.getElementById('localVideo').srcObject = localStream;
+            document.getElementById('callStatusText').textContent = 'Подключение...';
 
             await createPeerConnection(currentPartner);
             await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
@@ -893,6 +962,7 @@
             socket.emit('call-accepted', { to: currentPartner, answer });
             document.getElementById('callStatusText').textContent = 'Соединение установлено';
         } catch (e) {
+            alert('Не удалось получить доступ к микрофону/камере.');
             closeCall();
         }
     }
