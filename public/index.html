@@ -68,7 +68,6 @@
         .send-panel { display: flex; gap: 10px; }
         .send-panel input { flex-grow: 1; }
 
-        /* Оформление карточек мемов с картинками */
         .meme-card { background: #0b0c10; border: 1px solid #45a29e; padding: 12px; border-radius: 8px; margin-bottom: 12px; text-align: center; }
         .meme-card img { max-width: 100%; max-height: 300px; border-radius: 6px; margin-top: 8px; border: 1px solid #45a29e; }
         .meme-card p { color: #66fcf1; font-size: 14px; margin: 0 0 6px 0; font-weight: bold; }
@@ -145,7 +144,6 @@
                 </div>
             </div>
 
-            <!-- Блок отображения мемов в картинках -->
             <div id="newsContainer" class="hidden" style="overflow-y: auto; height: 100%; padding-right: 5px;">
                 <div id="newsList">Загрузка свежих мемов...</div>
             </div>
@@ -160,11 +158,30 @@
     let currentTab = 'messages';
     let dbData = {};
     let memeList = [];
+    let lastMsgCount = 0;
 
     let peerConnection;
     let localStream;
     let remoteStream;
     const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+    // Функция звука уведомления (мягкий позывной)
+    function playNotificationSound() {
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // Нота D5
+            osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15); // Нота A5
+            gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.3);
+        } catch (e) {}
+    }
 
     window.onload = async () => {
         await loadData();
@@ -220,9 +237,24 @@
 
     async function loadData() {
         const res = await fetch('/api/data');
-        dbData = await res.json();
+        const newData = await res.json();
+        
+        // Проверяем появление новых входящих сообщений для звука
+        if (currentPartner && currentUserLogin) {
+            const oldLen = dbData.messagesStore?.[currentUserLogin]?.[currentPartner]?.length || 0;
+            const newLen = newData.messagesStore?.[currentUserLogin]?.[currentPartner]?.length || 0;
+            if (newLen > oldLen) {
+                const latestMsg = newData.messagesStore[currentUserLogin][currentPartner][newLen - 1];
+                if (latestMsg && latestMsg.sender !== currentUserLogin) {
+                    playNotificationSound();
+                }
+            }
+        }
+
+        dbData = newData;
         if (currentUserLogin && dbData.users?.[currentUserLogin]) {
             updateTabContent();
+            if (currentPartner) renderMessages();
         }
     }
 
@@ -342,19 +374,23 @@
         if (!dbData.users) return;
 
         if (currentTab === 'messages') {
+            // Избранное всегда закреплено сверху
             const favDiv = document.createElement('div');
             favDiv.className = `item-card favorite-item ${currentPartner === currentUserLogin ? 'active' : ''}`;
             favDiv.innerHTML = `<span>⭐ Избранное</span> <span class="status-dot status-online"></span>`;
             favDiv.onclick = () => selectPartner(currentUserLogin);
             listDiv.appendChild(favDiv);
 
-            Object.values(dbData.users).forEach(u => {
-                if (u.login === currentUserLogin) return;
-                const online = isOnline(u.login);
+            // Показываем в сообщениях ТОЛЬКО пользователей из списка друзей
+            const friendLogins = dbData.friends?.[currentUserLogin] || [];
+            friendLogins.forEach(l => {
+                const u = dbData.users[l];
+                if (!u) return;
+                const online = isOnline(l);
                 const div = document.createElement('div');
-                div.className = `item-card ${currentPartner === u.login ? 'active' : ''}`;
+                div.className = `item-card ${currentPartner === l ? 'active' : ''}`;
                 div.innerHTML = `<span>${u.name} <small style="color:#66fcf1">@${u.login}</small></span> <span class="status-dot ${online ? 'status-online' : 'status-offline'}"></span>`;
-                div.onclick = () => selectPartner(u.login);
+                div.onclick = () => selectPartner(l);
                 listDiv.appendChild(div);
             });
         } else if (currentTab === 'friends') {
@@ -377,7 +413,7 @@
     }
 
     async function addFriend() {
-        const targetLogin = document.getElementById('friendLoginInput').value.trim();
+        let targetLogin = document.getElementById('friendLoginInput').value.trim();
         if (!targetLogin) return alert('Введите логин друга!');
 
         const res = await fetch('/api/add-friend', {
@@ -424,7 +460,9 @@
 
         chatHistory.forEach(m => {
             const div = document.createElement('div');
-            div.className = `msg ${m.sender === currentUserLogin && currentPartner !== currentUserLogin ? 'me' : 'other'}`;
+            const isMe = (m.sender === currentUserLogin);
+            div.className = `msg ${isMe && currentPartner !== currentUserLogin ? 'me' : 'other'}`;
+            // Выводим имя отправителя вместо логина
             const senderName = dbData.users[m.sender]?.name || m.sender;
             div.innerHTML = `<b>${senderName}:</b> ${m.text} <br><small style="font-size:10px; color:#888;">${m.time}</small>`;
             messagesBox.appendChild(div);
