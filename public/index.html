@@ -49,8 +49,6 @@
         .btn-neon-decline:hover { box-shadow: 0 0 10px #ff007f; }
 
         .call-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 3000; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-        .call-videos { display: flex; gap: 20px; margin-bottom: 20px; max-width: 90%; max-height: 70vh; }
-        video { width: 450px; height: 320px; background: #000; border: 2px solid #66fcf1; border-radius: 8px; object-fit: cover; }
         
         input, button, select { 
             padding: 12px; font-size: 15px; border: 1px solid #45a29e; border-radius: 6px; outline: none; background: #0b0c10; color: #fff;
@@ -64,8 +62,10 @@
 
         .app-content { display: flex; gap: 15px; height: 100%; width: 100%; overflow: hidden; }
         .main-nav { width: 220px; border-right: 1px solid #45a29e; display: flex; flex-direction: column; gap: 6px; padding-right: 10px; }
-        .nav-btn { background: #0b0c10; border: 1px solid #45a29e; color: #c5c6c7; padding: 12px; text-align: left; border-radius: 6px; cursor: pointer; font-size: 12px; text-transform: uppercase; }
+        .nav-btn { background: #0b0c10; border: 1px solid #45a29e; color: #c5c6c7; padding: 12px; text-align: left; border-radius: 6px; cursor: pointer; font-size: 12px; text-transform: uppercase; position: relative; }
         .nav-btn:hover, .nav-btn.active { border-color: #66fcf1; color: #66fcf1; background: rgba(102, 252, 241, 0.05); }
+
+        .badge { position: absolute; top: 8px; right: 8px; background: #ff007f; color: #fff; font-size: 10px; padding: 2px 6px; border-radius: 10px; font-weight: bold; box-shadow: 0 0 6px #ff007f; }
 
         .tab-pane { width: 280px; border-right: 1px solid #45a29e; padding-right: 10px; display: flex; flex-direction: column; }
         .pane-list { overflow-y: auto; flex-grow: 1; margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
@@ -126,23 +126,11 @@
         </div>
     </div>
 
-    <!-- НЕОНОВОЕ УВЕДОМЛЕНИЕ О ЗАЯВКЕ В ДРУЗЬЯ -->
-    <div id="friendReqModal" class="neon-alert-overlay hidden">
-        <div class="neon-alert-box">
-            <h3>Заявка в друзья</h3>
-            <p id="friendReqText">Пользователь хочет добавить вас в друзья</p>
-            <div class="neon-alert-btns">
-                <button class="btn-neon-accept" onclick="respondFriendReq(true)">Принять</button>
-                <button class="btn-neon-decline" onclick="respondFriendReq(false)">Отклонить</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- НЕОНОВОЕ УВЕДОМЛЕНИЕ О ЗВОНКЕ -->
+    <!-- НЕОНОВОЕ УВЕДОМЛЕНИЕ О ВХОДЯЩЕМ ЗВОНКЕ -->
     <div id="customCallNotification" class="neon-alert-overlay hidden">
         <div class="neon-alert-box">
-            <h3>Входящий звонок</h3>
-            <p id="callNotifText">Входящий вызов от пользователя</p>
+            <h3>Входящий аудиозвонок</h3>
+            <p id="callNotifText">Входящий голосовой вызов</p>
             <div class="neon-alert-btns">
                 <button class="btn-neon-accept" onclick="acceptIncomingCall()">Принять</button>
                 <button class="btn-neon-decline" onclick="declineIncomingCall()">Отклонить</button>
@@ -273,20 +261,15 @@
         </div>
     </div>
 
-    <!-- ОКНО ЗВОНКА -->
+    <!-- ОКНО АУДИОЗВОНКА (БЕЗ ВИДЕО) -->
     <div id="callModal" class="call-modal hidden">
-        <h3 id="callStatusText" style="color: #66fcf1; margin-bottom: 20px;">Подключение...</h3>
-        <div class="call-videos">
-            <div>
-                <p style="font-size:12px; text-align:center; color:#aaa;">Вы</p>
-                <video id="localVideo" autoplay muted playsinline></video>
-            </div>
-            <div>
-                <p style="font-size:12px; text-align:center; color:#aaa;">Собеседник</p>
-                <video id="remoteVideo" autoplay playsinline></video>
-            </div>
+        <div style="background: #1f2833; border: 2px solid #66fcf1; box-shadow: 0 0 30px rgba(102, 252, 241, 0.5); padding: 40px; border-radius: 50%; width: 180px; height: 180px; display: flex; justify-content: center; align-items: center; margin-bottom: 25px; animation: pulseGlow 1.5s infinite alternate;">
+            <span style="font-size: 50px;">🎙️</span>
         </div>
-        <button onclick="endCall()" style="background: #ff007f; color: #fff; border-color: #ff007f;">Завершить звонок</button>
+        <h3 id="callStatusText" style="color: #66fcf1; margin-bottom: 25px; text-transform: uppercase; letter-spacing: 1px;">Идет аудиовызов...</h3>
+        <!-- Скрытые аудиоэлементы для WebRTC стрима -->
+        <audio id="remoteAudio" autoplay></audio>
+        <button onclick="endCall()" style="background: #ff007f; color: #fff; border-color: #ff007f; padding: 12px 25px; border-radius: 8px;">Завершить звонок</button>
     </div>
 
     <!-- ИНТЕРФЕЙС ПРИЛОЖЕНИЯ -->
@@ -294,9 +277,8 @@
         <div class="main-nav">
             <h4 style="font-size:12px; margin-bottom:5px;">МЕНЮ</h4>
             <button class="nav-btn active" onclick="switchTab('messages')">💬 Сообщения</button>
-            <button class="nav-btn" onclick="switchTab('friends')">👥 Друзья</button>
+            <button class="nav-btn" onclick="switchTab('friends')">👥 Друзья <span id="friendNavBadge" class="badge hidden">0</span></button>
             <button class="nav-btn" onclick="switchTab('groups')">🏠 Сообщества</button>
-            <button class="nav-btn" onclick="switchTab('feed')">📰 Лента</button>
             <button class="nav-btn" onclick="switchTab('news')">🖼 Мемы</button>
             
             <div style="margin-top:auto; font-size: 11px; color: #45a29e; word-break: break-all; display:flex; align-items:center; gap:8px; cursor:pointer;" onclick="toggleProfileModal()" title="Нажмите для открытия профиля">
@@ -316,12 +298,19 @@
 
         <div class="tab-pane" id="leftPane">
             <h4 id="paneTitle">Сообщения</h4>
+            
+            <!-- Вкладка друзей: переключатель Список друзей / Заявки -->
+            <div id="friendsSubTabs" class="hidden" style="display: flex; gap: 5px; margin-bottom: 10px;">
+                <button class="auth-tab-btn active" id="subFriendsBtn" onclick="switchFriendsSubTab('list')" style="font-size: 11px; padding: 6px;">Мои друзья</button>
+                <button class="auth-tab-btn" id="subRequestsBtn" onclick="switchFriendsSubTab('requests')" style="font-size: 11px; padding: 6px; position:relative;">Заявки <span id="requestsTabBadge" class="badge hidden" style="top:2px; right:2px;">0</span></button>
+            </div>
+
             <div id="addFriendBox" class="hidden" style="margin-bottom: 10px; display: flex; flex-direction: column; gap: 6px;">
                 <input type="text" id="friendLoginInput" placeholder="Логин друга..." style="font-size:13px; padding:8px;">
                 <button onclick="addFriend()" style="font-size:12px; padding:8px;">+ Добавить друга</button>
             </div>
             
-            <!-- Блок управления и поиска сообществ -->
+            <!-- Поиск и создание групп -->
             <div id="addGroupBox" class="hidden" style="margin-bottom: 10px; display: flex; flex-direction: column; gap: 6px;">
                 <input type="text" id="groupSearchInput" placeholder="Поиск сообщества по названию..." oninput="updateTabContent()" style="font-size:13px; padding:8px;">
                 <input type="text" id="groupNameInput" placeholder="Название новой группы..." style="font-size:13px; padding:8px;">
@@ -337,8 +326,7 @@
                 <div style="display: flex; gap: 8px; align-items: center;">
                     <button id="groupSettingsBtn" class="hidden" onclick="openGroupSettingsModal()" style="padding: 6px 12px; font-size: 11px; background: #66fcf1; color: #0b0c10;">⚙ Настройки сообщества</button>
                     <div id="callButtons" class="call-buttons hidden">
-                        <button onclick="startCall(false)">📞 Звонок</button>
-                        <button onclick="startCall(true)">🖥 Демо</button>
+                        <button onclick="startCall()">🎙️ Аудиозвонок</button>
                     </div>
                 </div>
             </div>
@@ -355,9 +343,15 @@
                 <div id="filePreviewHint" style="font-size: 11px; color: #66fcf1; display:none; padding: 2px 0;"></div>
             </div>
 
-            <!-- Лента новостей и мемы -->
+            <!-- Мемы -->
             <div id="newsContainer" class="hidden" style="overflow-y: auto; height: 100%; padding-right: 5px;">
                 <div id="newsList">Загрузка...</div>
+            </div>
+
+            <!-- Общая лента новостей -->
+            <div id="feedContainer" class="hidden" style="overflow-y: auto; height: 100%; padding-right: 5px;">
+                <h4 style="margin: 0 0 10px 0; color:#66fcf1;">📰 Общая лента записей сообществ</h4>
+                <div id="feedList">Загрузка ленты...</div>
             </div>
         </div>
     </div>
@@ -368,6 +362,7 @@
     let currentUserLogin = localStorage.getItem('v_odno_eblo_login') || '';
     let currentPartner = '';
     let currentTab = 'messages';
+    let friendsSubTab = 'list'; // 'list' или 'requests'
     let dbData = {};
     let memeList = [];
     let selectedAvatarUrl = 'https://api.iconify.design/lucide:cat.svg?color=%2366fcf1';
@@ -379,7 +374,7 @@
     let localStream;
     let remoteStream;
     let incomingCallData = null;
-    let currentRequester = '';
+    let callRingerInterval = null;
     let editingContactLogin = '';
     const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
@@ -402,21 +397,42 @@
         }
     }
 
-    function playNotificationSound() {
+    function playPhoneRinger() {
         try {
             const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.type = 'sine';
-            osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15);
-            gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.start();
-            osc.stop(audioCtx.currentTime + 0.3);
+            const now = audioCtx.currentTime;
+            [0, 0.2].forEach(delay => {
+                const osc1 = audioCtx.createOscillator();
+                const osc2 = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc1.type = 'sine';
+                osc1.frequency.setValueAtTime(425, now + delay);
+                osc2.type = 'sine';
+                osc2.frequency.setValueAtTime(450, now + delay);
+                gain.gain.setValueAtTime(0.12, now + delay);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.15);
+                osc1.connect(gain);
+                osc2.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc1.start(now + delay);
+                osc2.start(now + delay);
+                osc1.stop(now + delay + 0.15);
+                osc2.stop(now + delay + 0.15);
+            });
         } catch (e) {}
+    }
+
+    function startPhoneRingingLoop() {
+        stopPhoneRingingLoop();
+        playPhoneRinger();
+        callRingerInterval = setInterval(playPhoneRinger, 2000);
+    }
+
+    function stopPhoneRingingLoop() {
+        if (callRingerInterval) {
+            clearInterval(callRingerInterval);
+            callRingerInterval = null;
+        }
     }
 
     window.onload = async () => {
@@ -435,27 +451,27 @@
         if (currentUserLogin) socket.emit('register', currentUserLogin);
     });
 
-    socket.on('incoming-call', async ({ from, offer, callType }) => {
-        incomingCallData = { from, offer, callType };
+    socket.on('incoming-call', async ({ from, offer }) => {
+        incomingCallData = { from, offer };
         const callerName = (dbData.users && dbData.users[from]) ? dbData.users[from].name : from;
-        const callTypeName = callType ? 'Демонстрация экрана' : 'Голосовой звонок';
-        
-        document.getElementById('callNotifText').textContent = `Входящий (${callTypeName}) от ${callerName}`;
+        document.getElementById('callNotifText').textContent = `Входящий аудиовызов от ${callerName}`;
         document.getElementById('customCallNotification').classList.remove('hidden');
-        playNotificationSound();
+        startPhoneRingingLoop();
     });
 
     async function acceptIncomingCall() {
+        stopPhoneRingingLoop();
         document.getElementById('customCallNotification').classList.add('hidden');
         if (!incomingCallData) return;
-        const { from, offer, callType } = incomingCallData;
+        const { from, offer } = incomingCallData;
         currentPartner = from;
         selectPartner(from, false);
-        await acceptCall(offer, callType);
+        await acceptCall(offer);
         incomingCallData = null;
     }
 
     function declineIncomingCall() {
+        stopPhoneRingingLoop();
         document.getElementById('customCallNotification').classList.add('hidden');
         if (incomingCallData) {
             socket.emit('hang-up', { to: incomingCallData.from });
@@ -465,7 +481,7 @@
 
     socket.on('call-answered', async ({ answer }) => {
         await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-        document.getElementById('callStatusText').textContent = 'Соединение установлено';
+        document.getElementById('callStatusText').textContent = 'Аудиосоединение установлено';
     });
 
     socket.on('ice-candidate', async ({ candidate }) => {
@@ -491,20 +507,10 @@
     async function loadData() {
         const res = await fetch('/api/data');
         const newData = await res.json();
-        
-        if (currentUserLogin && newData.friendRequests && newData.friendRequests[currentUserLogin]) {
-            const reqs = newData.friendRequests[currentUserLogin];
-            if (reqs.length > 0 && (!dbData.friendRequests || !dbData.friendRequests[currentUserLogin] || reqs.length > dbData.friendRequests[currentUserLogin].length)) {
-                currentRequester = reqs[reqs.length - 1];
-                const reqName = (newData.users && newData.users[currentRequester]) ? newData.users[currentRequester].name : currentRequester;
-                document.getElementById('friendReqText').textContent = `Пользователь ${reqName} (@${currentRequester}) хочет добавить вас в друзья!`;
-                document.getElementById('friendReqModal').classList.remove('hidden');
-                playNotificationSound();
-            }
-        }
-
         dbData = newData;
+
         if (currentUserLogin && dbData.users && dbData.users[currentUserLogin]) {
+            updateFriendBadges();
             updateTabContent();
             if (currentPartner) {
                 if (isGroupChat) {
@@ -513,7 +519,25 @@
                 }
                 renderMessages();
             }
-            if (currentTab === 'news' || currentTab === 'feed') renderContentList();
+            if (currentTab === 'news') renderContentList();
+            if (currentTab === 'groups') renderFeedList();
+        }
+    }
+
+    function updateFriendBadges() {
+        if (!dbData.friendRequests || !dbData.friendRequests[currentUserLogin]) return;
+        const count = dbData.friendRequests[currentUserLogin].length;
+        const navBadge = document.getElementById('friendNavBadge');
+        const reqBadge = document.getElementById('requestsTabBadge');
+
+        if (count > 0) {
+            navBadge.textContent = count;
+            navBadge.classList.remove('hidden');
+            reqBadge.textContent = count;
+            reqBadge.classList.remove('hidden');
+        } else {
+            navBadge.classList.add('hidden');
+            reqBadge.classList.add('hidden');
         }
     }
 
@@ -669,6 +693,7 @@
 
     function hideForgotModal() {
         document.getElementById('forgotModal').classList.add('hidden');
+        document.getElementById('authModal').classList.add('hidden');
         document.getElementById('authModal').classList.remove('hidden');
     }
 
@@ -927,15 +952,17 @@
 
         document.getElementById('chatContainer').classList.add('hidden');
         document.getElementById('newsContainer').classList.add('hidden');
+        document.getElementById('feedContainer').classList.add('hidden');
         document.getElementById('addFriendBox').classList.add('hidden');
         document.getElementById('addGroupBox').classList.add('hidden');
         document.getElementById('callButtons').classList.add('hidden');
         document.getElementById('groupSettingsBtn').classList.add('hidden');
+        document.getElementById('friendsSubTabs').classList.add('hidden');
 
-        if (tab === 'news' || tab === 'feed') {
-            document.getElementById('paneTitle').textContent = tab === 'news' ? 'Мемы' : 'Лента';
+        if (tab === 'news') {
+            document.getElementById('paneTitle').textContent = 'Мемы';
             document.getElementById('leftPane').classList.add('hidden');
-            document.getElementById('contentTitle').textContent = tab === 'news' ? 'Свежие мемы и видео-приколы' : 'Лента новостей из сообществ';
+            document.getElementById('contentTitle').textContent = 'Свежие мемы и видео-приколы';
             document.getElementById('newsContainer').classList.remove('hidden');
             renderContentList();
         } else {
@@ -945,12 +972,30 @@
             } else if (tab === 'friends') {
                 document.getElementById('paneTitle').textContent = 'Друзья';
                 document.getElementById('addFriendBox').classList.remove('hidden');
+                document.getElementById('friendsSubTabs').classList.remove('hidden');
             } else if (tab === 'groups') {
                 document.getElementById('paneTitle').textContent = 'Сообщества';
                 document.getElementById('addGroupBox').classList.remove('hidden');
+                document.getElementById('contentTitle').textContent = 'Сообщества и общая лента';
+                document.getElementById('feedContainer').classList.remove('hidden');
+                renderFeedList();
             }
             updateTabContent();
         }
+    }
+
+    function switchFriendsSubTab(subTab) {
+        friendsSubTab = subTab;
+        const btnList = document.getElementById('subFriendsBtn');
+        const btnReq = document.getElementById('subRequestsBtn');
+        if (subTab === 'list') {
+            btnList.classList.add('active');
+            btnReq.classList.remove('active');
+        } else {
+            btnReq.classList.add('active');
+            btnList.classList.remove('active');
+        }
+        updateTabContent();
     }
 
     function isOnline(login) {
@@ -987,31 +1032,58 @@
                 listDiv.appendChild(div);
             });
         } else if (currentTab === 'friends') {
-            const friendLogins = (dbData.friends && dbData.friends[currentUserLogin]) ? dbData.friends[currentUserLogin] : [];
-            if (friendLogins.length === 0) {
-                listDiv.innerHTML = '<i style="color:#45a29e; font-size:12px; padding:5px;">Список друзей пуст</i>';
-                return;
+            if (friendsSubTab === 'list') {
+                const friendLogins = (dbData.friends && dbData.friends[currentUserLogin]) ? dbData.friends[currentUserLogin] : [];
+                if (friendLogins.length === 0) {
+                    listDiv.innerHTML = '<i style="color:#45a29e; font-size:12px; padding:5px;">Список друзей пуст</i>';
+                    return;
+                }
+                friendLogins.forEach(l => {
+                    const u = dbData.users[l];
+                    if (!u) return;
+                    const online = isOnline(l);
+                    const displayName = getDisplayName(l);
+                    const div = document.createElement('div');
+                    div.className = `item-card ${currentPartner === l ? 'active' : ''}`;
+                    div.innerHTML = `
+                        <img class="avatar-sm" src="${u.avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1'}" onclick="openContactInfo('${l}', event)" title="Нажмите для просмотра/переименования">
+                        <span style="flex-grow:1;" onclick="selectPartner('${l}', false)">${displayName} <small style="color:#66fcf1">@${u.login}</small></span> 
+                        <span class="status-dot ${online ? 'status-online' : 'status-offline'}"></span>
+                    `;
+                    div.onclick = () => selectPartner(l, false);
+                    listDiv.appendChild(div);
+                });
+            } else {
+                // Вкладка «Заявки в друзья»
+                const reqs = (dbData.friendRequests && dbData.friendRequests[currentUserLogin]) ? dbData.friendRequests[currentUserLogin] : [];
+                if (reqs.length === 0) {
+                    listDiv.innerHTML = '<i style="color:#45a29e; font-size:12px; padding:5px;">Нет входящих заявок</i>';
+                    return;
+                }
+                reqs.forEach(reqLogin => {
+                    const u = dbData.users[reqLogin];
+                    if (!u) return;
+                    const div = document.createElement('div');
+                    div.className = 'item-card';
+                    div.style.flexDirection = 'column';
+                    div.style.alignItems = 'stretch';
+                    div.innerHTML = `
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <img class="avatar-sm" src="${u.avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1'}">
+                            <span style="flex-grow:1; font-size:12px;"><b>${u.name}</b><br><small style="color:#66fcf1">@${u.login}</small></span>
+                        </div>
+                        <div style="display:flex; gap:6px; margin-top:8px;">
+                            <button onclick="respondFriendRequestFromTab('${reqLogin}', true)" style="flex:1; font-size:10px; padding:6px; background:#45a29e; color:#0b0c10;">Принять</button>
+                            <button onclick="respondFriendRequestFromTab('${reqLogin}', false)" style="flex:1; font-size:10px; padding:6px; background:#ff007f; color:#fff;">Отклонить</button>
+                        </div>
+                    `;
+                    listDiv.appendChild(div);
+                });
             }
-            friendLogins.forEach(l => {
-                const u = dbData.users[l];
-                if (!u) return;
-                const online = isOnline(l);
-                const displayName = getDisplayName(l);
-                const div = document.createElement('div');
-                div.className = `item-card ${currentPartner === l ? 'active' : ''}`;
-                div.innerHTML = `
-                    <img class="avatar-sm" src="${u.avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1'}" onclick="openContactInfo('${l}', event)" title="Нажмите для просмотра/переименования">
-                    <span style="flex-grow:1;" onclick="selectPartner('${l}', false)">${displayName} <small style="color:#66fcf1">@${u.login}</small></span> 
-                    <span class="status-dot ${online ? 'status-online' : 'status-offline'}"></span>
-                `;
-                div.onclick = () => selectPartner(l, false);
-                listDiv.appendChild(div);
-            });
         } else if (currentTab === 'groups') {
             const groups = dbData.groups || {};
             const searchQuery = (document.getElementById('groupSearchInput')?.value || '').trim().toLowerCase();
             
-            // Превращаем в массив и сортируем: сначала те, где пользователь участник, а также сортировка по количеству участников (от большего к меньшему)
             let groupEntries = Object.entries(groups).filter(([gId, g]) => {
                 if (!g || !g.name) return false;
                 if (searchQuery && !g.name.toLowerCase().includes(searchQuery)) return false;
@@ -1021,7 +1093,7 @@
             groupEntries.sort((a, b) => {
                 const countA = a[1].members ? a[1].members.length : 0;
                 const countB = b[1].members ? b[1].members.length : 0;
-                return countB - countA; // Сортировка по количеству участников от большего к меньшему
+                return countB - countA;
             });
 
             if (groupEntries.length === 0) {
@@ -1029,7 +1101,6 @@
                 return;
             }
 
-            // Заголовок рекомендуемых
             const recHeader = document.createElement('div');
             recHeader.style.cssText = 'font-size:11px; color:#66fcf1; text-transform:uppercase; margin:4px 0; font-weight:bold;';
             recHeader.textContent = searchQuery ? 'Результаты поиска:' : 'Популярные / Рекомендуемые:';
@@ -1078,22 +1149,19 @@
         }
     }
 
-    async function respondFriendReq(accept) {
-        document.getElementById('friendReqModal').classList.add('hidden');
-        if (!currentRequester) return;
-
+    async function respondFriendRequestFromTab(requesterLogin, accept) {
         const res = await fetch('/api/respond-friend-request', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ login: currentUserLogin, requesterLogin: currentRequester, accept })
+            body: JSON.stringify({ login: currentUserLogin, requesterLogin, accept })
         });
         const data = await res.json();
         if (data.success) {
             dbData = data.db;
+            updateFriendBadges();
             updateTabContent();
             showNeonAlert('Информация', accept ? 'Вы приняли заявку в друзья!' : 'Заявка отклонена.');
         }
-        currentRequester = '';
     }
 
     async function createGroup() {
@@ -1110,6 +1178,7 @@
             dbData = data.db;
             document.getElementById('groupNameInput').value = '';
             updateTabContent();
+            renderFeedList();
         }
     }
 
@@ -1124,6 +1193,7 @@
             dbData = data.db;
             selectPartner(groupId, true);
             updateTabContent();
+            renderFeedList();
         }
     }
 
@@ -1137,11 +1207,15 @@
             document.getElementById('contentTitle').textContent = `🏠 Сообщество: ${groupObj?.name}`;
             document.getElementById('callButtons').classList.add('hidden');
             document.getElementById('groupSettingsBtn').classList.remove('hidden');
+            document.getElementById('feedContainer').classList.add('hidden');
+            document.getElementById('chatContainer').classList.remove('hidden');
         } else {
             const displayName = getDisplayName(targetId);
             const titleText = targetId === currentUserLogin ? '⭐ Избранное (Заметки)' : `Чат с: ${displayName} (@${targetId})`;
             document.getElementById('contentTitle').textContent = titleText;
             document.getElementById('groupSettingsBtn').classList.add('hidden');
+            document.getElementById('feedContainer').classList.add('hidden');
+            document.getElementById('chatContainer').classList.remove('hidden');
             
             if (targetId !== currentUserLogin) {
                 document.getElementById('callButtons').classList.remove('hidden');
@@ -1149,8 +1223,6 @@
                 document.getElementById('callButtons').classList.add('hidden');
             }
         }
-
-        document.getElementById('chatContainer').classList.remove('hidden');
         renderMessages();
     }
 
@@ -1203,71 +1275,74 @@
     function renderContentList() {
         const newsList = document.getElementById('newsList');
         newsList.innerHTML = '';
-
-        if (currentTab === 'news') {
-            if (memeList.length === 0) {
-                newsList.innerHTML = 'Загрузка мемов...';
-                return;
+        if (memeList.length === 0) {
+            newsList.innerHTML = 'Загрузка мемов...';
+            return;
+        }
+        memeList.forEach(m => {
+            const div = document.createElement('div');
+            div.className = 'meme-card';
+            let mediaContent = '';
+            if (m.isVideos) {
+                mediaContent = `<video src="${m.url}" controls controlsList="nodownload" style="width:100%; max-height:350px; border-radius:6px;"></video>`;
+            } else {
+                mediaContent = `<img src="${m.url}" alt="мем" loading="lazy">`;
             }
-            memeList.forEach(m => {
-                const div = document.createElement('div');
-                div.className = 'meme-card';
-                let mediaContent = '';
-                if (m.isVideos) {
-                    mediaContent = `<video src="${m.url}" controls controlsList="nodownload" style="width:100%; max-height:350px; border-radius:6px;"></video>`;
-                } else {
-                    mediaContent = `<img src="${m.url}" alt="мем" loading="lazy">`;
-                }
-                div.innerHTML = `
-                    <p>${m.title}</p>
-                    ${mediaContent}
-                    <br><small style="color:#888; font-size:11px;">Автор: ${m.author}</small>
-                `;
-                newsList.appendChild(div);
-            });
-        } else if (currentTab === 'feed') {
-            let feedItems = [];
-            if (dbData.groups) {
-                Object.values(dbData.groups).forEach(group => {
-                    if (group.messages) {
-                        group.messages.forEach(msg => {
-                            feedItems.unshift({
-                                title: `Сообщество: ${group.name}`,
-                                text: msg.text,
-                                url: msg.media ? msg.media.url : null,
-                                mediaType: msg.media ? msg.media.type : null,
-                                author: getDisplayName(msg.sender),
-                                time: msg.time
-                            });
+            div.innerHTML = `
+                <p>${m.title}</p>
+                ${mediaContent}
+                <br><small style="color:#888; font-size:11px;">Автор: ${m.author}</small>
+            `;
+            newsList.appendChild(div);
+        });
+    }
+
+    function renderFeedList() {
+        const feedList = document.getElementById('feedList');
+        if (!feedList) return;
+        feedList.innerHTML = '';
+
+        let feedItems = [];
+        if (dbData.groups) {
+            Object.values(dbData.groups).forEach(group => {
+                if (group.messages) {
+                    group.messages.forEach(msg => {
+                        feedItems.unshift({
+                            title: `Сообщество: ${group.name}`,
+                            text: msg.text,
+                            url: msg.media ? msg.media.url : null,
+                            mediaType: msg.media ? msg.media.type : null,
+                            author: getDisplayName(msg.sender),
+                            time: msg.time
                         });
-                    }
-                });
-            }
-
-            if (feedItems.length === 0) {
-                newsList.innerHTML = '<i style="color:#45a29e;">В ленте пока нет записей из сообществ.</i>';
-                return;
-            }
-
-            feedItems.forEach(item => {
-                const div = document.createElement('div');
-                div.className = 'meme-card';
-                let mediaContent = '';
-                if (item.mediaType === 'image') {
-                    mediaContent = `<img src="${item.url}" alt="фото" loading="lazy">`;
-                } else if (item.mediaType === 'video') {
-                    mediaContent = `<video src="${item.url}" controls controlsList="nodownload" style="width:100%; max-height:350px; border-radius:6px;"></video>`;
+                    });
                 }
-
-                div.innerHTML = `
-                    <p>${item.title}</p>
-                    ${item.text ? `<p style="font-weight:normal; color:#fff; font-size:13px; margin:5px 0;">${item.text}</p>` : ''}
-                    ${mediaContent}
-                    <br><small style="color:#888; font-size:11px;">Автор: ${item.author} ${item.time ? '• ' + item.time : ''}</small>
-                `;
-                newsList.appendChild(div);
             });
         }
+
+        if (feedItems.length === 0) {
+            feedList.innerHTML = '<i style="color:#45a29e;">В ленте пока нет записей из сообществ. Напишите что-нибудь в чат любого сообщества!</i>';
+            return;
+        }
+
+        feedItems.forEach(item => {
+            const div = document.createElement('div');
+            div.className = 'meme-card';
+            let mediaContent = '';
+            if (item.mediaType === 'image') {
+                mediaContent = `<img src="${item.url}" alt="фото" loading="lazy">`;
+            } else if (item.mediaType === 'video') {
+                mediaContent = `<video src="${item.url}" controls controlsList="nodownload" style="width:100%; max-height:350px; border-radius:6px;"></video>`;
+            }
+
+            div.innerHTML = `
+                <p>${item.title}</p>
+                ${item.text ? `<p style="font-weight:normal; color:#fff; font-size:13px; margin:5px 0;">${item.text}</p>` : ''}
+                ${mediaContent}
+                <br><small style="color:#888; font-size:11px;">Автор: ${item.author} ${item.time ? '• ' + item.time : ''}</small>
+            `;
+            feedList.appendChild(div);
+        });
     }
 
     async function sendMessage() {
@@ -1297,6 +1372,7 @@
         attachedMedia = null;
         document.getElementById('filePreviewHint').style.display = 'none';
         renderMessages();
+        renderFeedList();
     }
 
     function checkEnter(e) {
@@ -1323,7 +1399,7 @@
     async function createPeerConnection(toLogin) {
         peerConnection = new RTCPeerConnection(rtcConfig);
         remoteStream = new MediaStream();
-        document.getElementById('remoteVideo').srcObject = remoteStream;
+        document.getElementById('remoteAudio').srcObject = remoteStream;
 
         peerConnection.ontrack = (event) => {
             event.streams[0].getTracks().forEach(track => remoteStream.addTrack(track));
@@ -1336,39 +1412,33 @@
         }
     }
 
-    async function startCall(isScreenShare) {
+    async function startCall() {
         if (!currentPartner || currentPartner === currentUserLogin || isGroupChat) return showNeonAlert('Ошибка', 'Выберите собеседника');
         document.getElementById('callModal').classList.remove('hidden');
-        document.getElementById('callStatusText').textContent = 'Разрешите доступ к микрофону...';
+        document.getElementById('callStatusText').textContent = 'Доступ к микрофону...';
 
         try {
-            if (isScreenShare) {
-                localStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-            } else {
-                localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            }
-            document.getElementById('localVideo').srcObject = localStream;
-            document.getElementById('callStatusText').textContent = 'Вызов...';
+            // Запрашиваем ТОЛЬКО аудио (без видео)
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            document.getElementById('callStatusText').textContent = 'Вызов абонента...';
 
             await createPeerConnection(currentPartner);
             const offer = await peerConnection.createOffer();
             await peerConnection.setLocalDescription(offer);
 
-            socket.emit('call-user', { to: currentPartner, offer, from: currentUserLogin, callType: isScreenShare });
+            socket.emit('call-user', { to: currentPartner, offer, from: currentUserLogin });
         } catch (e) {
-            showNeonAlert('Ошибка', 'Не удалось получить доступ к микрофону/камере. Проверьте разрешения браузера.');
+            showNeonAlert('Ошибка', 'Не удалось получить доступ к микрофону. Проверьте разрешения браузера.');
             closeCall();
         }
     }
 
-    async function acceptCall(offer, isScreenShare) {
+    async function acceptCall(offer) {
         document.getElementById('callModal').classList.remove('hidden');
-        document.getElementById('callStatusText').textContent = 'Разрешите доступ к микрофону...';
+        document.getElementById('callStatusText').textContent = 'Подключение...';
 
         try {
-            localStream = await navigator.mediaDevices.getUserMedia({ video: !isScreenShare, audio: true });
-            document.getElementById('localVideo').srcObject = localStream;
-            document.getElementById('callStatusText').textContent = 'Подключение...';
+            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
 
             await createPeerConnection(currentPartner);
             await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
@@ -1376,9 +1446,9 @@
             await peerConnection.setLocalDescription(answer);
 
             socket.emit('call-accepted', { to: currentPartner, answer });
-            document.getElementById('callStatusText').textContent = 'Соединение установлено';
+            document.getElementById('callStatusText').textContent = 'Аудиосоединение установлено';
         } catch (e) {
-            showNeonAlert('Ошибка', 'Не удалось получить доступ к микрофону/камере.');
+            showNeonAlert('Ошибка', 'Не удалось получить доступ к микрофону.');
             closeCall();
         }
     }
@@ -1389,6 +1459,7 @@
     }
 
     function closeCall() {
+        stopPhoneRingingLoop();
         if (localStream) localStream.getTracks().forEach(t => t.stop());
         if (peerConnection) peerConnection.close();
         peerConnection = null;
