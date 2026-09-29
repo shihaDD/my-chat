@@ -23,7 +23,7 @@
         .sidebar { width: 350px; background: white; border-right: 1px solid #e1e2e5; display: flex; flex-direction: column; }
         .sidebar-header { padding: 15px; background: #f0f2f5; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e1e2e5; }
         .search-box { padding: 10px; background: #f6f6f6; }
-        .search-box input { width: 100%; padding: 8px 12px; border: none; border-radius: 20px; background: white; outline: none; }
+        .search-box input { width: 100%; padding: 8px 12px; border: none; border-radius: 20px; background: white; }
         
         .chat-list { flex: 1; overflow-y: auto; }
         .chat-item { display: flex; align-items: center; padding: 12px 15px; cursor: pointer; border-bottom: 1px solid #f0f2f5; position: relative; }
@@ -80,7 +80,7 @@
             <input type="text" id="search-input" placeholder="Поиск или новый чат...">
         </div>
         <div class="chat-list" id="chat-list">
-            <!-- Список чатов -->
+            <!-- Список чатов генерируется динамически -->
         </div>
     </div>
 
@@ -112,13 +112,13 @@
 
         let myPhone = localStorage.getItem('myPhone');
         let myName = localStorage.getItem('myName');
-        let activeChatId = null;
-        let activeChatType = null;
+        let activeChatId = null; // Может быть номером телефона, group_ID или community_ID
+        let activeChatType = null; // 'private', 'group', 'community', 'favorites'
         
         let allMessages = {};
         let groupsList = [];
         let communitiesList = [];
-        let mutedChats = [];
+        let mutedChats = []; // Список ID заглушенных чатов
 
         if (myPhone && myName) {
             document.getElementById('auth-screen').classList.add('hidden');
@@ -140,6 +140,7 @@
             }
         });
 
+        // Получение списков и истории
         socket.on('all_messages', (data) => {
             allMessages = data;
             renderChatList();
@@ -190,10 +191,12 @@
             }
         });
 
+        // Функция рендеринга списка чатов в сайдбаре
         function renderChatList() {
             const listEl = document.getElementById('chat-list');
             listEl.innerHTML = '';
 
+            // 1. Чат «Избранное»
             const favKey = `${myPhone}_${myPhone}`;
             const isFavMuted = mutedChats.includes(favKey);
             const favDiv = document.createElement('div');
@@ -208,6 +211,7 @@
             favDiv.onclick = () => selectChat(favKey, 'favorites', 'Избранное', '⭐');
             listEl.appendChild(favDiv);
 
+            // 2. Группы
             groupsList.forEach(group => {
                 if (group.members && group.members.includes(myPhone)) {
                     const chatKey = `group_${group.id}`;
@@ -226,6 +230,7 @@
                 }
             });
 
+            // 3. Сообщества
             communitiesList.forEach(com => {
                 if (com.subscribers && com.subscribers.includes(myPhone)) {
                     const chatKey = `community_${com.id}`;
