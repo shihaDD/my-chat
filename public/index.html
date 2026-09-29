@@ -307,7 +307,7 @@
             align-items: center;
         }
 
-        input, button {
+        input, button, select {
             outline: none;
             border: none;
             border-radius: 8px;
@@ -359,9 +359,11 @@
         .auth-card {
             background: #13131a;
             border: 1px solid var(--border-color);
-            padding: 30px;
+            padding: 25px 30px;
             border-radius: 12px;
-            width: 380px;
+            width: 400px;
+            max-height: 90vh;
+            overflow-y: auto;
             display: flex;
             flex-direction: column;
             gap: 15px;
@@ -391,15 +393,30 @@
             border-radius: 8px;
         }
 
-        .avatar-picker-section {
+        .settings-group {
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 6px;
         }
 
-        .avatar-picker-section label {
+        .settings-group label {
             font-size: 12px;
             color: var(--text-muted);
+        }
+
+        .settings-select {
+            width: 100%;
+            padding: 10px 12px;
+            background: #1a1a24;
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            border-radius: 8px;
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .settings-select:focus {
+            border-color: var(--accent-color);
         }
 
         .presets-grid {
@@ -481,7 +498,7 @@
             <input type="text" id="authName" placeholder="Ваше имя...">
             <input type="text" id="authPhone" placeholder="+7 (___) ___-__-__">
             
-            <div class="avatar-picker-section">
+            <div class="settings-group">
                 <label>Выберите аватарку:</label>
                 <div class="presets-grid" id="presetsGrid">
                     <div class="preset-av selected" style="background: linear-gradient(135deg, #ff2a5f, #7b2cbf);" data-bg="linear-gradient(135deg, #ff2a5f, #7b2cbf)">⚡</div>
@@ -513,7 +530,7 @@
             <h2>Редактировать профиль</h2>
             <input type="text" id="settingsName" placeholder="Ваше имя...">
             
-            <div class="avatar-picker-section">
+            <div class="settings-group">
                 <label>Сменить аватарку:</label>
                 <div class="presets-grid" id="settingsPresetsGrid">
                     <div class="preset-av" style="background: linear-gradient(135deg, #ff2a5f, #7b2cbf);" data-bg="linear-gradient(135deg, #ff2a5f, #7b2cbf)">⚡</div>
@@ -523,6 +540,17 @@
                 </div>
                 <label class="upload-file-label" for="settingsFileAvatarInput">📁 Загрузить свою картинку</label>
                 <input type="file" id="settingsFileAvatarInput" class="file-avatar-input" accept="image/*">
+            </div>
+
+            <div class="settings-group">
+                <label for="settingsSoundSelect">Звук уведомлений:</label>
+                <select id="settingsSoundSelect" class="settings-select">
+                    <option value="beep">Бип (стандартный)</option>
+                    <option value="bell">Колокольчик</option>
+                    <option value="digital">Цифровой</option>
+                    <option value="pop">Мягкий пинг</option>
+                    <option value="none">Без звука</option>
+                </select>
             </div>
 
             <div class="modal-buttons-row">
@@ -593,9 +621,60 @@
         let myPhone = localStorage.getItem('chat_phone') || '';
         let myName = localStorage.getItem('chat_name') || '';
         let myAvatarData = localStorage.getItem('chat_avatar') || 'linear-gradient(135deg, #ff2a5f, #7b2cbf)';
+        let notificationSoundType = localStorage.getItem('chat_sound') || 'beep';
         let activeContactPhone = null;
         let allMessages = {};
         let contacts = [];
+
+        // Функция воспроизведения звука уведомления через Web Audio API
+        function playNotificationSound(type) {
+            if (type === 'none') return;
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                const now = audioCtx.currentTime;
+
+                if (type === 'bell') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(880, now);
+                    osc.frequency.exponentialRampToValueAtTime(440, now + 0.3);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+                    osc.start(now);
+                    osc.stop(now + 0.3);
+                } else if (type === 'digital') {
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(1200, now);
+                    osc.frequency.setValueAtTime(1800, now + 0.08);
+                    gain.gain.setValueAtTime(0.15, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+                    osc.start(now);
+                    osc.stop(now + 0.2);
+                } else if (type === 'pop') {
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(400, now);
+                    osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+                    osc.start(now);
+                    osc.stop(now + 0.12);
+                } else {
+                    // Стандартный beep
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(587.33, now); // D5
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                    osc.start(now);
+                    osc.stop(now + 0.15);
+                }
+            } catch (e) {
+                console.error('Ошибка воспроизведения звука:', e);
+            }
+        }
 
         // Выбор аватарки в модалке входа
         let selectedAvatarStyle = myAvatarData;
@@ -630,6 +709,7 @@
         
         function openSettingsModal() {
             document.getElementById('settingsName').value = myName;
+            document.getElementById('settingsSoundSelect').value = notificationSoundType;
             settingsAvatarStyle = myAvatarData;
             settingsPresetAvs.forEach(av => {
                 if (av.dataset.bg === myAvatarData) {
@@ -663,6 +743,11 @@
             }
         });
 
+        // Предпросмотр звука при смене в селекте
+        document.getElementById('settingsSoundSelect').addEventListener('change', function(e) {
+            playNotificationSound(e.target.value);
+        });
+
         document.getElementById('closeSettingsBtn').addEventListener('click', () => {
             document.getElementById('settingsModal').style.display = 'none';
         });
@@ -675,8 +760,11 @@
             }
             myName = newName;
             myAvatarData = settingsAvatarStyle;
+            notificationSoundType = document.getElementById('settingsSoundSelect').value;
+
             localStorage.setItem('chat_name', myName);
             localStorage.setItem('chat_avatar', myAvatarData);
+            localStorage.setItem('chat_sound', notificationSoundType);
             
             document.getElementById('settingsModal').style.display = 'none';
             loginUser(myName, myPhone, myAvatarData);
@@ -688,6 +776,7 @@
                 localStorage.removeItem('chat_phone');
                 localStorage.removeItem('chat_name');
                 localStorage.removeItem('chat_avatar');
+                localStorage.removeItem('chat_sound');
                 location.reload();
             }
         });
@@ -769,7 +858,7 @@
                 return;
             }
             
-            myAvatarData = selectedAvatarStyle; // Сохраняем выбранную аватарку во временную переменную
+            myAvatarData = selectedAvatarStyle;
             socket.emit('request_code', { phone: tempPhone });
             authModal.style.display = 'none';
             codeModal.style.display = 'flex';
@@ -790,7 +879,7 @@
                 myName = tempName;
                 localStorage.setItem('chat_name', myName);
                 localStorage.setItem('chat_phone', myPhone);
-                localStorage.setItem('chat_avatar', myAvatarData); // Сохраняем в localStorage
+                localStorage.setItem('chat_avatar', myAvatarData);
                 codeModal.style.display = 'none';
                 loginUser(myName, myPhone, myAvatarData);
             } else {
@@ -884,6 +973,11 @@
                 time: msg.time
             });
             renderMessages();
+
+            // Если сообщение пришло от другого пользователя и не из открытого сейчас чата (или вообще входящее)
+            if (msg.fromPhone !== myPhone) {
+                playNotificationSound(notificationSoundType);
+            }
         });
 
         document.getElementById('sendBtn').addEventListener('click', sendMessage);
