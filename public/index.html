@@ -46,8 +46,9 @@
         .call-btn-hang { background: #ff0050 !important; padding: 12px 24px; border-radius: 30px; border: none; color: #fff; font-weight: bold; cursor: pointer; margin-top: 20px; }
 
         /* Лента TikTok (бесконечная) */
-        #tiktok-feed { flex: 1; overflow-y: scroll; height: 100vh; scroll-snap-type: y mandatory; background: #000; }
-        .tiktok-card { height: 100vh; scroll-snap-align: start; display: flex; align-items: center; justify-content: center; font-size: 28px; border-bottom: 2px solid #222; position: relative; background: #111; }
+        #tiktok-feed { flex: 1; overflow-y: scroll; height: calc(100vh - 55px); scroll-snap-type: y mandatory; background: #000; }
+        .feed-header { height: 55px; background: #1a1a1a; border-bottom: 1px solid #222; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; }
+        .tiktok-card { height: calc(100vh - 55px); scroll-snap-align: start; display: flex; align-items: center; justify-content: center; font-size: 28px; border-bottom: 2px solid #222; position: relative; background: #111; }
         .tiktok-card .info { position: absolute; bottom: 40px; left: 20px; }
 
         /* Настройки */
@@ -77,26 +78,23 @@
                 <button class="tab-btn" onclick="switchTab('settings', this)">Настройки</button>
             </div>
             
-            <!-- Вкладка Чатов -->
             <div id="tab-chats" class="tab-content">
-                <input type="text" id="search-chats-input" class="search-box" placeholder="Поиск по чатам (имя / логин)..." oninput="renderChats()">
+                <input type="text" id="search-chats-input" class="search-box" placeholder="Поиск по чатам..." oninput="renderChats()">
                 <div id="chats-list"></div>
             </div>
             
-            <!-- Вкладка Друзей -->
             <div id="tab-friends" class="tab-content hidden">
                 <div style="margin-bottom: 10px; display: flex; gap: 5px;">
                     <input type="text" id="add-friend-input" placeholder="Логин друга" style="flex: 1; padding: 6px; background:#222; border:1px solid #444; color:#fff; border-radius:4px;">
                     <button onclick="addFriend()" style="padding: 6px 10px; background:#ff0050; border:none; color:#fff; border-radius:4px; cursor:pointer;">Добавить</button>
                 </div>
-                <input type="text" id="search-friends-input" class="search-box" placeholder="Поиск друзей (часть имени/логина)..." oninput="renderFriends()">
+                <input type="text" id="search-friends-input" class="search-box" placeholder="Поиск друзей..." oninput="renderFriends()">
                 <h3>Список друзей</h3>
                 <div id="friends-list" style="margin-top: 10px;"></div>
                 <h3 style="margin-top: 15px;">Заявки</h3>
                 <div id="requests-list" style="margin-top: 10px;"></div>
             </div>
 
-            <!-- Вкладка Настроек -->
             <div id="tab-settings" class="tab-content hidden settings-pane">
                 <h3>Настройки управления</h3>
                 <label>Клавиша микрофона (Мьюту):
@@ -115,12 +113,15 @@
             </div>
         </div>
 
-        <!-- Центральная область (Чат или Лента) -->
+        <!-- Центральная область -->
         <div class="main-chat" id="main-content-area">
             <div id="chat-view" style="display: flex; flex-direction: column; height: 100%;">
                 <div class="chat-header">
                     <span id="active-chat-title">Выберите чат</span>
-                    <button id="call-tooltip-btn" onclick="startCall()" style="background:#00b894; border:none; padding:8px 14px; border-radius:6px; color:#fff; cursor:pointer;">Позвонить</button>
+                    <div>
+                        <button onclick="inviteToWatchParty()" style="background:#8e44ad; border:none; padding:8px 14px; border-radius:6px; color:#fff; cursor:pointer; margin-right: 5px;">Смотреть вместе</button>
+                        <button id="call-tooltip-btn" onclick="startCall()" style="background:#00b894; border:none; padding:8px 14px; border-radius:6px; color:#fff; cursor:pointer;">Позвонить</button>
+                    </div>
                 </div>
                 <div class="messages-area" id="messages-container"></div>
                 <div class="chat-input-area">
@@ -129,8 +130,11 @@
                 </div>
             </div>
 
-            <!-- Бесконечная лента TikTok -->
+            <!-- Бесконечная лента TikTok с совместным просмотром -->
             <div id="feed-view" class="hidden" style="display: flex; flex-direction: column; height: 100%;">
+                <div class="feed-header">
+                    <span>TikTok Лента <span id="party-status" style="color: #8e44ad; font-size: 12px; margin-left: 10px;"></span></span>
+                </div>
                 <div id="tiktok-feed">
                     <div class="tiktok-card">Видео #1<div class="info">Автор: @user1</div></div>
                     <div class="tiktok-card">Видео #2<div class="info">Автор: @user2</div></div>
@@ -155,6 +159,8 @@
         let activeChatUser = null;
         let isMicMuted = false;
         let peerConnection = null;
+        let currentWatchRoom = null;
+        let isSyncing = false;
 
         const iceServers = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
@@ -258,7 +264,6 @@
             renderFriends();
         }
 
-        // Фильтрация с поддержкой поиска по половине имени или логина
         function renderChats() {
             const list = document.getElementById('chats-list');
             list.innerHTML = '';
@@ -268,11 +273,7 @@
             friends.forEach(fLogin => {
                 const userData = currentDB.users[fLogin] || {};
                 const name = (userData.name || fLogin).toLowerCase();
-                
-                // Проверка: входит ли введенный текст (даже половина) в логин или имя
-                if (query && !fLogin.toLowerCase().includes(query) && !name.includes(query)) {
-                    return;
-                }
+                if (query && !fLogin.toLowerCase().includes(query) && !name.includes(query)) return;
 
                 const div = document.createElement('div');
                 div.className = 'user-item';
@@ -291,11 +292,7 @@
             friends.forEach(fLogin => {
                 const userData = currentDB.users[fLogin] || {};
                 const name = (userData.name || fLogin).toLowerCase();
-
-                // Поиск по части имени или логина
-                if (query && !fLogin.toLowerCase().includes(query) && !name.includes(query)) {
-                    return;
-                }
+                if (query && !fLogin.toLowerCase().includes(query) && !name.includes(query)) return;
 
                 const div = document.createElement('div');
                 div.className = 'user-item';
@@ -433,7 +430,63 @@
             document.getElementById('call-modal').classList.add('hidden');
         }
 
-        // Управление с клавиатуры с учетом актуальных клавиш
+        // Совместный просмотр TikTok (Watch Party)
+        function inviteToWatchParty() {
+            if(!activeChatUser) return alert('Выберите друга в чате для совместного просмотра!');
+            socket.emit('invite-watch-party', { to: activeChatUser, from: currentUser.login });
+            alert(`Приглашение на совместный просмотр отправлено пользователю ${activeChatUser}`);
+        }
+
+        socket.on('watch-party-invite', ({ from }) => {
+            if(confirm(`Пользователь ${from} приглашает вас посмотреть ленту TikTok вместе. Принять?`)) {
+                activeChatUser = from;
+                currentWatchRoom = [currentUser.login, from].sort().join('_');
+                socket.emit('accept-watch-party', { to: from, room: currentWatchRoom });
+                
+                // Переключаемся на вкладку ленты
+                document.querySelectorAll('.tab-btn')[2].click();
+            }
+        });
+
+        socket.on('watch-party-started', ({ room }) => {
+            currentWatchRoom = room;
+            document.getElementById('party-status').innerText = '• Совместный сеанс активен';
+        });
+
+        // Бесконечная лента TikTok с синхронизацией просмотра
+        const feedContainer = document.getElementById('tiktok-feed');
+        feedContainer.addEventListener('scroll', () => {
+            if (feedContainer.scrollTop + feedContainer.clientHeight >= feedContainer.scrollHeight - 100) {
+                loadMoreFeedItems();
+            }
+
+            if (currentWatchRoom && !isSyncing) {
+                const cardHeight = feedContainer.clientHeight;
+                const index = Math.round(feedContainer.scrollTop / cardHeight);
+                socket.emit('sync-feed-scroll', { room: currentWatchRoom, index });
+            }
+        });
+
+        socket.on('sync-feed-scroll', ({ index }) => {
+            if (currentWatchRoom) {
+                isSyncing = true;
+                const cardHeight = feedContainer.clientHeight;
+                feedContainer.scrollTo({ top: index * cardHeight, behavior: 'smooth' });
+                setTimeout(() => { isSyncing = false; }, 500);
+            }
+        });
+
+        function loadMoreFeedItems() {
+            const count = feedContainer.children.length + 1;
+            for(let i = 0; i < 2; i++) {
+                const card = document.createElement('div');
+                card.className = 'tiktok-card';
+                card.innerHTML = `Видео #${count + i}<div class="info">Автор: @user_${count + i}</div>`;
+                feedContainer.appendChild(card);
+            }
+        }
+
+        // Управление с клавиатуры
         window.addEventListener('keydown', (e) => {
             const muteKey = document.getElementById('setting-key-mute').value.toLowerCase();
             const callKey = document.getElementById('setting-key-call').value.toLowerCase();
@@ -450,24 +503,6 @@
                 startCall();
             }
         });
-
-        // Бесконечная лента TikTok (подгрузка при скролле)
-        const feedContainer = document.getElementById('tiktok-feed');
-        feedContainer.addEventListener('scroll', () => {
-            if (feedContainer.scrollTop + feedContainer.clientHeight >= feedContainer.scrollHeight - 100) {
-                loadMoreFeedItems();
-            }
-        });
-
-        function loadMoreFeedItems() {
-            const count = feedContainer.children.length + 1;
-            for(let i = 0; i < 2; i++) {
-                const card = document.createElement('div');
-                card.className = 'tiktok-card';
-                card.innerHTML = `Видео #${count + i}<div class="info">Автор: @user_${count + i}</div>`;
-                feedContainer.appendChild(card);
-            }
-        }
 
         setInterval(refreshData, 4000);
     </script>
