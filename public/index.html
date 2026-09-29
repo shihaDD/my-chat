@@ -50,16 +50,10 @@
 
         .call-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 3000; display: flex; flex-direction: column; justify-content: center; align-items: center; }
         
-        input, button, select, label { 
-            font-size: 14px;
-        }
-        input, select {
-            padding: 10px; border: 1px solid #45a29e; border-radius: 6px; outline: none; background: #0b0c10; color: #fff; width: 100%;
-        }
+        input, button, select, label { font-size: 14px; }
+        input, select { padding: 10px; border: 1px solid #45a29e; border-radius: 6px; outline: none; background: #0b0c10; color: #fff; width: 100%; }
         input:focus, select:focus { border-color: #66fcf1; box-shadow: 0 0 8px rgba(102, 252, 241, 0.6); }
-        button { 
-            padding: 12px; background: #45a29e; color: #0b0c10; border: none; cursor: pointer; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s; border-radius: 6px;
-        }
+        button { padding: 12px; background: #45a29e; color: #0b0c10; border: none; cursor: pointer; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; transition: all 0.2s; border-radius: 6px; }
         button:hover:not(:disabled) { background: #66fcf1; box-shadow: 0 0 12px #66fcf1; }
         button:disabled { background: #2c353d; color: #555; border-color: #333; cursor: not-allowed; }
 
@@ -124,7 +118,7 @@
         </div>
     </div>
 
-    <!-- НЕОНОВОЕ УВЕДОМЛЕНИЕ О ВХОДЯЩЕМ ЗВОНКЕ -->
+    <!-- УВЕДОМЛЕНИЕ О ЗВОНКЕ -->
     <div id="customCallNotification" class="neon-alert-overlay hidden">
         <div class="neon-alert-box">
             <h3>Входящий аудиозвонок</h3>
@@ -132,6 +126,24 @@
             <div class="neon-alert-btns">
                 <button class="btn-neon-accept" onclick="acceptIncomingCall()">Принять</button>
                 <button class="btn-neon-decline" onclick="declineIncomingCall()">Отклонить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ОКНО ПРОФИЛЯ ДРУГА -->
+    <div id="contactInfoModal" class="modal-overlay hidden">
+        <div class="modal">
+            <h3>Профиль друга</h3>
+            <img id="contactModalAvatar" class="avatar-lg" src="" alt="">
+            <p id="contactModalRealName" style="color:#66fcf1; font-weight:bold; margin: 5px 0;"></p>
+            <p id="contactModalLogin" style="color:#aaa; font-size: 12px; margin: 0 0 10px 0;"></p>
+            
+            <p style="font-size: 12px; margin: 0; color: #aaa; text-align: left;">Локальный псевдоним (имя для вас):</p>
+            <input type="text" id="contactNicknameInput" placeholder="Новое имя контакта...">
+            
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <button onclick="saveContactNickname()" style="flex: 1;">Сохранить</button>
+                <button onclick="closeContactModal()" style="flex: 1; background: #333; color:#fff;">Закрыть</button>
             </div>
         </div>
     </div>
@@ -176,7 +188,7 @@
         </div>
     </div>
 
-    <!-- ОКНО НАСТРОЕК ПРОФИЛЯ И АУДИО -->
+    <!-- ОКНО НАСТРОЕК ПРОФИЛЯ -->
     <div id="profileModal" class="modal-overlay hidden">
         <div class="modal" style="width: 500px; text-align: left;">
             <h3 style="text-align: center;">Настройки профиля и аудио</h3>
@@ -359,6 +371,7 @@
     let selectedAvatarUrl = 'https://api.iconify.design/lucide:cat.svg?color=%2366fcf1';
     let attachedMedia = null;
     let editingGroupId = '';
+    let editingContactLogin = '';
 
     let peerConnection;
     let localStream;
@@ -495,7 +508,6 @@
         setInterval(loadData, 3000);
     };
 
-    // ЗАГРУЗКА МИКРОФОНОВ И НАУШНИКОВ В СЕЛЕКТОРЫ
     async function loadAudioDevices() {
         try {
             await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -745,6 +757,47 @@
         }
     }
 
+    // ОТКРЫТИЕ ПРОФИЛЯ ДРУГА ПРИ КЛИКЕ НА ЕГО КАРТОЧКУ ВО ВКЛАДКЕ ДРУЗЬЯ
+    function openContactInfo(targetLogin, event) {
+        event?.stopPropagation();
+        editingContactLogin = targetLogin;
+        const u = dbData.users[targetLogin];
+        if (!u) return;
+
+        const currentNickname = (dbData.nicknames && dbData.nicknames[currentUserLogin] && dbData.nicknames[currentUserLogin][targetLogin]) ? dbData.nicknames[currentUserLogin][targetLogin] : u.name;
+        document.getElementById('contactModalAvatar').src = u.avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1';
+        document.getElementById('contactModalRealName').textContent = `Имя: ${u.name}`;
+        document.getElementById('contactModalLogin').textContent = `@${u.login}`;
+        document.getElementById('contactNicknameInput').value = currentNickname;
+        document.getElementById('contactInfoModal').classList.remove('hidden');
+    }
+
+    function closeContactModal() {
+        document.getElementById('contactInfoModal').classList.add('hidden');
+        editingContactLogin = '';
+    }
+
+    async function saveContactNickname() {
+        const nickname = document.getElementById('contactNicknameInput').value.trim();
+        if (!editingContactLogin) return;
+
+        const res = await fetch('/api/set-nickname', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ login: currentUserLogin, targetLogin: editingContactLogin, nickname })
+        });
+        const data = await res.json();
+        if (data.success) {
+            dbData = data.db;
+            updateTabContent();
+            if (currentPartner === editingContactLogin) {
+                selectPartner(editingContactLogin, false);
+            }
+            closeContactModal();
+            showNeonAlert('Успешно', 'Псевдоним контакта сохранен!');
+        }
+    }
+
     function openGroupSettingsModal() {
         if (!isGroupChat || !currentPartner) return;
         editingGroupId = currentPartner;
@@ -807,6 +860,8 @@
 
     function getDisplayName(login) {
         if (login === currentUserLogin) return 'Избранное';
+        const nick = (dbData.nicknames && dbData.nicknames[currentUserLogin]) ? dbData.nicknames[currentUserLogin][login] : null;
+        if (nick) return nick;
         return (dbData.users && dbData.users[login]) ? dbData.users[login].name : login;
     }
 
@@ -915,14 +970,16 @@
                     const u = dbData.users[l];
                     if (!u) return;
                     const online = isOnline(l);
+                    const displayName = getDisplayName(l);
                     const div = document.createElement('div');
-                    div.className = `item-card ${currentPartner === l ? 'active' : ''}`;
+                    div.className = `item-card`;
+                    // ПРИ КЛИКЕ НА ДРУГА ВО ВКЛАДКЕ ДРУЗЬЯ ТЕПЕРЬ ОТКРЫВАЕТСЯ ПРОФИЛЬ ДРУГА
+                    div.onclick = () => openContactInfo(l);
                     div.innerHTML = `
                         <img class="avatar-sm" src="${u.avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1'}">
-                        <span style="flex-grow:1;">${u.name} <small style="color:#66fcf1">@${u.login}</small></span> 
+                        <span style="flex-grow:1;">${displayName} <small style="color:#66fcf1">@${u.login}</small></span> 
                         <span class="status-dot ${online ? 'status-online' : 'status-offline'}"></span>
                     `;
-                    div.onclick = () => selectPartner(l, false);
                     listDiv.appendChild(div);
                 });
             } else if (friendsSubTab === 'requests') {
@@ -1183,14 +1240,12 @@
         reader.readAsDataURL(file);
     }
 
-    // НАСТРОЙКА РАЦИИ И АУДИО ПОТОКА (С УЧЕТОМ МИКРОФОНА, УРОВНЯ И PTT)
     async function createPeerConnection(toLogin) {
         peerConnection = new RTCPeerConnection(rtcConfig);
         remoteStream = new MediaStream();
         const remoteAudioEl = document.getElementById('remoteAudio');
         remoteAudioEl.srcObject = remoteStream;
 
-        // Выбор наушников (динамика) если поддерживается браузером
         const selectedOutput = localStorage.getItem('v_odno_eblo_out');
         if (selectedOutput && typeof remoteAudioEl.setSinkId === 'function') {
             try { await remoteAudioEl.setSinkId(selectedOutput); } catch (e) {}
@@ -1203,9 +1258,7 @@
             if (event.candidate) socket.emit('ice-candidate', { to: toLogin, candidate: event.candidate });
         };
 
-        if (pttAudioTrack) {
-            peerConnection.addTrack(pttAudioTrack, localStream);
-        }
+        if (pttAudioTrack) { peerConnection.addTrack(pttAudioTrack, localStream); }
     }
 
     async function startCall() {
@@ -1218,7 +1271,6 @@
             const constraints = { audio: selectedMic ? { deviceId: { exact: selectedMic } } : true, video: false };
             localStream = await navigator.mediaDevices.getUserMedia(constraints);
 
-            // Обработка звука через Web Audio API (громкость + рация)
             audioContext = new (window.AudioContext || window.webkitAudioContext)();
             microphoneNode = audioContext.createMediaStreamSource(localStream);
             gainNode = audioContext.createGain();
@@ -1314,11 +1366,7 @@
             let average = sum / dataArray.length;
             const threshold = parseInt(localStorage.getItem('v_odno_eblo_thresh') || '10');
 
-            if (average > threshold) {
-                pttAudioTrack.enabled = true;
-            } else {
-                pttAudioTrack.enabled = false;
-            }
+            if (average > threshold) { pttAudioTrack.enabled = true; } else { pttAudioTrack.enabled = false; }
         }, 100);
     }
 
@@ -1326,20 +1374,16 @@
         const targetKey = localStorage.getItem('v_odno_eblo_ptt_key') || 'Space';
         window.onkeydown = (e) => {
             if (e.code === targetKey && pttAudioTrack && !isPttActive) {
-                isPttActive = true;
-                pttAudioTrack.enabled = true;
+                isPttActive = true; pttAudioTrack.enabled = true;
                 const ind = document.getElementById('pttStatusIndicator');
-                ind.textContent = '🟢 МИКРОФОН ВКЛЮЧЕН (Говорите)';
-                ind.style.color = '#66fcf1';
+                ind.textContent = '🟢 МИКРОФОН ВКЛЮЧЕН (Говорите)'; ind.style.color = '#66fcf1';
             }
         };
         window.onkeyup = (e) => {
             if (e.code === targetKey && pttAudioTrack && isPttActive) {
-                isPttActive = false;
-                pttAudioTrack.enabled = false;
+                isPttActive = false; pttAudioTrack.enabled = false;
                 const ind = document.getElementById('pttStatusIndicator');
-                ind.textContent = '🔴 МИКРОФОН ВЫКЛЮЧЕН';
-                ind.style.color = '#ff007f';
+                ind.textContent = '🔴 МИКРОФОН ВЫКЛЮЧЕН'; ind.style.color = '#ff007f';
             }
         };
     }
