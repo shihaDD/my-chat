@@ -44,9 +44,11 @@ async function loadDatabase() {
 
     return {
         "users": [],
+        "userPhones": {},
         "userContacts": {},
         "messagesStore": {},
-        "favorites": {}
+        "friends": {},
+        "lastSeen": {}
     };
 }
 
@@ -93,24 +95,22 @@ app.get('/api/data', async (req, res) => {
     res.json(db);
 });
 
-// Эндпоинт для подтяжки свежих новостей с Google News RSS
+// Новости Google RSS
 app.get('/api/news', async (req, res) => {
     try {
         const rssRes = await fetch('https://news.google.com/rss?hl=ru&gl=RU&ceid=RU:ru');
         const rssText = await rssRes.text();
         
-        // Простой парсинг элементов <item> из RSS
         const items = [];
         const itemMatches = rssText.match(/<item>([\s\S]*?)<\/item>/g) || [];
         
-        for (let i = 0; i < Math.min(items.length + 15, itemMatches.length); i++) {
+        for (let i = 0; i < Math.min(15, itemMatches.length); i++) {
             const item = itemMatches[i];
             const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
             const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
             const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
 
             if (titleMatch) {
-                // Очищаем от CDATA и HTML сущностей
                 let title = titleMatch[1].replace('<![CDATA[', '').replace(']]>', '').trim();
                 let link = linkMatch ? linkMatch[1].replace('<![CDATA[', '').replace(']]>', '').trim() : '#';
                 let date = dateMatch ? new Date(dateMatch[1]).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
@@ -119,7 +119,6 @@ app.get('/api/news', async (req, res) => {
         }
         res.json({ success: true, news: items });
     } catch (e) {
-        console.error('Ошибка загрузки новостей:', e);
         res.json({ success: false, news: [] });
     }
 });
@@ -146,16 +145,54 @@ app.post('/api/verify-code', async (req, res) => {
     const username = record.name;
     let db = await loadDatabase();
 
+    if (!db.users) db.users = [];
+    if (!db.userPhones) db.userPhones = {};
+    if (!db.friends) db.friends = {};
+    if (!db.messagesStore) db.messagesStore = {};
+    if (!db.lastSeen) db.lastSeen = {};
+
+    db.userPhones[phone] = username;
+    db.lastSeen[username] = Date.now();
+
     if (!db.users.includes(username)) {
         db.users.push(username);
-        db.userContacts[username] = [];
+        db.friends[username] = [];
         db.messagesStore[username] = {};
-        db.favorites[username] = [];
+    }
+
+    await saveDatabase(db);
+    delete verificationCodes[phone];
+    res.json({ success: true, username, db });
+});
+
+// Пинг для обновления статуса «в сети»
+app.post('/api/ping', async (req, res) => {
+    const { username } = req.body;
+    if (!username) return res.sendStatus(400);
+    let db = await loadDatabase();
+    if (!db.lastSeen) db.lastSeen = {};
+    db.lastSeen[username] = Date.now();
+    await saveDatabase(db);
+    res.json({ success: true });
+});
+
+// Добавление в друзья по номеру телефона
+app.post('/api/add-friend-by-phone', async (req, res) => {
+    const { username, phone } = req.body;
+    let db = await loadDatabase();
+
+    const targetUser = db.userPhones?.[phone];
+    if (!targetUser || targetUser === username) {
+        return res.status(400).json({ success: false, error: 'Пользователь с таким номером не найден' });
+    }
+
+    if (!db.friends[username]) db.friends[username] = [];
+    if (!db.friends[username].includes(targetUser)) {
+        db.friends[username].push(targetUser);
         await saveDatabase(db);
     }
 
-    delete verificationCodes[phone];
-    res.json({ success: true, username, db });
+    res.json({ success: true, db, friendName: targetUser });
 });
 
 app.post('/api/send-message', async (req, res) => {
@@ -172,23 +209,8 @@ app.post('/api/send-message', async (req, res) => {
     const messageObj = { sender, text, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
     
     db.messagesStore[sender][receiver].push(messageObj);
-    db.messagesStore[receiver][sender].push(messageObj);
-
-    await saveDatabase(db);
-    res.json({ success: true, db });
-});
-
-// Добавить/удалить из избранного
-app.post('/api/toggle-favorite', async (req, res) => {
-    const { username, target } = req.body;
-    let db = await loadDatabase();
-    if (!db.favorites[username]) db.favorites[username] = [];
-
-    const index = db.favorites[username].indexOf(target);
-    if (index > -1) {
-        db.favorites[username].splice(index, 1);
-    } else {
-        db.favorites[username].push(target);
+    if (sender !== receiver) {
+        db.messagesStore[receiver][sender].push(messageObj);
     }
 
     await saveDatabase(db);
