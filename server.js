@@ -30,10 +30,7 @@ async function loadDatabase() {
 
     try {
         const response = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${FILE_PATH}`, {
-            headers: {
-                'Authorization': `token ${GITHUB_TOKEN}`,
-                'User-Agent': 'NodeJS-Server'
-            }
+            headers: { 'Authorization': `token ${GITHUB_TOKEN}`, 'User-Agent': 'NodeJS-Server' }
         });
         if (response.ok) {
             const json = await response.json();
@@ -114,7 +111,6 @@ app.post('/api/ping', async (req, res) => {
     res.json({ success: true });
 });
 
-// Исправленный и надежный поиск пользователя по логину
 app.post('/api/add-friend', async (req, res) => {
     let { login, targetLogin } = req.body;
     login = login ? login.trim().toLowerCase() : '';
@@ -123,7 +119,7 @@ app.post('/api/add-friend', async (req, res) => {
     let db = await loadDatabase();
 
     if (!db.users?.[targetLogin]) {
-        return res.status(400).json({ success: false, error: `Пользователь @${targetLogin} не найден в системе!` });
+        return res.status(400).json({ success: false, error: `Пользователь @${targetLogin} не найден!` });
     }
     if (targetLogin === login) {
         return res.status(400).json({ success: false, error: 'Нельзя добавить самого себя!' });
@@ -132,29 +128,41 @@ app.post('/api/add-friend', async (req, res) => {
     if (!db.friends[login]) db.friends[login] = [];
     if (!db.friends[login].includes(targetLogin)) {
         db.friends[login].push(targetLogin);
-        await saveDatabase(db);
     }
 
-    res.json({ success: true, db });
-});
-
-app.post('/api/send-message', async (req, res) => {
-    const { sender, receiver, text } = req.body;
-    let db = await loadDatabase();
-    if (!db.messagesStore[sender]) db.messagesStore[sender] = {};
-    if (!db.messagesStore[sender][receiver]) db.messagesStore[sender][receiver] = [];
-    if (!db.messagesStore[receiver]) db.messagesStore[receiver] = {};
-    if (!db.messagesStore[receiver][sender]) db.messagesStore[receiver][sender] = [];
-
-    const messageObj = { sender, text, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
-    db.messagesStore[sender][receiver].push(messageObj);
-    if (sender !== receiver) db.messagesStore[receiver][sender].push(messageObj);
+    // Двухстороннее добавление в друзья для удобства общения
+    if (!db.friends[targetLogin]) db.friends[targetLogin] = [];
+    if (!db.friends[targetLogin].includes(login)) {
+        db.friends[targetLogin].push(login);
+    }
 
     await saveDatabase(db);
     res.json({ success: true, db });
 });
 
-// Мемы и картинки из интернета (Reddit API / Memes)
+// Исправленная отправка сообщений без дублирования
+app.post('/api/send-message', async (req, res) => {
+    const { sender, receiver, text } = req.body;
+    let db = await loadDatabase();
+    
+    if (!db.messagesStore) db.messagesStore = {};
+    if (!db.messagesStore[sender]) db.messagesStore[sender] = {};
+    if (!db.messagesStore[sender][receiver]) db.messagesStore[sender][receiver] = [];
+
+    const messageObj = { sender, text, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) };
+    
+    db.messagesStore[sender][receiver].push(messageObj);
+
+    if (sender !== receiver) {
+        if (!db.messagesStore[receiver]) db.messagesStore[receiver] = {};
+        if (!db.messagesStore[receiver][sender]) db.messagesStore[receiver][sender] = [];
+        db.messagesStore[receiver][sender].push(messageObj);
+    }
+
+    await saveDatabase(db);
+    res.json({ success: true, db });
+});
+
 app.get('/api/news', async (req, res) => {
     try {
         const response = await fetch('https://meme-api.com/gimme/20');
@@ -171,7 +179,6 @@ app.get('/api/news', async (req, res) => {
     }
 });
 
-// WebRTC сигналинг
 const onlineSockets = {};
 io.on('connection', (socket) => {
     socket.on('register', (login) => { onlineSockets[login] = socket.id; });
