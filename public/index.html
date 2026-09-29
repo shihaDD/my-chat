@@ -929,6 +929,22 @@
         let communities = [];
         let currentEditingAvatar = '';
 
+        // Автоматическая разблокировка аудиоконтекста браузера при любом клике
+        let audioCtx = null;
+        function getAudioContext() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            return audioCtx;
+        }
+
+        document.addEventListener('click', () => {
+            getAudioContext();
+        }, { once: true });
+
         function showToast(text, callback) {
             const overlay = document.createElement('div');
             overlay.className = 'custom-toast-overlay';
@@ -948,12 +964,12 @@
         function playNotificationSound(type) {
             if (type === 'none') return;
             try {
-                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
+                const ctx = getAudioContext();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
                 osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                const now = audioCtx.currentTime;
+                gain.connect(ctx.destination);
+                const now = ctx.currentTime;
 
                 if (type === 'bell') {
                     osc.type = 'sine';
@@ -991,6 +1007,11 @@
                 console.error('Ошибка звука:', e);
             }
         }
+
+        // Воспроизведение звука при изменении селекта в настройках для проверки
+        document.getElementById('settingsSoundSelect').addEventListener('change', (e) => {
+            playNotificationSound(e.target.value);
+        });
 
         function applyAvatar(el, avatarValue, fallbackText) {
             if (!avatarValue) {
@@ -1870,7 +1891,6 @@
                 socket.emit('community_message', { communityId: activeChatId, message: text, file: fileObj });
             }
 
-            // Избранное не дублируем локально вручную, так как сервер обрабатывает его корректно
             if (activeChatId !== myPhone) {
                 let chatKey = '';
                 if (activeChatType === 'group') chatKey = `group_${activeChatId}`;
