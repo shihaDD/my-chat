@@ -171,6 +171,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // WebRTC Звонки
     socket.on('call-user', ({ to, offer, from }) => {
         const targetSocketId = activeSockets[to];
         if (targetSocketId) io.to(targetSocketId).emit('incoming-call', { from, offer });
@@ -189,6 +190,26 @@ io.on('connection', (socket) => {
     socket.on('hang-up', ({ to }) => {
         const targetSocketId = activeSockets[to];
         if (targetSocketId) io.to(targetSocketId).emit('hang-up');
+    });
+
+    // Совместный просмотр TikTok
+    socket.on('invite-watch-party', ({ to, from }) => {
+        const targetSocketId = activeSockets[to];
+        if (targetSocketId) io.to(targetSocketId).emit('watch-party-invite', { from });
+    });
+
+    socket.on('accept-watch-party', ({ to, room }) => {
+        socket.join(room);
+        const targetSocketId = activeSockets[to];
+        if (targetSocketId) {
+            const targetSocket = io.sockets.sockets.get(targetSocketId);
+            if (targetSocket) targetSocket.join(room);
+        }
+        io.to(room).emit('watch-party-started', { room });
+    });
+
+    socket.on('sync-feed-scroll', ({ room, index }) => {
+        socket.to(room).emit('sync-feed-scroll', { index });
     });
 
     socket.on('disconnect', () => {
