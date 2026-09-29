@@ -78,23 +78,26 @@
                 <button class="tab-btn" onclick="switchTab('settings', this)">Настройки</button>
             </div>
             
+            <!-- Вкладка Чатов -->
             <div id="tab-chats" class="tab-content">
-                <input type="text" id="search-chats-input" class="search-box" placeholder="Поиск по чатам..." oninput="renderChats()">
+                <input type="text" id="search-chats-input" class="search-box" placeholder="Поиск по чатам (имя / логин)..." oninput="renderChats()">
                 <div id="chats-list"></div>
             </div>
             
+            <!-- Вкладка Друзей -->
             <div id="tab-friends" class="tab-content hidden">
                 <div style="margin-bottom: 10px; display: flex; gap: 5px;">
                     <input type="text" id="add-friend-input" placeholder="Логин друга" style="flex: 1; padding: 6px; background:#222; border:1px solid #444; color:#fff; border-radius:4px;">
                     <button onclick="addFriend()" style="padding: 6px 10px; background:#ff0050; border:none; color:#fff; border-radius:4px; cursor:pointer;">Добавить</button>
                 </div>
-                <input type="text" id="search-friends-input" class="search-box" placeholder="Поиск друзей..." oninput="renderFriends()">
+                <input type="text" id="search-friends-input" class="search-box" placeholder="Поиск друзей (часть имени/логина)..." oninput="renderFriends()">
                 <h3>Список друзей</h3>
                 <div id="friends-list" style="margin-top: 10px;"></div>
                 <h3 style="margin-top: 15px;">Заявки</h3>
                 <div id="requests-list" style="margin-top: 10px;"></div>
             </div>
 
+            <!-- Вкладка Настроек -->
             <div id="tab-settings" class="tab-content hidden settings-pane">
                 <h3>Настройки управления</h3>
                 <label>Клавиша микрофона (Мьюту):
@@ -113,7 +116,7 @@
             </div>
         </div>
 
-        <!-- Центральная область -->
+        <!-- Центральная область (Чат или Лента) -->
         <div class="main-chat" id="main-content-area">
             <div id="chat-view" style="display: flex; flex-direction: column; height: 100%;">
                 <div class="chat-header">
@@ -264,6 +267,7 @@
             renderFriends();
         }
 
+        // Фильтрация чатов с поддержкой поиска по половине имени или логина
         function renderChats() {
             const list = document.getElementById('chats-list');
             list.innerHTML = '';
@@ -273,7 +277,10 @@
             friends.forEach(fLogin => {
                 const userData = currentDB.users[fLogin] || {};
                 const name = (userData.name || fLogin).toLowerCase();
-                if (query && !fLogin.toLowerCase().includes(query) && !name.includes(query)) return;
+                
+                if (query && !fLogin.toLowerCase().includes(query) && !name.includes(query)) {
+                    return;
+                }
 
                 const div = document.createElement('div');
                 div.className = 'user-item';
@@ -283,6 +290,7 @@
             });
         }
 
+        // Фильтрация друзей с поддержкой поиска по половине имени или логина
         function renderFriends() {
             const fList = document.getElementById('friends-list');
             fList.innerHTML = '';
@@ -292,7 +300,10 @@
             friends.forEach(fLogin => {
                 const userData = currentDB.users[fLogin] || {};
                 const name = (userData.name || fLogin).toLowerCase();
-                if (query && !fLogin.toLowerCase().includes(query) && !name.includes(query)) return;
+
+                if (query && !fLogin.toLowerCase().includes(query) && !name.includes(query)) {
+                    return;
+                }
 
                 const div = document.createElement('div');
                 div.className = 'user-item';
@@ -443,7 +454,6 @@
                 currentWatchRoom = [currentUser.login, from].sort().join('_');
                 socket.emit('accept-watch-party', { to: from, room: currentWatchRoom });
                 
-                // Переключаемся на вкладку ленты
                 document.querySelectorAll('.tab-btn')[2].click();
             }
         });
