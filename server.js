@@ -41,12 +41,10 @@ async function loadDatabase() {
     }
 
     return {
-        "users": [],
-        "userIds": {},       // username -> uniqueId
-        "idToUser": {},       // uniqueId -> username
-        "friends": {},
-        "messagesStore": {},
-        "lastSeen": {}
+        "users": {},         // login -> { login, name, createdAt }
+        "friends": {},       // login -> [friendLogins]
+        "messagesStore": {}, // login -> { partnerLogin: [messages] }
+        "lastSeen": {}       // login -> timestamp
     };
 }
 
@@ -93,100 +91,74 @@ app.get('/api/data', async (req, res) => {
     res.json(db);
 });
 
-// Новости Google RSS
-app.get('/api/news', async (req, res) => {
-    try {
-        const rssRes = await fetch('https://news.google.com/rss?hl=ru&gl=RU&ceid=RU:ru');
-        const rssText = await rssRes.text();
-        
-        const items = [];
-        const itemMatches = rssText.match(/<item>([\s\S]*?)<\/item>/g) || [];
-        
-        for (let i = 0; i < Math.min(15, itemMatches.length); i++) {
-            const item = itemMatches[i];
-            const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
-            const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
-            const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
-
-            if (titleMatch) {
-                let title = titleMatch[1].replace('<![CDATA[', '').replace(']]>', '').trim();
-                let link = linkMatch ? linkMatch[1].replace('<![CDATA[', '').replace(']]>', '').trim() : '#';
-                let date = dateMatch ? new Date(dateMatch[1]).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
-                items.push({ title, link, date });
-            }
-        }
-        res.json({ success: true, news: items });
-    } catch (e) {
-        res.json({ success: false, news: [] });
-    }
+// Проверка доступности логина
+app.get('/api/check-login/:login', async (req, res) => {
+    const login = req.params.login.trim().toLowerCase();
+    const db = await loadDatabase();
+    const exists = db.users && db.users[login];
+    res.json({ available: !exists });
 });
 
-// Авторизация по никнейму с генерацией ID
-app.post('/api/login', async (req, res) => {
-    const { username } = req.body;
-    if (!username || !username.trim()) {
-        return res.status(400).json({ success: false, error: 'Введите никнейм' });
-    }
+// Авторизация / Регистрация
+app.post('/api/auth', async (req, res) => {
+    let { login, name } = req.body;
+    if (!login || !name) return res.status(400).json({ success: false, error: 'Заполните все поля' });
+
+    login = login.trim().toLowerCase();
+    name = name.trim();
 
     let db = await loadDatabase();
-    if (!db.users) db.users = [];
-    if (!db.userIds) db.userIds = {};
-    if (!db.idToUser) db.idToUser = {};
+    if (!db.users) db.users = {};
     if (!db.friends) db.friends = {};
     if (!db.messagesStore) db.messagesStore = {};
     if (!db.lastSeen) db.lastSeen = {};
 
-    let userTag = db.userIds[username];
-    let isNew = false;
+    let user = db.users[login];
 
-    if (!userTag) {
-        isNew = true;
-        // Генерируем уникальный 6-значный ID
-        do {
-            userTag = Math.floor(100000 + Math.random() * 900000).toString();
-        } while (db.idToUser[userTag]);
-
-        db.userIds[username] = userTag;
-        db.idToUser[userTag] = username;
-        db.users.push(username);
-        db.friends[username] = [];
-        db.messagesStore[username] = {};
+    if (!user) {
+        // Регистрация нового
+        db.users[login] = { login, name, createdAt: Date.now() };
+        db.friends[login] = [];
+        db.messagesStore[login] = {};
+    } else {
+        // Вход существующего (обновляем имя на всякий случай)
+        db.users[login].name = name;
     }
 
-    db.lastSeen[username] = Date.now();
+    db.lastSeen[login] = Date.now();
     await saveDatabase(db);
 
-    res.json({ success: true, username, userId: userTag, isNew, db });
+    res.json({ success: true, user: db.users[login], db });
 });
 
 // Пинг статуса
 app.post('/api/ping', async (req, res) => {
-    const { username } = req.body;
-    if (!username) return res.sendStatus(400);
+    const { login } = req.body;
+    if (!login) return res.sendStatus(400);
     let db = await loadDatabase();
     if (!db.lastSeen) db.lastSeen = {};
-    db.lastSeen[username] = Date.now();
+    db.lastSeen[login] = Date.now();
     await saveDatabase(db);
     res.json({ success: true });
 });
 
-// Добавление в друзья по ID
-app.post('/api/add-friend-by-id', async (req, res) => {
-    const { username, targetId } = req.body;
+// Добавление в друзья по логину (ID)
+app.post('/api/add-friend', async (req, res) => {
+    const { login, targetLogin } = req.body;
+    const cleanTarget = targetLogin ? targetLogin.trim().toLowerCase() : '';
     let db = await loadDatabase();
 
-    const targetUser = db.idToUser?.[targetId];
-    if (!targetUser || targetUser === username) {
-        return res.status(400).json({ success: false, error: 'Пользователь с таким ID не найден' });
+    if (!db.users?.[cleanTarget] || cleanTarget === login) {
+        return res.status(400).json({ success: false, error: 'Пользователь с таким логином не найден' });
     }
 
-    if (!db.friends[username]) db.friends[username] = [];
-    if (!db.friends[username].includes(targetUser)) {
-        db.friends[username].push(targetUser);
+    if (!db.friends[login]) db.friends[login] = [];
+    if (!db.friends[login].includes(cleanTarget)) {
+        db.friends[login].push(cleanTarget);
         await saveDatabase(db);
     }
 
-    res.json({ success: true, db, friendName: targetUser });
+    res.json({ success: true, db });
 });
 
 // Отправка сообщения
@@ -210,6 +182,33 @@ app.post('/api/send-message', async (req, res) => {
 
     await saveDatabase(db);
     res.json({ success: true, db });
+});
+
+// Google News RSS
+app.get('/api/news', async (req, res) => {
+    try {
+        const rssRes = await fetch('https://news.google.com/rss?hl=ru&gl=RU&ceid=RU:ru');
+        const rssText = await rssRes.text();
+        const items = [];
+        const itemMatches = rssText.match(/<item>([\s\S]*?)<\/item>/g) || [];
+        
+        for (let i = 0; i < Math.min(15, itemMatches.length); i++) {
+            const item = itemMatches[i];
+            const titleMatch = item.match(/<title>([\s\S]*?)<\/title>/);
+            const linkMatch = item.match(/<link>([\s\S]*?)<\/link>/);
+            const dateMatch = item.match(/<pubDate>([\s\S]*?)<\/pubDate>/);
+
+            if (titleMatch) {
+                let title = titleMatch[1].replace('<![CDATA[', '').replace(']]>', '').trim();
+                let link = linkMatch ? linkMatch[1].replace('<![CDATA[', '').replace(']]>', '').trim() : '#';
+                let date = dateMatch ? new Date(dateMatch[1]).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '';
+                items.push({ title, link, date });
+            }
+        }
+        res.json({ success: true, news: items });
+    } catch (e) {
+        res.json({ success: false, news: [] });
+    }
 });
 
 app.listen(PORT, () => {
