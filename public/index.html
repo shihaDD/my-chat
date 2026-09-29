@@ -112,13 +112,13 @@
 
         let myPhone = localStorage.getItem('myPhone');
         let myName = localStorage.getItem('myName');
-        let activeChatId = null; // Может быть номером телефона, group_ID или community_ID
-        let activeChatType = null; // 'private', 'group', 'community', 'favorites'
+        let activeChatId = null;
+        let activeChatType = null;
         
         let allMessages = {};
         let groupsList = [];
         let communitiesList = [];
-        let mutedChats = []; // Список ID заглушенных чатов
+        let mutedChats = [];
 
         if (myPhone && myName) {
             document.getElementById('auth-screen').classList.add('hidden');
@@ -140,7 +140,6 @@
             }
         });
 
-        // Получение списков и истории
         socket.on('all_messages', (data) => {
             allMessages = data;
             renderChatList();
@@ -191,12 +190,10 @@
             }
         });
 
-        // Функция рендеринга списка чатов в сайдбаре
         function renderChatList() {
             const listEl = document.getElementById('chat-list');
             listEl.innerHTML = '';
 
-            // 1. Чат «Избранное»
             const favKey = `${myPhone}_${myPhone}`;
             const isFavMuted = mutedChats.includes(favKey);
             const favDiv = document.createElement('div');
@@ -211,7 +208,6 @@
             favDiv.onclick = () => selectChat(favKey, 'favorites', 'Избранное', '⭐');
             listEl.appendChild(favDiv);
 
-            // 2. Группы
             groupsList.forEach(group => {
                 if (group.members && group.members.includes(myPhone)) {
                     const chatKey = `group_${group.id}`;
@@ -230,7 +226,6 @@
                 }
             });
 
-            // 3. Сообщества
             communitiesList.forEach(com => {
                 if (com.subscribers && com.subscribers.includes(myPhone)) {
                     const chatKey = `community_${com.id}`;
