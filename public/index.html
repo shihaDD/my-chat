@@ -53,7 +53,7 @@
             z-index: 0;
         }
 
-        /* Главное окно мессенджера (изначально скрыто) */
+        /* Главное окно мессенджера */
         #chat-screen {
             display: none;
             width: 100vw;
@@ -69,7 +69,7 @@
         }
 
         /* Левая панель (список чатов) */
-        .sidebar { background: #ffffff; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; }
+        .sidebar { background: #ffffff; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; min-height: 0; }
         .sidebar-header {
             height: 60px;
             background: #f0f2f5;
@@ -78,6 +78,7 @@
             align-items: center;
             justify-content: space-between;
             border-right: 1px solid #d1d7db;
+            flex-shrink: 0;
         }
         .user-avatar-placeholder {
             width: 40px;
@@ -99,6 +100,7 @@
             border-bottom: 1px solid #f0f2f5;
             display: flex;
             align-items: center;
+            flex-shrink: 0;
         }
         .search-box {
             width: 100%;
@@ -111,7 +113,7 @@
             color: #3b4a54;
         }
 
-        #users-list { list-style: none; overflow-y: auto; flex: 1; background: #fff; }
+        #users-list { list-style: none; overflow-y: auto; flex: 1; background: #fff; min-height: 0; }
         #users-list li {
             padding: 12px 15px;
             cursor: pointer;
@@ -128,7 +130,7 @@
         .contact-status { font-size: 13px; color: #667781; margin-top: 2px; }
 
         /* Правая область чата */
-        .chat-area { display: flex; flex-direction: column; height: 100%; background: #efeae2; position: relative; }
+        .chat-area { display: flex; flex-direction: column; height: 100%; background: #efeae2; position: relative; min-height: 0; }
         
         .chat-header {
             height: 60px;
@@ -138,9 +140,10 @@
             align-items: center;
             gap: 15px;
             border-bottom: 1px solid #d1d7db;
+            flex-shrink: 0;
         }
 
-        /* Текстурный фон чата WhatsApp */
+        /* Текстурный фон чата WhatsApp — ИСПРАВЛЕННЫЙ СКРОЛЛ */
         .messages-container {
             flex: 1;
             padding: 20px 7%;
@@ -151,6 +154,7 @@
             display: flex;
             flex-direction: column;
             gap: 4px;
+            min-height: 0; /* Обязательно для работы скролла во флекс-контейнере */
         }
 
         /* Пузыри сообщений в стиле WhatsApp */
@@ -164,6 +168,7 @@
             position: relative;
             box-shadow: 0 1px 0.5px rgba(0,0,0,0.13);
             margin-bottom: 2px;
+            flex-shrink: 0;
         }
         .message.incoming {
             background: #ffffff;
@@ -199,6 +204,7 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            flex-shrink: 0;
         }
         .chat-input-area input {
             flex: 1;
@@ -293,7 +299,7 @@
                     myUsername = response.username;
                     myAvatarLabel.textContent = myUsername.charAt(0).toUpperCase();
                     authScreen.style.display = 'none';
-                    chatScreen.style.display = 'grid'; // Исправлено на grid
+                    chatScreen.style.display = 'grid';
                 } else {
                     alert(response.message);
                 }
