@@ -18,362 +18,58 @@
       --neon: 0 0 12px rgba(0, 255, 204, 0.25);
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { background-color: var(--bg-main); color: var(--text); height: 100vh; overflow: hidden; }
 
-    body {
-      background-color: var(--bg-main);
-      color: var(--text);
-      height: 100vh;
-      overflow: hidden;
-    }
-
-    /* Авторизация */
     #auth-container {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
+      display: flex; justify-content: center; align-items: center; height: 100vh;
       background: radial-gradient(circle, #181d32 0%, #0c0d14 100%);
     }
-
     .auth-box {
-      background: var(--bg-panel);
-      padding: 40px;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      box-shadow: var(--neon);
-      width: 360px;
-      text-align: center;
+      background: var(--bg-panel); padding: 40px; border-radius: 12px; border: 1px solid var(--border);
+      box-shadow: var(--neon); width: 360px; text-align: center;
     }
+    .auth-box h2 { margin-bottom: 25px; color: var(--accent); }
+    .auth-box input { width: 100%; padding: 12px; margin-bottom: 15px; background: var(--bg-main); border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
+    .auth-box button { width: 100%; padding: 12px; background: var(--accent); color: var(--bg-main); font-weight: bold; border: none; border-radius: 6px; cursor: pointer; }
+    .auth-switch { margin-top: 15px; font-size: 14px; color: var(--text-muted); cursor: pointer; }
 
-    .auth-box h2 {
-      margin-bottom: 25px;
-      color: var(--accent);
-    }
+    #app-container { display: none; height: 100vh; display: grid; grid-template-columns: 280px 1fr 340px; }
+    .left-sidebar { background: var(--bg-panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; height: 100vh; }
+    .app-logo { padding: 20px; font-size: 18px; font-weight: bold; color: var(--accent); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+    .nav-tabs { display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--border); background: var(--bg-main); }
+    .tab-btn { flex: 1 1 50%; padding: 10px 4px; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 11px; font-weight: 600; text-align: center; }
+    .tab-btn.active { color: var(--accent); border-bottom: 2px solid var(--accent); background: rgba(0, 255, 204, 0.05); }
+    .tab-body { flex: 1; overflow-y: auto; padding: 15px; }
 
-    .auth-box input {
-      width: 100%;
-      padding: 12px;
-      margin-bottom: 15px;
-      background: var(--bg-main);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text);
-    }
+    .user-card { padding: 10px; margin-bottom: 8px; background: var(--bg-card); border-radius: 6px; display: flex; justify-content: space-between; align-items: center; border: 1px solid transparent; }
+    .user-card:hover { border-color: var(--accent); }
 
-    .auth-box button {
-      width: 100%;
-      padding: 12px;
-      background: var(--accent);
-      color: var(--bg-main);
-      font-weight: bold;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: 0.2s;
-    }
+    .center-area { display: flex; flex-direction: column; height: 100vh; background: var(--bg-main); }
+    .chat-box { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
+    .chat-message { background: var(--bg-panel); padding: 12px 16px; border-radius: 8px; max-width: 70%; border: 1px solid var(--border); }
+    .chat-message .author { font-size: 12px; color: var(--accent); margin-bottom: 4px; }
+    .chat-message img { max-width: 100%; border-radius: 6px; margin-top: 8px; }
+    #typing-status-bar { padding: 4px 20px; font-size: 13px; color: var(--text-muted); font-style: italic; height: 24px; }
+    .chat-controls { padding: 15px 20px; background: var(--bg-panel); border-top: 1px solid var(--border); display: flex; gap: 10px; align-items: center; }
+    .chat-controls input[type="text"] { flex: 1; padding: 10px 15px; background: var(--bg-main); border: 1px solid var(--border); border-radius: 6px; color: var(--text); }
+    .chat-controls label { cursor: pointer; background: var(--bg-main); border: 1px solid var(--border); padding: 10px; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+    .chat-controls input[type="file"] { display: none; }
+    .chat-controls button { padding: 10px 20px; background: var(--accent); color: var(--bg-main); border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
 
-    .auth-box button:hover {
-      background: var(--accent-hover);
-      box-shadow: var(--neon);
-    }
+    .right-sidebar { background: var(--bg-panel); border-left: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; gap: 20px; height: 100vh; overflow-y: auto; }
+    .panel-box { background: var(--bg-main); border: 1px solid var(--border); padding: 15px; border-radius: 8px; }
+    .panel-box h3 { color: var(--accent); margin-bottom: 12px; font-size: 16px; }
+    .panel-box input, .panel-box select { width: 100%; padding: 8px; margin: 8px 0; background: var(--bg-panel); border: 1px solid var(--border); color: var(--text); border-radius: 4px; }
+    .panel-box button { width: 100%; padding: 10px; margin-top: 6px; background: var(--accent); color: var(--bg-main); border: none; border-radius: 4px; font-weight: bold; cursor: pointer; }
 
-    .auth-switch {
-      margin-top: 15px;
-      font-size: 14px;
-      color: var(--text-muted);
-      cursor: pointer;
-    }
-
-    /* Главный интерфейс */
-    #app-container {
-      display: none;
-      height: 100vh;
-      display: grid;
-      grid-template-columns: 280px 1fr 340px;
-    }
-
-    /* Левая панель */
-    .left-sidebar {
-      background: var(--bg-panel);
-      border-right: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-    }
-
-    .app-logo {
-      padding: 20px;
-      font-size: 20px;
-      font-weight: bold;
-      color: var(--accent);
-      border-bottom: 1px solid var(--border);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .nav-tabs {
-      display: flex;
-      flex-wrap: wrap;
-      border-bottom: 1px solid var(--border);
-      background: var(--bg-main);
-    }
-
-    .tab-btn {
-      flex: 1 1 50%;
-      padding: 10px 4px;
-      background: none;
-      border: none;
-      color: var(--text-muted);
-      cursor: pointer;
-      font-size: 11px;
-      font-weight: 600;
-      transition: 0.2s;
-      text-align: center;
-    }
-
-    .tab-btn.active {
-      color: var(--accent);
-      border-bottom: 2px solid var(--accent);
-      background: rgba(0, 255, 204, 0.05);
-    }
-
-    .tab-body {
-      flex: 1;
-      overflow-y: auto;
-      padding: 15px;
-    }
-
-    .user-card {
-      padding: 10px;
-      margin-bottom: 8px;
-      background: var(--bg-card);
-      border-radius: 6px;
-      cursor: pointer;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border: 1px solid transparent;
-      transition: 0.2s;
-    }
-
-    .user-card:hover {
-      border-color: var(--accent);
-    }
-
-    /* Центральная часть */
-    .center-area {
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      background: var(--bg-main);
-      position: relative;
-    }
-
-    .chat-box {
-      flex: 1;
-      overflow-y: auto;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-    }
-
-    .chat-message {
-      background: var(--bg-panel);
-      padding: 12px 16px;
-      border-radius: 8px;
-      max-width: 70%;
-      border: 1px solid var(--border);
-    }
-
-    .chat-message .author {
-      font-size: 12px;
-      color: var(--accent);
-      margin-bottom: 4px;
-    }
-
-    .chat-message img {
-      max-width: 100%;
-      border-radius: 6px;
-      margin-top: 8px;
-    }
-
-    #typing-status-bar {
-      padding: 4px 20px;
-      font-size: 13px;
-      color: var(--text-muted);
-      font-style: italic;
-      height: 24px;
-    }
-
-    .chat-controls {
-      padding: 15px 20px;
-      background: var(--bg-panel);
-      border-top: 1px solid var(--border);
-      display: flex;
-      gap: 10px;
-      align-items: center;
-    }
-
-    .chat-controls input[type="text"] {
-      flex: 1;
-      padding: 10px 15px;
-      background: var(--bg-main);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text);
-    }
-
-    .chat-controls label {
-      cursor: pointer;
-      background: var(--bg-main);
-      border: 1px solid var(--border);
-      padding: 10px;
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: 0.2s;
-    }
-
-    .chat-controls label:hover {
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-
-    .chat-controls input[type="file"] {
-      display: none;
-    }
-
-    .chat-controls button {
-      padding: 10px 20px;
-      background: var(--accent);
-      color: var(--bg-main);
-      border: none;
-      border-radius: 6px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-
-    /* Лента */
-    .feed-wrapper {
-      flex: 1;
-      overflow-y: auto;
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 30px;
-      height: 100vh;
-    }
-
-    .feed-post {
-      background: var(--bg-panel);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      width: 100%;
-      max-width: 450px;
-      overflow: hidden;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-    }
-
-    .feed-content {
-      width: 100%;
-      max-height: 500px;
-      object-fit: cover;
-      display: block;
-    }
-
-    .feed-info {
-      padding: 15px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    /* Правая панель (Профиль друга) */
-    .right-sidebar {
-      background: var(--bg-panel);
-      border-left: 1px solid var(--border);
-      padding: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 20px;
-      height: 100vh;
-      overflow-y: auto;
-    }
-
-    .panel-box {
-      background: var(--bg-main);
-      border: 1px solid var(--border);
-      padding: 15px;
-      border-radius: 8px;
-    }
-
-    .panel-box h3 {
-      color: var(--accent);
-      margin-bottom: 12px;
-      font-size: 16px;
-    }
-
-    .panel-box input, .panel-box select {
-      width: 100%;
-      padding: 8px;
-      margin: 8px 0;
-      background: var(--bg-panel);
-      border: 1px solid var(--border);
-      color: var(--text);
-      border-radius: 4px;
-    }
-
-    .panel-box button {
-      width: 100%;
-      padding: 10px;
-      margin-top: 6px;
-      background: var(--accent);
-      color: var(--bg-main);
-      border: none;
-      border-radius: 4px;
-      font-weight: bold;
-      cursor: pointer;
-    }
-
-    /* Модальное окно настроек */
-    #settings-modal {
-      display: none;
-      position: fixed;
-      top: 0; left: 0; width: 100%; height: 100%;
-      background: rgba(0,0,0,0.7);
-      justify-content: center;
-      align-items: center;
-      z-index: 1000;
-    }
-
-    .settings-content {
-      background: var(--bg-panel);
-      border: 1px solid var(--border);
-      padding: 30px;
-      border-radius: 12px;
-      width: 420px;
-      box-shadow: var(--neon);
-    }
-
-    .settings-content h3 {
-      color: var(--accent);
-      margin-bottom: 15px;
-    }
+    #settings-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); justify-content: center; align-items: center; z-index: 1000; }
+    .settings-content { background: var(--bg-panel); border: 1px solid var(--border); padding: 30px; border-radius: 12px; width: 420px; box-shadow: var(--neon); }
+    .settings-content h3 { color: var(--accent); margin-bottom: 15px; }
   </style>
 </head>
 <body>
 
-  <!-- Экран авторизации -->
   <div id="auth-container">
     <div class="auth-box">
       <h2 id="auth-title">Вход</h2>
@@ -384,10 +80,9 @@
     </div>
   </div>
 
-  <!-- Модальное окно настроек (Аудио, Рация и выбор устройств с разрешением микрофона) -->
   <div id="settings-modal">
     <div class="settings-content">
-      <h3>Настройки аудио и рации</h3>
+      <h3>Настройки аудиоустройств</h3>
       <button onclick="requestMicrophonePermission()" style="background:#ff3366; color:#fff; margin-bottom:15px;">🔒 Разрешить доступ к микрофону</button>
       
       <label style="font-size:12px; color:var(--text-muted);">Микрофон:</label>
@@ -396,22 +91,15 @@
       <label style="font-size:12px; color:var(--text-muted); margin-top:10px; display:block;">Наушники / Динамики:</label>
       <select id="speaker-select"><option value="">Вывод звука (Динамики)</option></select>
 
-      <h3 style="margin-top:20px; font-size:15px;">Рация (Push-to-Talk)</h3>
-      <p style="font-size:12px; color:var(--text-muted); margin-bottom:5px;">Текущая привязка:</p>
-      <input type="text" id="ptt-key-display" readonly value="Левая кнопка мыши (ЛКМ)" style="background:var(--bg-main); color:var(--accent); text-align:center; font-weight:bold;">
-      <button onclick="startKeyBinding()" style="background:var(--bg-main); border:1px solid var(--border); color:var(--text); margin-top:5px;">Изменить клавишу / кнопку мыши</button>
-
       <button onclick="toggleSettingsModal()" style="margin-top:20px; background:var(--accent);">Закрыть</button>
     </div>
   </div>
 
-  <!-- Основное приложение -->
   <div id="app-container">
-    <!-- Левая панель: Навигация и списки (Чаты, Друзья, Сообщества, Лента) -->
     <div class="left-sidebar">
       <div class="app-logo">
         <span id="current-username-view">Профиль</span>
-        <button onclick="toggleSettingsModal()" style="background:none; border:none; color:var(--accent); cursor:pointer; font-size:18px;" title="Настройки">⚙️️</button>
+        <button onclick="toggleSettingsModal()" style="background:none; border:none; color:var(--accent); cursor:pointer; font-size:18px;" title="Настройки">⚙</button>
       </div>
       <div class="nav-tabs">
         <button class="tab-btn active" onclick="switchAppTab('chats')">Чаты</button>
@@ -419,30 +107,23 @@
         <button class="tab-btn" onclick="switchAppTab('communities')">Сообщества</button>
         <button class="tab-btn" onclick="switchAppTab('feed')">Лента</button>
       </div>
-      <div class="tab-body" id="left-tab-content">
-        <!-- Динамическое наполнение -->
-      </div>
+      <div class="tab-body" id="left-tab-content"></div>
     </div>
 
-    <!-- Центральная область: Чаты или Лента -->
     <div class="center-area" id="center-dynamic-area">
       <div class="chat-box" id="chat-messages-box"></div>
       <div id="typing-status-bar"></div>
       <div class="chat-controls">
         <input type="text" id="chat-text-input" placeholder="Введите сообщение..." oninput="emitTypingEvent()">
-        <label title="Отправить фото">
-          📷
-          <input type="file" id="photo-picker" accept="image/*" onchange="sendPhotoFile(event)">
-        </label>
+        <label title="Отправить фото">📷<input type="file" id="photo-picker" accept="image/*" onchange="sendPhotoFile(event)"></label>
         <button onclick="sendChatMessage()">Отправить</button>
       </div>
     </div>
 
-    <!-- Правая панель: Профиль друга -->
     <div class="right-sidebar">
       <div class="panel-box" id="right-profile-box">
         <h3>Профиль</h3>
-        <p style="color: var(--text-muted); font-size: 13px;">Выберите пользователя во вкладке «Друзья», чтобы управлять им здесь.</p>
+        <p style="color: var(--text-muted); font-size: 13px;">Выберите пользователя или сообщество для управления.</p>
       </div>
     </div>
   </div>
@@ -452,12 +133,9 @@
     let isReg = false;
     let myUser = null;
     let activeTab = 'chats';
-    let feedDataCache = [];
     let usersCache = [];
+    let communitiesCache = [];
     let typingTimeout = null;
-
-    let boundKeyConfig = { type: 'mouse', code: 0, name: 'Левая кнопка мыши (ЛКМ)' };
-    let isBindingActive = false;
     let localStream = null;
     let peerConnection = null;
 
@@ -502,12 +180,21 @@
 
       socket.on('init_data', (data) => {
         renderChatMessages(data.messages);
-        feedDataCache = data.feed;
+        communitiesCache = data.communities;
       });
 
       socket.on('users_list', (users) => {
         usersCache = users;
         renderLeftTab();
+      });
+
+      socket.on('communities_updated', (comms) => {
+        communitiesCache = comms;
+        if (activeTab === 'communities') renderLeftTab();
+      });
+
+      socket.on('community_joined', (commData) => {
+        renderCommunityDetails(commData);
       });
 
       socket.on('chat_message', (msg) => {
@@ -517,30 +204,16 @@
       socket.on('user_typing', (data) => {
         const statusElem = document.getElementById('typing-status-bar');
         if (statusElem) {
-          if (data.active) {
-            statusElem.innerText = data.type === 'photo' ? `${data.username} отправляет фото...` : `${data.username} печатает...`;
-          } else {
-            statusElem.innerText = '';
-          }
+          statusElem.innerText = data.active ? `${data.username} печатает...` : '';
         }
-      });
-
-      socket.on('feed_updated', (feed) => {
-        feedDataCache = feed;
-        if (activeTab === 'feed') renderFeedStream();
       });
 
       // WebRTC Сигнализация для звонков
       socket.on('webrtc_offer', async ({ offer, sender }) => {
-        if (!confirm(
-          `Входящий звонок от пользователя ${sender}. Принять?`
-        )) return;
-
+        if (!confirm(`Входящий звонок от пользователя ${sender}. Принять?`)) return;
         await requestMicrophonePermission();
         peerConnection = new RTCPeerConnection(rtcConfig);
-        if (localStream) {
-          localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-        }
+        if (localStream) localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
         peerConnection.onicecandidate = e => {
           if (e.candidate) socket.emit('webrtc_ice_candidate', { candidate: e.candidate, target: sender });
@@ -560,15 +233,11 @@
       });
 
       socket.on('webrtc_answer', async ({ answer }) => {
-        if (peerConnection) {
-          await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-        }
+        if (peerConnection) await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
       });
 
       socket.on('webrtc_ice_candidate', async ({ candidate }) => {
-        if (peerConnection) {
-          await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-        }
+        if (peerConnection) await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
       });
     }
 
@@ -603,27 +272,6 @@
       activeTab = tab;
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       event.target.classList.add('active');
-
-      const center = document.getElementById('center-dynamic-area');
-      if (tab === 'feed') {
-        center.innerHTML = `
-          <div class="feed-wrapper" id="feed-scroll-box" onscroll="handleFeedScroll()"></div>
-        `;
-        renderFeedStream();
-      } else {
-        center.innerHTML = `
-          <div class="chat-box" id="chat-messages-box"></div>
-          <div id="typing-status-bar"></div>
-          <div class="chat-controls">
-            <input type="text" id="chat-text-input" placeholder="Введите сообщение..." oninput="emitTypingEvent()">
-            <label title="Отправить фото">
-              📷
-              <input type="file" id="photo-picker" accept="image/*" onchange="sendPhotoFile(event)">
-            </label>
-            <button onclick="sendChatMessage()">Отправить</button>
-          </div>
-        `;
-      }
       renderLeftTab();
     }
 
@@ -633,16 +281,13 @@
       container.innerHTML = '';
 
       if (activeTab === 'chats') {
-        container.innerHTML = '<p style="color:var(--text-muted); font-size:13px;">Общий чат активен в центре.</p>';
+        container.innerHTML = '<p style="color:var(--text-muted); font-size:13px;">Общий чат активен.</p>';
       } else if (activeTab === 'friends') {
         container.innerHTML = '<h4 style="font-size:12px; color:var(--accent); margin-bottom:8px;">Ваши друзья</h4>';
         usersCache.filter(u => u.isFriend && u.username !== myUser).forEach(u => {
           const div = document.createElement('div');
           div.className = 'user-card';
-          div.innerHTML = `
-            <span>${u.customName}</span>
-            <button style="padding:4px 8px; background:var(--accent); border:none; border-radius:4px; cursor:pointer;" onclick="openUserProfile('${u.username}', '${u.customName}')">Профиль</button>
-          `;
+          div.innerHTML = `<span>${u.customName}</span><button style="padding:4px 8px; background:var(--accent); border:none; border-radius:4px; cursor:pointer;" onclick="openUserProfile('${u.username}', '${u.customName}')">Профиль</button>`;
           container.appendChild(div);
         });
 
@@ -650,49 +295,85 @@
         usersCache.filter(u => u.hasIncoming).forEach(u => {
           const div = document.createElement('div');
           div.className = 'user-card';
-          div.innerHTML = `
-            <span>${u.username}</span>
-            <button style="padding:4px 8px; background:var(--accent); border:none; border-radius:4px; cursor:pointer;" onclick="acceptRequest('${u.username}')">Принять</button>
-          `;
+          div.innerHTML = `<span>${u.username}</span><button style="padding:4px 8px; background:var(--accent); border:none; border-radius:4px; cursor:pointer;" onclick="acceptRequest('${u.username}')">Принять</button>`;
           container.appendChild(div);
         });
 
-        container.innerHTML += '<h4 style="font-size:12px; color:var(--accent); margin:15px 0 8px 0;">Найти пользователей</h4>';
+        container.innerHTML += '<h4 style="font-size:12px; color:var(--accent); margin:15px 0 8px 0;">Пользователи</h4>';
         usersCache.filter(u => u.username !== myUser && !u.isFriend && !u.hasIncoming && !u.hasOutgoing).forEach(u => {
           const div = document.createElement('div');
           div.className = 'user-card';
-          div.innerHTML = `
-            <span>${u.username}</span>
-            <button style="padding:4px 8px; background:var(--border); color:var(--text); border:none; border-radius:4px; cursor:pointer;" onclick="sendFriendRequest('${u.username}')">Добавить</button>
-          `;
+          div.innerHTML = `<span>${u.username}</span><button style="padding:4px 8px; background:var(--border); color:var(--text); border:none; border-radius:4px; cursor:pointer;" onclick="sendFriendRequest('${u.username}')">Добавить</button>`;
           container.appendChild(div);
         });
       } else if (activeTab === 'communities') {
-        container.innerHTML = '<p style="color:var(--text-muted); font-size:13px;">Здесь отображаются ваши сообщества и группы.</p>';
-      } else if (activeTab === 'feed') {
-        container.innerHTML = '<p style="color:var(--text-muted); font-size:13px;">Совместный просмотр ленты.</p>';
+        container.innerHTML = `
+          <input type="text" id="new-comm-name" placeholder="Название сообщества..." style="width:100%; padding:8px; margin-bottom:8px; background:var(--bg-main); border:1px solid var(--border); color:var(--text); border-radius:4px;">
+          <button onclick="createCommunity()" style="width:100%; padding:8px; background:var(--accent); color:var(--bg-main); border:none; border-radius:4px; font-weight:bold; margin-bottom:15px; cursor:pointer;">Создать сообщество</button>
+          <h4 style="font-size:12px; color:var(--accent); margin-bottom:8px;">Список сообществ</h4>
+        `;
+        communitiesCache.forEach(comm => {
+          const div = document.createElement('div');
+          div.className = 'user-card';
+          div.innerHTML = `<span>${comm.name} (${comm.membersCount})</span><button style="padding:4px 8px; background:var(--accent); border:none; border-radius:4px; cursor:pointer;" onclick="openCommunity('${comm.id}')">Открыть</button>`;
+          container.appendChild(div);
+        });
       }
     }
 
-    function sendFriendRequest(targetUser) {
-      socket.emit('send_friend_request', { targetUser });
+    function sendFriendRequest(targetUser) { socket.emit('send_friend_request', { targetUser }); }
+    function acceptRequest(targetUser) { socket.emit('accept_friend_request', { targetUser }); }
+
+    function createCommunity() {
+      const name = document.getElementById('new-comm-name').value.trim();
+      if (!name) return;
+      socket.emit('create_community', { name });
     }
 
-    function acceptRequest(targetUser) {
-      socket.emit('accept_friend_request', { targetUser });
+    function openCommunity(communityId) {
+      socket.emit('get_community_details', { communityId });
     }
 
-    // Профиль друга в правой панели с функциями отправки сообщений и звонков
-    function openUserProfile(username, customName) {
+    function renderCommunityDetails(comm) {
       const rightBox = document.getElementById('right-profile-box');
+      let membersHtml = '';
+      let isCreator = comm.creator === myUser;
+
+      comm.members.forEach(m => {
+        let roleBadge = m.role === 'creator' ? '👑 Создатель' : (m.role === 'admin' ? '🛡 Админ' : '👤 Участник');
+        let roleAction = '';
+        if (isCreator && m.username !== myUser) {
+          if (m.role === 'member') {
+            roleAction = `<button style="padding:2px 6px; background:var(--accent); border:none; border-radius:4px; font-size:10px; cursor:pointer;" onclick="setMemberRole('${comm.id}', '${m.username}', 'admin')">Сделать админом</button>`;
+          } else {
+            roleAction = `<button style="padding:2px 6px; background:var(--border); border:none; border-radius:4px; font-size:10px; color:var(--text); cursor:pointer;" onclick="setMemberRole('${comm.id}', '${m.username}', 'member')">Снять админа</button>`;
+          }
+        }
+        membersHtml += `<div style="display:flex; justify-content:space-between; align-items:center; margin:6px 0; font-size:12px;"><span>${m.username} (${roleBadge})</span> ${roleAction}</div>`;
+      });
+
       rightBox.innerHTML = `
+        <h3>Сообщество: ${comm.name}</h3>
+        <p style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">Создатель: ${comm.creator}</p>
+        <h4 style="font-size:13px; color:var(--accent); margin-bottom:6px;">Участники:</h4>
+        ${membersHtml}
+        <button style="background:var(--accent); margin-top:10px;" onclick="joinCommunity('${comm.id}')">Вступить / Обновить</button>
+        <button style="background:#ff3366; color:#fff;" onclick="leaveCommunity('${comm.id}')">${isCreator ? 'Удалить сообщество' : 'Выйти'}</button>
+      `;
+    }
+
+    function joinCommunity(communityId) { socket.emit('join_community', { communityId }); }
+    function leaveCommunity(communityId) { socket.emit('leave_community', { communityId }); document.getElementById('right-profile-box').innerHTML = '<h3>Профиль</h3><p style="color:var(--text-muted); font-size:13px;">Выберите объект управления.</p>'; }
+    function setMemberRole(communityId, targetUser, newRole) { socket.emit('set_member_role', { communityId, targetUser, newRole }); }
+
+    function openUserProfile(username, customName) {
+      document.getElementById('right-profile-box').innerHTML = `
         <h3>Профиль: ${customName}</h3>
         <p style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">Аккаунт: ${username}</p>
-        <label style="font-size:12px; color:var(--text-muted);">Изменить псевдоним:</label>
+        <label style="font-size:12px; color:var(--text-muted);">Псевдоним:</label>
         <input type="text" id="edit-custom-name" value="${customName}">
         <button onclick="saveUserAlias('${username}')">Сохранить</button>
         <button style="background:var(--accent); color:var(--bg-main);" onclick="callUser('${username}')">📞 Позвонить</button>
-        <button style="background:#3366ff; color:#fff;" onclick="messageUser('${username}')">💬 Написать</button>
       `;
     }
 
@@ -725,35 +406,23 @@
       alert(`Звонок пользователю ${username} отправлен...`);
     }
 
-    function messageUser(username) {
-      switchAppTab('chats');
-      alert(`Открыт чат с пользователем ${username}`);
-    }
-
-    // Настройки
     function toggleSettingsModal() {
       const modal = document.getElementById('settings-modal');
       modal.style.display = modal.style.display === 'flex' ? 'none' : 'flex';
     }
 
-    // Чат и индикаторы
     function emitTypingEvent() {
-      socket.emit('typing_status', { type: 'typing', active: true });
+      socket.emit('typing_status', { active: true });
       clearTimeout(typingTimeout);
-      typingTimeout = setTimeout(() => {
-        socket.emit('typing_status', { type: 'typing', active: false });
-      }, 1500);
+      typingTimeout = setTimeout(() => socket.emit('typing_status', { active: false }), 1500);
     }
 
     function sendPhotoFile(e) {
       const file = e.target.files[0];
       if (!file) return;
-
-      socket.emit('typing_status', { type: 'photo', active: true });
       const reader = new FileReader();
       reader.onload = function(evt) {
         socket.emit('chat_message', { text: '', image: evt.target.result });
-        socket.emit('typing_status', { type: 'photo', active: false });
       };
       reader.readAsDataURL(file);
     }
@@ -762,16 +431,13 @@
       const input = document.getElementById('chat-text-input');
       const text = input.value.trim();
       if (!text) return;
-
       socket.emit('chat_message', { text, image: null });
       input.value = '';
-      socket.emit('typing_status', { type: 'typing', active: false });
     }
 
     function appendChatMessage(msg) {
       const box = document.getElementById('chat-messages-box');
       if (!box) return;
-
       const div = document.createElement('div');
       div.className = 'chat-message';
       div.innerHTML = `
@@ -788,75 +454,6 @@
       if (!box) return;
       box.innerHTML = '';
       messages.forEach(m => appendChatMessage(m));
-    }
-
-    // Лента
-    function renderFeedStream() {
-      const container = document.getElementById('feed-scroll-box');
-      if (!container) return;
-
-      container.innerHTML = '';
-      feedDataCache.forEach(item => {
-        const div = document.createElement('div');
-        div.className = 'feed-post';
-        div.innerHTML = `
-          ${item.type === 'video' 
-            ? `<video class="feed-content" src="${item.url}" controls loop></video>`
-            : `<img class="feed-content" src="${item.url}" alt="post">`
-          }
-          <div class="feed-info">
-            <span>${item.caption}</span>
-            <button onclick="likeFeed(${item.id})" style="background:none; border:none; color:var(--accent); cursor:pointer;">❤️ ${item.likes}</button>
-          </div>
-        `;
-        container.appendChild(div);
-      });
-    }
-
-    function handleFeedScroll() {
-      const container = document.getElementById('feed-scroll-box');
-      if (!container) return;
-      if (container.scrollTop + container.clientHeight >= container.scrollHeight - 50) {
-        socket.emit('load_more_feed');
-      }
-    }
-
-    function likeFeed(itemId) {
-      socket.emit('like_feed_item', { itemId });
-    }
-
-    // Настройка привязки клавиш
-    function startKeyBinding() {
-      isBindingActive = true;
-      const display = document.getElementById('ptt-key-display');
-      display.value = 'Нажмите клавишу или кнопку мыши...';
-
-      window.addEventListener('keydown', function keyListener(e) {
-        if (!isBindingActive) return;
-        isBindingActive = false;
-        e.preventDefault();
-
-        boundKeyConfig = { type: 'keyboard', code: e.code, name: `Клавиша [${e.key.toUpperCase()}]` };
-        display.value = boundKeyConfig.name;
-        window.removeEventListener('keydown', keyListener);
-      }, { once: true });
-
-      window.addEventListener('mousedown', function mouseListener(e) {
-        if (!isBindingActive) return;
-        isBindingActive = false;
-        e.preventDefault();
-
-        let name = 'Левая кнопка мыши (ЛКМ)';
-        if (e.button === 1) name = 'Средняя кнопка мыши (СКМ)';
-        if (e.button === 2) name = 'Правая кнопка мыши (ПКМ)';
-        if (e.button === 3) name = 'Боковая кнопка мыши (Назад)';
-        if (e.button === 4) name = 'Боковая кнопка мыши (Вперед)';
-        if (e.button > 4) name = `Кнопка мыши #${e.button + 1}`;
-
-        boundKeyConfig = { type: 'mouse', code: e.button, name };
-        display.value = boundKeyConfig.name;
-        window.removeEventListener('mousedown', mouseListener);
-      }, { once: true });
     }
   </script>
 </body>
