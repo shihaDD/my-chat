@@ -20,12 +20,12 @@
         }
         .hidden { display: none !important; }
         
-        .modal-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(11, 12, 16, 0.95); display: flex; justify-content: center; align-items: center; z-index: 2000; border-radius: 0; }
+        .modal-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(11, 12, 16, 0.95); display: flex; justify-content: center; align-items: center; z-index: 2000; }
         .modal { background: #1f2833; padding: 35px; border-radius: 12px; width: 420px; border: 1px solid #66fcf1; box-shadow: 0 0 30px rgba(102, 252, 241, 0.4); text-align: center; display: flex; flex-direction: column; gap: 12px; max-height: 95vh; overflow-y: auto; }
         .modal h3 { color: #66fcf1; margin-top: 0; text-transform: uppercase; letter-spacing: 2px; }
         
         .auth-tabs { display: flex; gap: 10px; margin-bottom: 5px; }
-        .auth-tab-btn { flex: 1; padding: 10px; background: #0b0c10; border: 1px solid #45a29e; color: #c5c6c7; border-radius: 6px; cursor: pointer; font-weight: bold; text-transform: uppercase; font-size: 12px; }
+        .auth-tab-btn { flex: 1; padding: 10px; background: #0b0c10; border: 1px solid #45a29e; color: #c5c6c7; border-radius: 6px; cursor: pointer; font-weight: bold; text-transform: uppercase; font-size: 11px; }
         .auth-tab-btn.active { border-color: #66fcf1; color: #66fcf1; background: rgba(102, 252, 241, 0.1); box-shadow: 0 0 8px rgba(102, 252, 241, 0.3); }
 
         .pass-status { font-size: 12px; text-align: left; min-height: 15px; font-weight: bold; }
@@ -92,8 +92,6 @@
         .msg.other { background: #1f2833; border: 1px solid #45a29e; }
         
         .msg-media { max-width: 100%; max-height: 250px; border-radius: 6px; margin-top: 6px; display: block; border: 1px solid #45a29e; }
-        .msg-file { display: inline-block; color: #66fcf1; text-decoration: underline; margin-top: 4px; font-size: 13px; }
-
         .send-panel { display: flex; gap: 8px; align-items: center; }
         .send-panel input { flex-grow: 1; }
         .file-btn { background: transparent; border: 1px solid #45a29e; color: #66fcf1; padding: 12px; border-radius: 6px; cursor: pointer; }
@@ -106,9 +104,6 @@
         .preset-avatars { display: flex; gap: 10px; justify-content: center; margin: 5px 0; }
         .preset-avatars img { width: 45px; height: 45px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
         .preset-avatars img.selected { border-color: #66fcf1; box-shadow: 0 0 8px #66fcf1; }
-
-        .link-btn { background: none; border: none; color: #66fcf1; cursor: pointer; font-size: 12px; text-decoration: underline; text-transform: none; padding: 0; margin-top: 5px; }
-        .link-btn:hover { color: #fff; box-shadow: none; }
 
         h4 { color: #66fcf1; margin-top: 0; }
         b { color: #66fcf1; }
@@ -178,24 +173,6 @@
         </div>
     </div>
 
-    <!-- ОКНО ИНФО О ДРУГЕ И ПЕРЕИМЕНОВАНИЯ -->
-    <div id="contactInfoModal" class="modal-overlay hidden">
-        <div class="modal">
-            <h3>Информация о контакте</h3>
-            <img id="contactModalAvatar" class="avatar-lg" src="" alt="">
-            <p id="contactModalRealName" style="color:#66fcf1; font-weight:bold; margin: 5px 0;"></p>
-            <p id="contactModalLogin" style="color:#aaa; font-size: 12px; margin: 0 0 10px 0;"></p>
-            
-            <p style="font-size: 12px; margin: 0; color: #aaa; text-align: left;">Локальный псевдоним (имя для вас):</p>
-            <input type="text" id="contactNicknameInput" placeholder="Новое имя контакта...">
-            
-            <div style="display: flex; gap: 10px; margin-top: 10px;">
-                <button onclick="saveContactNickname()" style="flex: 1;">Сохранить</button>
-                <button onclick="closeContactModal()" style="flex: 1; background: #333; color:#fff;">Закрыть</button>
-            </div>
-        </div>
-    </div>
-
     <!-- ОКНО НАСТРОЕК ПРОФИЛЯ -->
     <div id="profileModal" class="modal-overlay hidden">
         <div class="modal">
@@ -204,7 +181,21 @@
             <input type="text" id="editNameInput" placeholder="Ваше имя...">
             <input type="email" id="editEmailInput" placeholder="Электронная почта (email)...">
             
-            <button onclick="requestMicrophonePermission()" style="background: #1f2833; border: 1px solid #66fcf1; color: #66fcf1; margin-top: 5px;">🎤 Включить микрофон</button>
+            <p style="font-size: 12px; margin: 0; color: #aaa; text-align: left;">Звук уведомлений:</p>
+            <select id="notificationSoundSelect" onchange="saveNotificationSoundPreference()" style="width: 100%;">
+                <option value="beep">1. Классический Бип</option>
+                <option value="pop">2. Пуп (Pop)</option>
+                <option value="bell">3. Колокольчик</option>
+                <option value="chime">4. Мелодичный перезвон</option>
+                <option value="marimba">5. Марианна</option>
+                <option value="drop">6. Капля воды</option>
+                <option value="laser">7. Лазерный импульс</option>
+                <option value="bubble">8. Пузырик</option>
+                <option value="pling">9. Плинг</option>
+                <option value="cyber">10. Кибер-сигнал</option>
+            </select>
+
+            <button onclick="requestMicrophonePermission()" style="background: #1f2833; border: 1px solid #66fcf1; color: #66fcf1; margin-top: 5px;">🎤 Проверить микрофон</button>
 
             <div style="display: flex; gap: 10px; margin-top: 10px;">
                 <button onclick="toggleProfileModal()" style="flex: 1; background: #333; color:#fff;">Закрыть</button>
@@ -254,7 +245,6 @@
                     <span id="currentUserLogin" style="color:#66fcf1;"></span>
                 </div>
             </div>
-            <div id="lastLoginInfo" style="font-size: 9px; color: #777;">Последний вход: <span id="lastLoginText"></span></div>
             
             <div style="display: flex; gap: 4px; margin-top: 4px;">
                 <button class="nav-btn" onclick="toggleProfileModal()" style="flex: 1; text-align: center; border-color: #45a29e; color: #66fcf1; font-size: 18px; padding: 8px;" title="Настройки">⚙</button>
@@ -265,9 +255,10 @@
         <div class="tab-pane" id="leftPane">
             <h4 id="paneTitle">Сообщения</h4>
             
-            <div id="friendsSubTabs" class="hidden" style="display: flex; gap: 5px; margin-bottom: 10px;">
-                <button class="auth-tab-btn active" id="subFriendsBtn" onclick="switchFriendsSubTab('list')" style="font-size: 11px; padding: 6px;">Мои друзья</button>
-                <button class="auth-tab-btn" id="subRequestsBtn" onclick="switchFriendsSubTab('requests')" style="font-size: 11px; padding: 6px; position:relative;">Заявки <span id="requestsTabBadge" class="badge hidden" style="top:2px; right:2px;">0</span></button>
+            <div id="friendsSubTabs" class="hidden" style="display: flex; gap: 3px; margin-bottom: 10px;">
+                <button class="auth-tab-btn active" id="subFriendsBtn" onclick="switchFriendsSubTab('list')" style="font-size: 10px; padding: 5px;">Мои</button>
+                <button class="auth-tab-btn" id="subRequestsBtn" onclick="switchFriendsSubTab('requests')" style="font-size: 10px; padding: 5px; position:relative;">Входящие <span id="requestsTabBadge" class="badge hidden" style="top:2px; right:2px;">0</span></button>
+                <button class="auth-tab-btn" id="subOutcomingBtn" onclick="switchFriendsSubTab('outcoming')" style="font-size: 10px; padding: 5px;">Исходящие</button>
             </div>
 
             <div id="addFriendBox" class="hidden" style="margin-bottom: 10px; display: flex; flex-direction: column; gap: 6px;">
@@ -276,7 +267,7 @@
             </div>
             
             <div id="addGroupBox" class="hidden" style="margin-bottom: 10px; display: flex; flex-direction: column; gap: 6px;">
-                <input type="text" id="groupSearchInput" placeholder="Поиск сообщества по названию..." oninput="updateTabContent()" style="font-size:13px; padding:8px;">
+                <input type="text" id="groupSearchInput" placeholder="Поиск сообщества..." oninput="updateTabContent()" style="font-size:13px; padding:8px;">
                 <input type="text" id="groupNameInput" placeholder="Название новой группы..." style="font-size:13px; padding:8px;">
                 <button onclick="createGroup()" style="font-size:12px; padding:8px;">+ Создать группу</button>
             </div>
@@ -288,7 +279,7 @@
             <div class="chat-header">
                 <h4 id="contentTitle" style="margin: 0;">Выбери чат</h4>
                 <div style="display: flex; gap: 8px; align-items: center;">
-                    <button id="groupSettingsBtn" class="hidden" onclick="openGroupSettingsModal()" style="padding: 6px 12px; font-size: 11px; background: #66fcf1; color: #0b0c10;">⚙ Настройки сообщества</button>
+                    <button id="groupSettingsBtn" class="hidden" onclick="openGroupSettingsModal()" style="padding: 6px 12px; font-size: 11px; background: #66fcf1; color: #0b0c10;">⚙ Настройки</button>
                     <div id="callButtons" class="call-buttons hidden">
                         <button onclick="startCall()">🎙️ Аудиозвонок</button>
                     </div>
@@ -336,7 +327,7 @@
     let remoteStream;
     let incomingCallData = null;
     let callRingerInterval = null;
-    let editingContactLogin = '';
+    let lastRequestCount = 0;
     const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
     function showNeonAlert(title, text) {
@@ -346,6 +337,145 @@
     }
     function closeNeonAlert() {
         document.getElementById('neonAlertModal').classList.add('hidden');
+    }
+
+    // СИСТЕМА ИГРЫ 10 ЗВУКОВ ОПОВЕЩЕНИЙ
+    function playNotificationSound(soundType = 'beep') {
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const now = audioCtx.currentTime;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (soundType === 'pop') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600, now);
+                osc.frequency.exponentialRampToValueAtTime(150, now + 0.1);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+            } else if (soundType === 'bell') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(880, now);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+                osc.start(now);
+                osc.stop(now + 0.4);
+            } else if (soundType === 'chime') {
+                [523.25, 659.25, 783.99].forEach((freq, idx) => {
+                    const o = audioCtx.createOscillator();
+                    const g = audioCtx.createGain();
+                    o.connect(g); g.connect(audioCtx.destination);
+                    o.frequency.setValueAtTime(freq, now + idx * 0.08);
+                    g.gain.setValueAtTime(0.15, now + idx * 0.08);
+                    g.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.2);
+                    o.start(now + idx * 0.08);
+                    o.stop(now + idx * 0.08 + 0.2);
+                });
+            } else if (soundType === 'marimba') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(440, now);
+                osc.frequency.setValueAtTime(554.37, now + 0.1);
+                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            } else if (soundType === 'drop') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(900, now + 0.15);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            } else if (soundType === 'laser') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(900, now);
+                osc.frequency.exponentialRampToValueAtTime(100, now + 0.2);
+                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            } else if (soundType === 'bubble') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.exponentialRampToValueAtTime(700, now + 0.12);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+                osc.start(now);
+                osc.stop(now + 0.12);
+            } else if (soundType === 'pling') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(1200, now);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            } else if (soundType === 'cyber') {
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.setValueAtTime(600, now + 0.08);
+                osc.frequency.setValueAtTime(900, now + 0.16);
+                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+                osc.start(now);
+                osc.stop(now + 0.25);
+            } else { // beep по умолчанию
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(440, now);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                osc.start(now);
+                osc.stop(now + 0.15);
+            }
+        } catch (e) {}
+    }
+
+    // ТЕЛЕФОННЫЙ РИНГТОН НА ЗВОНОК
+    function playPhoneRinger() {
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const now = audioCtx.currentTime;
+            [0, 0.2].forEach(delay => {
+                const osc1 = audioCtx.createOscillator();
+                const osc2 = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc1.type = 'sine'; osc1.frequency.setValueAtTime(425, now + delay);
+                osc2.type = 'sine'; osc2.frequency.setValueAtTime(450, now + delay);
+                gain.gain.setValueAtTime(0.15, now + delay);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.15);
+                osc1.connect(gain); osc2.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc1.start(now + delay); osc2.start(now + delay);
+                osc1.stop(now + delay + 0.15); osc2.stop(now + delay + 0.15);
+            });
+        } catch (e) {}
+    }
+
+    function startPhoneRingingLoop() {
+        stopPhoneRingingLoop();
+        playPhoneRinger();
+        callRingerInterval = setInterval(playPhoneRinger, 2000);
+    }
+
+    function stopPhoneRingingLoop() {
+        if (callRingerInterval) {
+            clearInterval(callRingerInterval);
+            callRingerInterval = null;
+        }
+    }
+
+    function getSelectedSound() {
+        return localStorage.getItem('v_odno_eblo_sound') || 'beep';
+    }
+
+    function saveNotificationSoundPreference() {
+        const val = document.getElementById('notificationSoundSelect').value;
+        localStorage.setItem('v_odno_eblo_sound', val);
+        playNotificationSound(val);
     }
 
     async function requestMicrophonePermission() {
@@ -360,6 +490,9 @@
 
     window.onload = async () => {
         await loadData();
+        const savedSound = localStorage.getItem('v_odno_eblo_sound');
+        if (savedSound) document.getElementById('notificationSoundSelect').value = savedSound;
+
         if (currentUserLogin && dbData.users && dbData.users[currentUserLogin]) {
             document.getElementById('authModal').classList.add('hidden');
             initApp();
@@ -379,9 +512,11 @@
         const callerName = (dbData.users && dbData.users[from]) ? dbData.users[from].name : from;
         document.getElementById('callNotifText').textContent = `Входящий аудиовызов от ${callerName}`;
         document.getElementById('customCallNotification').classList.remove('hidden');
+        startPhoneRingingLoop();
     });
 
     async function acceptIncomingCall() {
+        stopPhoneRingingLoop();
         document.getElementById('customCallNotification').classList.add('hidden');
         if (!incomingCallData) return;
         const { from, offer } = incomingCallData;
@@ -392,6 +527,7 @@
     }
 
     function declineIncomingCall() {
+        stopPhoneRingingLoop();
         document.getElementById('customCallNotification').classList.add('hidden');
         if (incomingCallData) {
             socket.emit('hang-up', { to: incomingCallData.from });
@@ -418,6 +554,12 @@
         dbData = newData;
 
         if (currentUserLogin && dbData.users && dbData.users[currentUserLogin]) {
+            const currentReqCount = (dbData.friendRequests && dbData.friendRequests[currentUserLogin]) ? dbData.friendRequests[currentUserLogin].length : 0;
+            if (currentReqCount > lastRequestCount) {
+                playNotificationSound(getSelectedSound());
+            }
+            lastRequestCount = currentReqCount;
+
             updateFriendBadges();
             updateTabContent();
             if (currentPartner) {
@@ -457,16 +599,12 @@
         const title = document.getElementById('modalTitle');
 
         if (mode === 'login') {
-            tabLogin.classList.add('active');
-            tabReg.classList.remove('active');
-            loginSec.classList.remove('hidden');
-            regSec.classList.add('hidden');
+            tabLogin.classList.add('active'); tabReg.classList.remove('active');
+            loginSec.classList.remove('hidden'); regSec.classList.add('hidden');
             title.textContent = 'Вход в систему';
         } else {
-            tabReg.classList.add('active');
-            tabLogin.classList.remove('active');
-            regSec.classList.remove('hidden');
-            loginSec.classList.add('hidden');
+            tabReg.classList.add('active'); tabLogin.classList.remove('active');
+            regSec.classList.remove('hidden'); loginSec.classList.add('hidden');
             title.textContent = 'Регистрация аккаунта';
             checkRegPasswords();
         }
@@ -484,20 +622,12 @@
         const statusEl = document.getElementById('regPassStatus');
         const authBtn = document.getElementById('regSubmitBtn');
 
-        if (!p1 && !p2) {
-            statusEl.textContent = '';
-            authBtn.disabled = true;
-            return;
-        }
+        if (!p1 && !p2) { statusEl.textContent = ''; authBtn.disabled = true; return; }
 
         if (p1 === p2 && p1.length >= 3) {
-            statusEl.textContent = '✔ Пароли совпадают';
-            statusEl.style.color = '#66fcf1';
-            authBtn.disabled = false;
+            statusEl.textContent = '✔ Пароли совпадают'; statusEl.style.color = '#66fcf1'; authBtn.disabled = false;
         } else {
-            statusEl.textContent = '✖ Пароли не совпадают или короткие';
-            statusEl.style.color = '#ff007f';
-            authBtn.disabled = true;
+            statusEl.textContent = '✖ Пароли не совпадают или короткие'; statusEl.style.color = '#ff007f'; authBtn.disabled = true;
         }
     }
 
@@ -554,7 +684,6 @@
         document.getElementById('currentUserName').textContent = userData.name;
         document.getElementById('currentUserLogin').textContent = `@${userData.login}`;
         document.getElementById('navUserAvatar').src = userData.avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1';
-        document.getElementById('lastLoginText').textContent = userData.lastLoginTime || 'Только что';
         
         socket.emit('register', currentUserLogin);
         switchTab('messages');
@@ -578,7 +707,6 @@
         if (!g) return;
 
         document.getElementById('editGroupNameInput').value = g.name;
-
         const membersListEl = document.getElementById('groupMembersList');
         membersListEl.innerHTML = '';
 
@@ -588,11 +716,7 @@
             const role = g.roles?.[mLogin] || (g.creator === mLogin ? 'Создатель' : 'Участник');
 
             const row = document.createElement('div');
-            row.style.display = 'flex';
-            row.style.alignItems = 'center';
-            row.style.justifyContent = 'space-between';
-            row.style.padding = '4px 0';
-            row.style.borderBottom = '1px solid #1f2833';
+            row.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid #1f2833;';
 
             let roleControl = `<span style="color:#66fcf1; font-size:12px;">${role}</span>`;
             if (g.creator === currentUserLogin && mLogin !== g.creator) {
@@ -623,11 +747,7 @@
             body: JSON.stringify({ groupId, login: currentUserLogin, targetLogin, newRole })
         });
         const data = await res.json();
-        if (data.success) {
-            dbData = data.db;
-        } else {
-            showNeonAlert('Ошибка', data.error || 'Не удалось изменить роль');
-        }
+        if (data.success) { dbData = data.db; } else { showNeonAlert('Ошибка', data.error); }
     }
 
     async function saveGroupSettings() {
@@ -646,54 +766,12 @@
             closeGroupSettingsModal();
             showNeonAlert('Успешно', 'Настройки сообщества сохранены!');
         } else {
-            showNeonAlert('Ошибка', data.error || 'Ошибка сохранения');
-        }
-    }
-
-    function openContactInfo(targetLogin, event) {
-        event?.stopPropagation();
-        editingContactLogin = targetLogin;
-        const u = dbData.users[targetLogin];
-        if (!u) return;
-
-        const currentNickname = (dbData.nicknames && dbData.nicknames[currentUserLogin] && dbData.nicknames[currentUserLogin][targetLogin]) ? dbData.nicknames[currentUserLogin][targetLogin] : u.name;
-        document.getElementById('contactModalAvatar').src = u.avatar;
-        document.getElementById('contactModalRealName').textContent = `Имя: ${u.name}`;
-        document.getElementById('contactModalLogin').textContent = `@${u.login}`;
-        document.getElementById('contactNicknameInput').value = currentNickname;
-        document.getElementById('contactInfoModal').classList.remove('hidden');
-    }
-
-    function closeContactModal() {
-        document.getElementById('contactInfoModal').classList.add('hidden');
-        editingContactLogin = '';
-    }
-
-    async function saveContactNickname() {
-        const nickname = document.getElementById('contactNicknameInput').value.trim();
-        if (!editingContactLogin) return;
-
-        const res = await fetch('/api/set-nickname', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ login: currentUserLogin, targetLogin: editingContactLogin, nickname })
-        });
-        const data = await res.json();
-        if (data.success) {
-            dbData = data.db;
-            updateTabContent();
-            if (currentPartner === editingContactLogin) {
-                selectPartner(editingContactLogin, false);
-            }
-            closeContactModal();
-            showNeonAlert('Успешно', 'Контакт переименован!');
+            showNeonAlert('Ошибка', data.error);
         }
     }
 
     function getDisplayName(login) {
         if (login === currentUserLogin) return 'Избранное';
-        const nick = (dbData.nicknames && dbData.nicknames[currentUserLogin]) ? dbData.nicknames[currentUserLogin][login] : null;
-        if (nick) return nick;
         return (dbData.users && dbData.users[login]) ? dbData.users[login].name : login;
     }
 
@@ -702,7 +780,6 @@
         location.reload();
     }
 
-    // Использование стабильных публичных MP4 видео-заглушек
     async function fetchMemes() {
         memeList = [
             { title: 'Когда зашел в мессенджер В Одно Ебло 🔥', url: 'https://www.w3schools.com/html/mov_bbb.mp4', author: 'TikTok Россия' },
@@ -755,15 +832,14 @@
 
     function switchFriendsSubTab(subTab) {
         friendsSubTab = subTab;
-        const btnList = document.getElementById('subFriendsBtn');
-        const btnReq = document.getElementById('subRequestsBtn');
-        if (subTab === 'list') {
-            btnList.classList.add('active');
-            btnReq.classList.remove('active');
-        } else {
-            btnReq.classList.add('active');
-            btnList.classList.remove('active');
-        }
+        document.getElementById('subFriendsBtn').classList.remove('active');
+        document.getElementById('subRequestsBtn').classList.remove('active');
+        document.getElementById('subOutcomingBtn').classList.remove('active');
+
+        if (subTab === 'list') document.getElementById('subFriendsBtn').classList.add('active');
+        else if (subTab === 'requests') document.getElementById('subRequestsBtn').classList.add('active');
+        else if (subTab === 'outcoming') document.getElementById('subOutcomingBtn').classList.add('active');
+
         updateTabContent();
     }
 
@@ -793,8 +869,8 @@
                 const div = document.createElement('div');
                 div.className = `item-card ${currentPartner === l ? 'active' : ''}`;
                 div.innerHTML = `
-                    <img class="avatar-sm" src="${u.avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1'}" onclick="openContactInfo('${l}', event)">
-                    <span style="flex-grow:1;" onclick="selectPartner('${l}', false)">${displayName} <small style="color:#66fcf1">@${u.login}</small></span> 
+                    <img class="avatar-sm" src="${u.avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1'}">
+                    <span style="flex-grow:1;">${displayName} <small style="color:#66fcf1">@${u.login}</small></span> 
                     <span class="status-dot ${online ? 'status-online' : 'status-offline'}"></span>
                 `;
                 div.onclick = () => selectPartner(l, false);
@@ -807,26 +883,28 @@
                     const u = dbData.users[l];
                     if (!u) return;
                     const online = isOnline(l);
-                    const displayName = getDisplayName(l);
                     const div = document.createElement('div');
                     div.className = `item-card ${currentPartner === l ? 'active' : ''}`;
                     div.innerHTML = `
-                        <img class="avatar-sm" src="${u.avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1'}" onclick="openContactInfo('${l}', event)">
-                        <span style="flex-grow:1;" onclick="selectPartner('${l}', false)">${displayName} <small style="color:#66fcf1">@${u.login}</small></span> 
+                        <img class="avatar-sm" src="${u.avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1'}">
+                        <span style="flex-grow:1;">${u.name} <small style="color:#66fcf1">@${u.login}</small></span> 
                         <span class="status-dot ${online ? 'status-online' : 'status-offline'}"></span>
                     `;
                     div.onclick = () => selectPartner(l, false);
                     listDiv.appendChild(div);
                 });
-            } else {
+            } else if (friendsSubTab === 'requests') {
                 const reqs = (dbData.friendRequests && dbData.friendRequests[currentUserLogin]) ? dbData.friendRequests[currentUserLogin] : [];
+                if (reqs.length === 0) {
+                    listDiv.innerHTML = '<i style="color:#45a29e; font-size:12px; padding:5px;">Нет входящих заявок</i>';
+                    return;
+                }
                 reqs.forEach(reqLogin => {
                     const u = dbData.users[reqLogin];
                     if (!u) return;
                     const div = document.createElement('div');
                     div.className = 'item-card';
-                    div.style.flexDirection = 'column';
-                    div.style.alignItems = 'stretch';
+                    div.style.cssText = 'flex-direction: column; align-items: stretch;';
                     div.innerHTML = `
                         <div style="display:flex; align-items:center; gap:8px;">
                             <img class="avatar-sm" src="${u.avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1'}">
@@ -836,6 +914,31 @@
                             <button onclick="respondFriendRequestFromTab('${reqLogin}', true)" style="flex:1; font-size:10px; padding:6px; background:#45a29e; color:#0b0c10;">Принять</button>
                             <button onclick="respondFriendRequestFromTab('${reqLogin}', false)" style="flex:1; font-size:10px; padding:6px; background:#ff007f; color:#fff;">Отклонить</button>
                         </div>
+                    `;
+                    listDiv.appendChild(div);
+                });
+            } else if (friendsSubTab === 'outcoming') {
+                // ИСХОДЯЩИЕ ЗАЯВКИ
+                let outcoming = [];
+                if (dbData.friendRequests) {
+                    Object.entries(dbData.friendRequests).forEach(([targetUser, reqList]) => {
+                        if (reqList && reqList.includes(currentUserLogin)) {
+                            outcoming.push(targetUser);
+                        }
+                    });
+                }
+                if (outcoming.length === 0) {
+                    listDiv.innerHTML = '<i style="color:#45a29e; font-size:12px; padding:5px;">Нет исходящих заявок</i>';
+                    return;
+                }
+                outcoming.forEach(targetLogin => {
+                    const u = dbData.users[targetLogin];
+                    if (!u) return;
+                    const div = document.createElement('div');
+                    div.className = 'item-card';
+                    div.innerHTML = `
+                        <img class="avatar-sm" src="${u.avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1'}">
+                        <span style="flex-grow:1;">${u.name}<br><small style="color:#66fcf1">⏳ Ожидает ответа (@${u.login})</small></span>
                     `;
                     listDiv.appendChild(div);
                 });
@@ -863,11 +966,7 @@
                     <small style="color:${isMember?'#66fcf1':'#ff007f'}">${isMember ? '' : 'Вступить'}</small>
                 `;
                 div.onclick = () => {
-                    if (!isMember) {
-                        joinGroup(gId);
-                    } else {
-                        selectPartner(gId, true);
-                    }
+                    if (!isMember) { joinGroup(gId); } else { selectPartner(gId, true); }
                 };
                 listDiv.appendChild(div);
             });
@@ -875,7 +974,7 @@
     }
 
     async function addFriend() {
-        let targetLogin = document.getElementById('friendLoginInput').value.trim();
+        let targetLogin = document.getElementById('friendLoginInput').value.trim().toLowerCase();
         if (!targetLogin) return showNeonAlert('Ошибка', 'Введите логин друга!');
 
         const res = await fetch('/api/add-friend', {
@@ -887,6 +986,7 @@
         if (data.success) {
             document.getElementById('friendLoginInput').value = '';
             showNeonAlert('Успешно', 'Заявка в друзья отправлена!');
+            dbData = data.db;
             updateTabContent();
         } else {
             showNeonAlert('Ошибка', data.error || 'Ошибка');
@@ -904,6 +1004,7 @@
             dbData = data.db;
             updateFriendBadges();
             updateTabContent();
+            showNeonAlert('Информация', accept ? 'Заявка принята, теперь вы друзья!' : 'Заявка отклонена.');
         }
     }
 
@@ -1083,8 +1184,7 @@
                 body: JSON.stringify({ groupId: currentPartner, sender: currentUserLogin, text, media: attachedMedia })
             });
             const data = await res.json();
-            if (data.success) dbData = data.db;
-            else return showNeonAlert('Ошибка', data.error);
+            if (data.success) { dbData = data.db; } else { return showNeonAlert('Ошибка', data.error); }
         } else {
             const res = await fetch('/api/send-message', {
                 method: 'POST',
@@ -1179,6 +1279,7 @@
     }
 
     function closeCall() {
+        stopPhoneRingingLoop();
         if (localStream) localStream.getTracks().forEach(t => t.stop());
         if (peerConnection) peerConnection.close();
         peerConnection = null;
