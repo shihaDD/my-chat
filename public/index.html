@@ -100,7 +100,7 @@
         .file-btn:hover { background: rgba(102, 252, 241, 0.1); }
 
         .meme-card { background: #0b0c10; border: 1px solid #45a29e; padding: 12px; border-radius: 8px; margin-bottom: 12px; text-align: center; }
-        .meme-card img { max-width: 100%; max-height: 350px; border-radius: 6px; margin-top: 8px; border: 1px solid #45a29e; }
+        .meme-card img, .meme-card video { max-width: 100%; max-height: 350px; border-radius: 6px; margin-top: 8px; border: 1px solid #45a29e; }
         .meme-card p { color: #66fcf1; font-size: 14px; margin: 0 0 6px 0; font-weight: bold; }
 
         .preset-avatars { display: flex; gap: 10px; justify-content: center; margin: 5px 0; }
@@ -235,7 +235,7 @@
         </div>
     </div>
 
-    <!-- ОКНО НАСТРОЕК ПРОФИЛЯ -->
+    <!-- ОКНО НАСТРОЕК ПРОФИЛЯ С КНОПКОЙ МИКРОФОНА -->
     <div id="profileModal" class="modal-overlay hidden">
         <div class="modal">
             <h3>Настройки профиля</h3>
@@ -244,6 +244,10 @@
             <input type="email" id="editEmailInput" placeholder="Электронная почта (email)...">
             <p style="font-size: 12px; margin: 0; color: #aaa; text-align: left;">Сменить аватар:</p>
             <input type="file" id="editAvatarFile" accept="image/*" style="font-size:12px; padding:6px;" onchange="previewEditAvatar(event)">
+            
+            <!-- Кнопка включения микрофона с запросом разрешений -->
+            <button onclick="requestMicrophonePermission()" style="background: #1f2833; border: 1px solid #66fcf1; color: #66fcf1; margin-top: 5px;">🎤 Включить микрофон</button>
+
             <div style="display: flex; gap: 10px; margin-top: 10px;">
                 <button onclick="saveProfile()" style="flex: 1;">Сохранить</button>
                 <button onclick="toggleProfileModal()" style="flex: 1; background: #333; color:#fff;">Закрыть</button>
@@ -274,7 +278,7 @@
             <button class="nav-btn active" onclick="switchTab('messages')">💬 Сообщения</button>
             <button class="nav-btn" onclick="switchTab('friends')">👥 Друзья</button>
             <button class="nav-btn" onclick="switchTab('groups')">🏠 Сообщества</button>
-            <button class="nav-btn" onclick="switchTab('news')">🖼 Мемы</button>
+            <button class="nav-btn" onclick="switchTab('news')">🖼 Лента</button>
             
             <div style="margin-top:auto; font-size: 11px; color: #45a29e; word-break: break-all; display:flex; align-items:center; gap:8px; cursor:pointer;" onclick="toggleProfileModal()" title="Нажмите для открытия профиля">
                 <img id="navUserAvatar" class="avatar-sm" src="" alt="">
@@ -327,7 +331,7 @@
             </div>
 
             <div id="newsContainer" class="hidden" style="overflow-y: auto; height: 100%; padding-right: 5px;">
-                <div id="newsList">Загрузка свежих мемов...</div>
+                <div id="newsList">Загрузка ленты...</div>
             </div>
         </div>
     </div>
@@ -358,6 +362,18 @@
     }
     function closeNeonAlert() {
         document.getElementById('neonAlertModal').classList.add('hidden');
+    }
+
+    // Функция запроса разрешения на использование микрофона
+    async function requestMicrophonePermission() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            showNeonAlert('Микрофон', 'Доступ к микрофону успешно разрешен!');
+            // Сразу останавливаем поток, чтобы не занимать устройство в фоновом режиме
+            stream.getTracks().forEach(track => track.stop());
+        } catch (e) {
+            showNeonAlert('Ошибка', 'Не удалось получить доступ к микрофону. Проверьте настройки браузера.');
+        }
     }
 
     function playNotificationSound() {
@@ -476,6 +492,7 @@
         if (currentUserLogin && dbData.users && dbData.users[currentUserLogin]) {
             updateTabContent();
             if (currentPartner) renderMessages();
+            if (currentTab === 'news') renderMemes();
         }
     }
 
@@ -631,6 +648,7 @@
 
     function hideForgotModal() {
         document.getElementById('forgotModal').classList.add('hidden');
+        document.getElementById('authModal').classList.add('hidden'); // исправлено
         document.getElementById('authModal').classList.remove('hidden');
     }
 
@@ -782,15 +800,26 @@
         location.reload();
     }
 
+    // Подгрузка русскоязычных мемов, видео-приколов и новостей из сообществ
     async function fetchMemes() {
         try {
-            const res = await fetch('/api/news');
+            const res = await fetch('https://meme-api.com/gimme/pikabu/20'); // Пикабу и русскоязычные подборки
             const data = await res.json();
-            if (data.success) {
-                memeList = data.memes;
-                if (currentTab === 'news') renderMemes();
-            }
-        } catch (e) {}
+            memeList = (data.memes || []).map(m => ({
+                title: m.title,
+                url: m.url,
+                isVideos: m.url.endsWith('.mp4') || m.url.endsWith('.webm'),
+                author: m.author || 'Сеть',
+                sourceType: 'meme'
+            }));
+            if (currentTab === 'news') renderMemes();
+        } catch (e) {
+            // Запасной массив локальных русскоязычных мемов, если API недоступно
+            memeList = [
+                { title: 'Когда зашел в мессенджер В Одно Ебло', url: 'https://i.imgur.com/3G722zP.jpg', author: 'Пользователь', sourceType: 'meme' }
+            ];
+            if (currentTab === 'news') renderMemes();
+        }
     }
 
     function switchTab(tab) {
@@ -807,9 +836,9 @@
         document.getElementById('callButtons').classList.add('hidden');
 
         if (tab === 'news') {
-            document.getElementById('paneTitle').textContent = 'Мемы';
+            document.getElementById('paneTitle').textContent = 'Лента';
             document.getElementById('leftPane').classList.add('hidden');
-            document.getElementById('contentTitle').textContent = 'Свежие мемы из сети';
+            document.getElementById('contentTitle').textContent = 'Лента новостей и мемов';
             document.getElementById('newsContainer').classList.remove('hidden');
             renderMemes();
         } else {
@@ -1038,20 +1067,62 @@
         messagesBox.scrollTop = messagesBox.scrollHeight;
     }
 
+    // Рендер ленты: собираем мемы из сети + посты из всех сообществ
     function renderMemes() {
         const newsList = document.getElementById('newsList');
         newsList.innerHTML = '';
-        if (memeList.length === 0) {
-            newsList.innerHTML = 'Загрузка мемов...';
+
+        let feedItems = [...memeList];
+
+        // Собираем новости/сообщения из всех сообществ
+        if (dbData.groups) {
+            Object.values(dbData.groups).forEach(group => {
+                if (group.messages) {
+                    group.messages.forEach(msg => {
+                        feedItems.unshift({
+                            title: `Новость из сообщества: ${group.name}`,
+                            text: msg.text,
+                            url: msg.media ? msg.media.url : null,
+                            mediaType: msg.media ? msg.media.type : null,
+                            author: getDisplayName(msg.sender),
+                            time: msg.time,
+                            sourceType: 'group'
+                        });
+                    });
+                }
+            });
+        }
+
+        if (feedItems.length === 0) {
+            newsList.innerHTML = 'Лента пуста...';
             return;
         }
-        memeList.forEach(m => {
+
+        feedItems.forEach(item => {
             const div = document.createElement('div');
             div.className = 'meme-card';
+
+            let mediaContent = '';
+            if (item.sourceType === 'meme') {
+                if (item.isVideos) {
+                    mediaContent = `<video src="${item.url}" controls controlsList="nodownload" style="width:100%; max-height:350px; border-radius:6px;"></video>`;
+                } else {
+                    mediaContent = `<img src="${item.url}" alt="мем" loading="lazy">`;
+                }
+            } else {
+                // Из сообществ
+                if (item.mediaType === 'image') {
+                    mediaContent = `<img src="${item.url}" alt="фото" loading="lazy">`;
+                } else if (item.mediaType === 'video') {
+                    mediaContent = `<video src="${item.url}" controls controlsList="nodownload" style="width:100%; max-height:350px; border-radius:6px;"></video>`;
+                }
+            }
+
             div.innerHTML = `
-                <p>${m.title}</p>
-                <img src="${m.image}" alt="meme" loading="lazy">
-                <br><small style="color:#888; font-size:11px;">Автор: ${m.author}</small>
+                <p>${item.title}</p>
+                ${item.text ? `<p style="font-weight:normal; color:#fff; font-size:13px; margin:5px 0;">${item.text}</p>` : ''}
+                ${mediaContent}
+                <br><small style="color:#888; font-size:11px;">Автор: ${item.author} ${item.time ? '• ' + item.time : ''}</small>
             `;
             newsList.appendChild(div);
         });
