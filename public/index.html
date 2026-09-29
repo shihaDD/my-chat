@@ -68,9 +68,13 @@
         }
 
         .sidebar { background: #ffffff; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-        .sidebar-header { height: 60px; min-height: 60px; background: #f0f2f5; padding: 10px 16px; display: flex; align-items: center; border-right: 1px solid #d1d7db; }
-        .user-avatar-placeholder { width: 40px; height: 40px; border-radius: 50%; background: #dfe2e5; display: flex; align-items: center; justify-content: center; color: #54656f; font-weight: 600; flex-shrink: 0; }
+        .sidebar-header { height: 60px; min-height: 60px; background: #f0f2f5; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; border-right: 1px solid #d1d7db; }
+        .user-avatar-placeholder { width: 40px; height: 40px; border-radius: 50%; background: #dfe2e5; display: flex; align-items: center; justify-content: center; color: #54656f; font-weight: 600; flex-shrink: 0; cursor: pointer; }
         
+        .sidebar-icons { display: flex; gap: 15px; align-items: center; }
+        .icon-btn { background: transparent; border: none; cursor: pointer; color: #54656f; font-size: 20px; display: flex; align-items: center; justify-content: center; padding: 5px; }
+        .icon-btn:hover { color: #00a884; }
+
         .search-container { padding: 8px 12px; background: #fff; border-bottom: 1px solid #f0f2f5; display: flex; align-items: center; min-height: 49px; }
         .search-box { width: 100%; background: #f0f2f5; border-radius: 8px; padding: 8px 12px 8px 32px; border: none; outline: none; font-size: 14px; color: #3b4a54; }
 
@@ -82,7 +86,9 @@
         .contact-name { font-size: 16px; color: #111b21; }
         .contact-status { font-size: 13px; color: #667781; margin-top: 2px; }
 
-        .chat-area { display: flex; flex-direction: column; height: 100%; background: #efeae2; position: relative; overflow: hidden; }
+        .chat-area, .settings-area { display: flex; flex-direction: column; height: 100%; background: #efeae2; position: relative; overflow: hidden; }
+        .settings-area { background: #f0f2f5; display: none; }
+        
         .chat-header { height: 60px; min-height: 60px; padding: 10px 16px; background: #f0f2f5; display: flex; align-items: center; gap: 15px; border-bottom: 1px solid #d1d7db; }
 
         .messages-container { flex: 1; padding: 20px 7%; overflow-y: auto; background-color: #efeae2; background-image: radial-gradient(#d8d2c9 0.85px, transparent 0.85px); background-size: 17px 17px; display: flex; flex-direction: column; gap: 4px; min-height: 0; }
@@ -98,6 +104,15 @@
         .chat-input-area input { flex: 1; padding: 12px 16px; border: none; border-radius: 8px; outline: none; background: #ffffff; font-size: 15px; color: #3b4a54; }
         .send-btn { background: transparent; border: none; cursor: pointer; color: #54656f; font-size: 22px; display: flex; align-items: center; justify-content: center; padding: 8px; }
         .send-btn:hover { color: #00a884; }
+
+        /* Стили панели настроек */
+        .settings-header { height: 60px; min-height: 60px; background: #00a884; color: white; padding: 10px 20px; display: flex; align-items: center; gap: 20px; font-size: 19px; font-weight: 500; }
+        .settings-content { padding: 30px; max-width: 500px; display: flex; flex-direction: column; gap: 20px; }
+        .settings-group { display: flex; flex-direction: column; gap: 8px; }
+        .settings-group label { font-size: 14px; color: #00a884; font-weight: 600; }
+        .settings-group input { padding: 12px 16px; border: 1px solid #d1d7db; border-radius: 8px; font-size: 15px; outline: none; background: #fff; }
+        .save-settings-btn { padding: 12px; background: #00a884; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: 600; margin-top: 10px; }
+        .save-settings-btn:hover { background: #008f72; }
     </style>
 </head>
 <body>
@@ -123,7 +138,10 @@
     <div id="chat-screen">
         <div class="sidebar">
             <div class="sidebar-header">
-                <div class="user-avatar-placeholder" id="my-avatar-label">Я</div>
+                <div class="user-avatar-placeholder" id="my-avatar-label" title="Профиль">Я</div>
+                <div class="sidebar-icons">
+                    <button class="icon-btn" id="settings-btn" title="Настройки профиля">⚙️</button>
+                </div>
             </div>
             <div class="search-container">
                 <input type="text" class="search-box" placeholder="Поиск или новый чат">
@@ -131,7 +149,8 @@
             <ul id="users-list"></ul>
         </div>
         
-        <div class="chat-area">
+        <!-- Область чата -->
+        <div class="chat-area" id="chat-main-container">
             <div class="chat-header">
                 <div class="user-avatar-placeholder" id="active-avatar-label">💬</div>
                 <div>
@@ -147,6 +166,25 @@
                 <button class="send-btn" id="send-btn" title="Отправить">
                     <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M1.101 21.757L23.8 12.028 1.101 2.3l.011 7.912 13.623 1.816-13.623 1.817-.011 7.912z"></path></svg>
                 </button>
+            </div>
+        </div>
+
+        <!-- Область настроек профиля -->
+        <div class="settings-area" id="settings-area">
+            <div class="settings-header">
+                <button class="icon-btn" id="close-settings-btn" style="color: white; font-size: 24px;" title="Назад">✕</button>
+                <span>Профиль</span>
+            </div>
+            <div class="settings-content">
+                <div class="settings-group">
+                    <label>Ваше имя</label>
+                    <input type="text" id="edit-name-input" autocomplete="off">
+                </div>
+                <div class="settings-group">
+                    <label>Номер телефона</label>
+                    <input type="text" id="edit-phone-input" autocomplete="off">
+                </div>
+                <button class="save-settings-btn" id="save-settings-btn">Сохранить</button>
             </div>
         </div>
     </div>
@@ -179,25 +217,41 @@
         const messageInput = document.getElementById('message-input');
         const sendBtn = document.getElementById('send-btn');
 
+        // Элементы настроек
+        const settingsBtn = document.getElementById('settings-btn');
+        const closeSettingsBtn = document.getElementById('close-settings-btn');
+        const chatMainContainer = document.getElementById('chat-main-container');
+        const settingsArea = document.getElementById('settings-area');
+        const editNameInput = document.getElementById('edit-name-input');
+        const editPhoneInput = document.getElementById('edit-phone-input');
+        const saveSettingsBtn = document.getElementById('save-settings-btn');
+
         const savedUser = localStorage.getItem('whatsapp_user');
         if (savedUser) {
             myData = JSON.parse(savedUser);
             startChatSession();
         }
 
-        // Маска для ввода телефона
-        phoneInput.oninput = (e) => {
-            let val = e.target.value.replace(/\D/g, '');
+        // Функция маски для телефона
+        function formatPhone(inputVal) {
+            let val = inputVal.replace(/\D/g, '');
             if (val.startsWith('7') || val.startsWith('8')) val = val.substring(1);
             let res = '+7 ';
             if (val.length > 0) res += '(' + val.substring(0, 3);
             if (val.length >= 3) res += ') ' + val.substring(3, 6);
             if (val.length >= 6) res += '-' + val.substring(6, 8);
             if (val.length >= 8) res += '-' + val.substring(8, 10);
-            phoneInput.value = val.length === 0 ? '' : res;
+            return val.length === 0 ? '' : res;
+        }
+
+        phoneInput.oninput = (e) => {
+            phoneInput.value = formatPhone(e.target.value);
         };
 
-        // Кнопка «Получить код»: генерирует случайный код прямо в браузере и выводит в alert
+        editPhoneInput.oninput = (e) => {
+            editPhoneInput.value = formatPhone(e.target.value);
+        };
+
         getCodeBtn.onclick = () => {
             const phone = phoneInput.value.trim();
             const name = nameInput.value.trim();
@@ -206,18 +260,13 @@
             if (cleanDigits.length < 10) return alert('Введите полный номер телефона!');
             if (!name) return alert('Введите ваше имя!');
 
-            // Генерация случайного 4-значного кода
             generatedPopupCode = Math.floor(1000 + Math.random() * 9000).toString();
-
-            // Выводим код во всплывающем окне
             alert('Ваш проверочный код: ' + generatedPopupCode);
 
-            // Переключаем блоки интерфейса
             stepPhoneBlock.style.display = 'none';
             stepCodeBlock.style.display = 'block';
         };
 
-        // Кнопка «Подтвердить и войти»
         verifyCodeBtn.onclick = () => {
             const phone = phoneInput.value.trim();
             const name = nameInput.value.trim();
@@ -228,8 +277,6 @@
             if (code === generatedPopupCode) {
                 myData = { phone, name };
                 localStorage.setItem('whatsapp_user', JSON.stringify(myData));
-                
-                socket.emit('verify_code', { phone, name, code: 'bypass' }, () => {}); 
                 startChatSession();
             } else {
                 alert('Неверный код! Попробуйте еще раз.');
@@ -237,11 +284,49 @@
         };
 
         function startChatSession() {
-            socket.emit('verify_code', { phone: myData.phone, name: myData.name, code: 'bypass' }, () => {}); 
+            socket.emit('verify_code', { phone: myData.phone, name: myData.name }); 
             myAvatarLabel.textContent = myData.name.charAt(0).toUpperCase();
             authScreen.style.display = 'none';
             chatScreen.style.display = 'grid';
         }
+
+        // Открытие настроек
+        settingsBtn.onclick = () => {
+            editNameInput.value = myData.name;
+            editPhoneInput.value = myData.phone;
+            chatMainContainer.style.display = 'none';
+            settingsArea.style.display = 'flex';
+        };
+
+        // Закрытие настроек
+        closeSettingsBtn.onclick = () => {
+            settingsArea.style.display = 'none';
+            chatMainContainer.style.display = 'flex';
+        };
+
+        // Сохранение отредактированного профиля
+        saveSettingsBtn.onclick = () => {
+            const newName = editNameInput.value.trim();
+            const newPhone = editPhoneInput.value.trim();
+            const cleanDigits = newPhone.replace(/\D/g, '');
+
+            if (!newName) return alert('Имя не может быть пустым!');
+            if (cleanDigits.length < 10) return alert('Введите корректный номер телефона!');
+
+            // Если старый номер отличался, сообщаем серверу об изменении
+            const oldPhone = myData.phone;
+            
+            myData = { phone: newPhone, name: newName };
+            localStorage.setItem('whatsapp_user', JSON.stringify(myData));
+            myAvatarLabel.textContent = myData.name.charAt(0).toUpperCase();
+
+            // Переподключаемся/отправляем новые данные на сервер
+            socket.emit('update_profile', { oldPhone, phone: newPhone, name: newName });
+
+            settingsArea.style.display = 'none';
+            chatMainContainer.style.display = 'flex';
+            alert('Профиль успешно обновлен!');
+        };
 
         socket.on('users_list', (users) => {
             if (!myData) return;
