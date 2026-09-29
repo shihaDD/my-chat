@@ -15,9 +15,11 @@ app.use(express.static(path.join(__dirname, 'public')));
 // База данных в памяти
 const users = new Map(); // username -> { password, nickname }
 const friendships = new Map(); // username -> Set of friend usernames
+const incomingRequests = new Map(); // username -> Set of pending requests
+const outgoingRequests = new Map(); // username -> Set of sent requests
 const customNames = new Map(); // "user1:user2" -> customNickname
 const messages = []; // Сообщения общего чата
-const feedItems = []; // Лента TikTok / мемов
+const feedItems = []; // Лента
 
 // Инициализация стартовых элементов ленты
 for (let i = 1; i <= 10; i++) {
@@ -40,6 +42,8 @@ app.post('/api/register', (req, res) => {
   
   users.set(username, { password, nickname: username });
   friendships.set(username, new Set());
+  incomingRequests.set(username, new Set());
+  outgoingRequests.set(username, new Set());
   res.json({ success: true, username });
 });
 
@@ -65,7 +69,33 @@ io.on('connection', (socket) => {
       feed: feedItems,
       users: Array.from(users.keys()).filter(u => u !== username)
     });
-    broadcastUsers(socket);
+    broadcastUserData(socket);
+  });
+
+  // Заявки в друзья
+  socket.on('send_friend_request', ({ targetUser }) => {
+    const user = socket.data.username;
+    if (users.has(targetUser) && user !== targetUser) {
+      if (!incomingRequests.has(targetUser)) incomingRequests.set(targetUser, new Set());
+      if (!outgoingRequests.has(user)) outgoingRequests.set(user, new Set());
+
+      incomingRequests.get(targetUser).add(user);
+      outgoingRequests.get(user).add(targetUser);
+      broadcastUserData(socket);
+    }
+  });
+
+  socket.on('accept_friend_request', ({ targetUser }) => {
+    const user = socket.data.username;
+    if (incomingRequests.has(user)) incomingRequests.get(user).delete(targetUser);
+    if (outgoingRequests.has(targetUser)) outgoingRequests.get(targetUser).delete(user);
+
+    if (!friendships.has(user)) friendships.set(user, new Set());
+    if (!friendships.has(targetUser)) friendships.set(targetUser, new Set());
+    friendships.get(user).add(targetUser);
+    friendships.get(targetUser).add(user);
+
+    broadcastUserData(socket);
   });
 
   // Сообщения чата
@@ -73,6 +103,7 @@ io.on('connection', (socket) => {
     const msg = {
       id: Date.now(),
       sender: socket.data.username,
+      recipient: data.recipient || null,
       text: data.text,
       image: data.image || null,
       timestamp: new Date().toLocaleTimeString()
@@ -89,16 +120,6 @@ io.on('connection', (socket) => {
     });
   });
 
-  // Друзья
-  socket.on('add_friend', ({ targetUser }) => {
-    const user = socket.data.username;
-    if (users.has(targetUser) && user !== targetUser) {
-      if (!friendships.has(user)) friendships.set(user, new Set());
-      friendships.get(user).add(targetUser);
-      broadcastUsers(socket);
-    }
-  });
-
   // Кастомное имя / псевдоним друга
   socket.on('set_custom_name', ({ targetUser, customName }) => {
     const user = socket.data.username;
@@ -111,7 +132,7 @@ io.on('connection', (socket) => {
     socket.emit('custom_name_updated', { targetUser, customName });
   });
 
-  // WebRTC Сигнализация
+  // WebRTC Сигнализация (Звонки)
   socket.on('webrtc_offer', (data) => {
     socket.to(data.target).emit('webrtc_offer', { offer: data.offer, sender: socket.data.username });
   });
@@ -157,20 +178,24 @@ io.on('connection', (socket) => {
   });
 });
 
-function broadcastUsers(socket) {
+function broadcastUserData(socket) {
   const currentUsername = socket.data.username;
   const friendSet = friendships.get(currentUsername) || new Set();
+  const incomingSet = incomingRequests.get(currentUsername) || new Set();
+  const outgoingSet = outgoingRequests.get(currentUsername) || new Set();
   
-  const list = Array.from(users.keys()).map(u => {
+  const allUsers = Array.from(users.keys()).map(u => {
     const customKey = `${currentUsername}:${u}`;
     return {
       username: u,
       isFriend: friendSet.has(u),
+      hasIncoming: incomingSet.has(u),
+      hasOutgoing: outgoingSet.has(u),
       customName: customNames.get(customKey) || u
     };
   });
   
-  io.to('main-room').emit('users_list', list);
+  io.to('main-room').emit('users_list', allUsers);
 }
 
 const PORT = process.env.PORT || 3000;
