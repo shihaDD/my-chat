@@ -15,13 +15,13 @@ const io = new Server(server, {
 app.use(express.static(path.join(__dirname, 'public')));
 
 const users = {}; // socket.id -> { phone, name }
+const pendingCodes = {}; // phone -> code (временные коды для входа)
 
 io.on('connection', (socket) => {
     console.log('Пользователь подключился:', socket.id);
 
-    // Регистрация по телефону и имени
-    socket.on('register', (data, callback) => {
-        // data = { phone, name }
+    // Шаг 1: Запрос на отправку СМС-кода
+    socket.on('request_code', (data, callback) => {
         const cleanPhone = data.phone ? data.phone.replace(/\D/g, '') : '';
         const name = data.name ? data.name.trim() : '';
 
@@ -31,17 +31,41 @@ io.on('connection', (socket) => {
         if (!name) {
             return callback({ success: false, message: 'Введите ваше имя!' });
         }
+
+        // Генерируем случайный 4-значный код (например: 1234)
+        const smsCode = Math.floor(1000 + Math.random() * 9000).toString();
+        pendingCodes[cleanPhone] = smsCode;
+
+        // В реальном проекте здесь вызов API СМС-шлюза. 
+        // Для примера выводим код в консоль сервера:
+        console.log(`\n========================================`);
+        console.log(`[SMS СЕРВИС] Код для номера ${data.phone}: ${smsCode}`);
+        console.log(`========================================\n`);
+
+        callback({ success: true, message: 'Код отправлен (проверьте консоль сервера)' });
+    });
+
+    // Шаг 2: Проверка кода и успешный вход
+    socket.on('verify_code', (data, callback) => {
+        // data = { phone, name, code }
+        const cleanPhone = data.phone ? data.phone.replace(/\D/g, '') : '';
         
-        users[socket.id] = { phone: data.phone.trim(), name: name };
-        socket.userData = users[socket.id];
-        
-        callback({ success: true, user: users[socket.id] });
-        updateUsersList();
+        if (pendingCodes[cleanPhone] && pendingCodes[cleanPhone] === data.code) {
+            // Код верный, очищаем его и авторизуем пользователя
+            delete pendingCodes[cleanPhone];
+
+            users[socket.id] = { phone: data.phone.trim(), name: data.name.trim() };
+            socket.userData = users[socket.id];
+
+            callback({ success: true, user: users[socket.id] });
+            updateUsersList();
+        } else {
+            callback({ success: false, message: 'Неверный код подтверждения!' });
+        }
     });
 
     // Обработка личных сообщений
     socket.on('private_message', (data) => {
-        // data = { toPhone: 'номер', message: 'текст' }
         const recipientSocketId = Object.keys(users).find(
             key => users[key].phone === data.toPhone
         );
