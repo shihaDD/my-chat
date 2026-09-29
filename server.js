@@ -7,7 +7,7 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-    maxHttpBufferSize: 20 * 1024 * 1024
+    maxHttpBufferSize: 20 * 1024 * 1024 // Поддержка больших файлов и аватарок
 });
 
 app.use(express.static('public'));
@@ -24,7 +24,7 @@ function loadDatabase() {
                 groups: data.groups || [],
                 communities: data.communities || [],
                 messages: data.messages || {},
-                mutedChats: data.mutedChats || {}
+                mutedChats: data.mutedChats || {} // Хранилище заглушенных чатов: { phone: [chatId1, chatId2] }
             };
         } catch (e) {
             console.error('Ошибка чтения базы данных, создаем новую:', e);
@@ -61,6 +61,7 @@ let communities = db.communities;
 const messages = db.messages;
 const mutedChats = db.mutedChats;
 
+// Функция для сохранения базы и рассылки актуальных списков и аватарок всем клиентам
 function updateAllLists() {
     saveDatabase();
     io.emit('groups_list', groups);
@@ -70,6 +71,7 @@ function updateAllLists() {
 io.on('connection', (socket) => {
     console.log('Пользователь подключился:', socket.id);
 
+    // При подключении сразу отправляем актуальные списки и аватарки
     socket.emit('groups_list', groups);
     socket.emit('communities_list', communities);
 
@@ -110,7 +112,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Управление уведомлениями (мут/анмут чата)
+    // --- УПРАВЛЕНИЕ УВЕДОМЛЕНИЯМИ (МЬЮТ / МУТ ДРУЗЕЙ, ГРУПП, СООБЩЕСТВ) ---
     socket.on('toggle_mute_chat', ({ chatId }) => {
         const phone = getPhoneBySocket(socket.id);
         if (!phone) return;
@@ -200,12 +202,13 @@ io.on('connection', (socket) => {
         }
     });
 
+    // --- ОБНОВЛЕНИЕ ИНФОРМАЦИИ И АВАТАРОК ---
     socket.on('update_group_info', ({ groupId, name, description, avatar, myPhone }) => {
         const group = groups.find(g => g.id === groupId);
         if (group && group.creator === myPhone) {
             group.name = name;
             group.description = description;
-            if (avatar) group.avatar = avatar;
+            if (avatar !== undefined) group.avatar = avatar; // Сохраняем новую аватарку группы
             updateAllLists();
             io.emit('group_updated', group);
         }
@@ -216,7 +219,7 @@ io.on('connection', (socket) => {
         if (com && com.creator === myPhone) {
             com.name = name;
             com.description = description;
-            if (avatar) com.avatar = avatar;
+            if (avatar !== undefined) com.avatar = avatar; // Сохраняем новую аватарку сообщества
             updateAllLists();
             io.emit('community_updated', com);
         }
@@ -258,6 +261,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // --- ЛИЧНЫЕ СООБЩЕНИЯ И ИЗБРАННОЕ ---
     socket.on('private_message', ({ toPhone, message, file }) => {
         const senderPhone = getPhoneBySocket(socket.id);
         let senderName = 'Пользователь';
@@ -266,7 +270,7 @@ io.on('connection', (socket) => {
         }
         if (!senderPhone) return;
 
-        // Если отправляем себе (Избранное), формируем специальный ключ чата
+        // Если отправляем себе (Избранное) — фиксированный ключ, чтобы чат не очищался
         const chatKey = senderPhone === toPhone ? `${senderPhone}_${senderPhone}` : [senderPhone, toPhone].sort().join('_');
 
         if (!messages[chatKey]) messages[chatKey] = [];
@@ -285,6 +289,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // --- СООБЩЕНИЯ ГРУПП ---
     socket.on('group_message', ({ groupId, message, file }) => {
         const senderPhone = getPhoneBySocket(socket.id);
         let senderName = 'Пользователь';
@@ -313,6 +318,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // --- СООБЩЕНИЯ СООБЩЕСТВ ---
     socket.on('community_message', ({ communityId, message, file }) => {
         const senderPhone = getPhoneBySocket(socket.id);
         let senderName = 'Пользователь';
