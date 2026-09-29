@@ -24,8 +24,7 @@ function loadDatabase() {
                 groups: data.groups || [],
                 communities: data.communities || [],
                 messages: data.messages || {},
-                mutedChats: data.mutedChats || {},
-                userThemes: data.userThemes || {} // Сохраненные темы пользователей
+                mutedChats: data.mutedChats || {} // Хранилище заглушенных чатов: { phone: [chatId1, chatId2] }
             };
         } catch (e) {
             console.error('Ошибка чтения базы данных, создаем новую:', e);
@@ -37,8 +36,7 @@ function loadDatabase() {
         groups: [],
         communities: [],
         messages: {},
-        mutedChats: {},
-        userThemes: {}
+        mutedChats: {}
     };
 }
 
@@ -49,8 +47,7 @@ function saveDatabase() {
         groups,
         communities,
         messages,
-        mutedChats,
-        userThemes
+        mutedChats
     };
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
 }
@@ -63,8 +60,8 @@ let groups = db.groups;
 let communities = db.communities;
 const messages = db.messages;
 const mutedChats = db.mutedChats;
-const userThemes = db.userThemes;
 
+// Функция для сохранения базы и рассылки актуальных списков и аватарок всем клиентам
 function updateAllLists() {
     saveDatabase();
     io.emit('groups_list', groups);
@@ -74,6 +71,7 @@ function updateAllLists() {
 io.on('connection', (socket) => {
     console.log('Пользователь подключился:', socket.id);
 
+    // При подключении сразу отправляем актуальные списки и аватарки
     socket.emit('groups_list', groups);
     socket.emit('communities_list', communities);
 
@@ -99,7 +97,6 @@ io.on('connection', (socket) => {
             socket.emit('verification_result', { success: true });
             socket.emit('all_messages', messages);
             socket.emit('muted_chats_list', mutedChats[phone] || []);
-            socket.emit('user_theme', { theme: userThemes[phone] || 'default' });
             updateAllLists();
         } else {
             socket.emit('verification_result', { success: false, message: 'Неверный код подтверждения!' });
@@ -111,20 +108,11 @@ io.on('connection', (socket) => {
             registeredUsers[phone] = { name, phone, isOnline: true };
             activeUsers[phone] = socket.id;
             socket.emit('muted_chats_list', mutedChats[phone] || []);
-            socket.emit('user_theme', { theme: userThemes[phone] || 'default' });
             updateAllLists();
         }
     });
 
-    // Смена и сохранение темы
-    socket.on('change_theme', ({ theme }) => {
-        const phone = getPhoneBySocket(socket.id);
-        if (!phone) return;
-        userThemes[phone] = theme;
-        saveDatabase();
-        socket.emit('user_theme', { theme });
-    });
-
+    // --- УПРАВЛЕНИЕ УВЕДОМЛЕНИЯМИ (МЬЮТ / МУТ ДРУЗЕЙ, ГРУПП, СООБЩЕСТВ) ---
     socket.on('toggle_mute_chat', ({ chatId }) => {
         const phone = getPhoneBySocket(socket.id);
         if (!phone) return;
@@ -196,12 +184,31 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('join_group_by_link', ({ groupId, myPhone }) => {
+        const group = groups.find(g => g.id === groupId);
+        if (group && !group.members.includes(myPhone)) {
+            group.members.push(myPhone);
+            updateAllLists();
+            io.emit('group_updated', group);
+        }
+    });
+
+    socket.on('join_community_by_link', ({ communityId, myPhone }) => {
+        const com = communities.find(c => c.id === communityId);
+        if (com && !com.subscribers.includes(myPhone)) {
+            com.subscribers.push(myPhone);
+            updateAllLists();
+            io.emit('community_updated', com);
+        }
+    });
+
+    // --- ОБНОВЛЕНИЕ ИНФОРМАЦИИ И АВАТАРОК ---
     socket.on('update_group_info', ({ groupId, name, description, avatar, myPhone }) => {
         const group = groups.find(g => g.id === groupId);
         if (group && group.creator === myPhone) {
             group.name = name;
             group.description = description;
-            if (avatar !== undefined) group.avatar = avatar;
+            if (avatar !== undefined) group.avatar = avatar; // Сохраняем новую аватарку группы
             updateAllLists();
             io.emit('group_updated', group);
         }
@@ -212,12 +219,49 @@ io.on('connection', (socket) => {
         if (com && com.creator === myPhone) {
             com.name = name;
             com.description = description;
-            if (avatar !== undefined) com.avatar = avatar;
+            if (avatar !== undefined) com.avatar = avatar; // Сохраняем новую аватарку сообщества
             updateAllLists();
             io.emit('community_updated', com);
         }
     });
 
+    socket.on('add_group_member', ({ groupId, phone }) => {
+        const group = groups.find(g => g.id === groupId);
+        if (group && !group.members.includes(phone)) {
+            group.members.push(phone);
+            updateAllLists();
+            io.emit('group_updated', group);
+        }
+    });
+
+    socket.on('remove_group_member', ({ groupId, phone }) => {
+        const group = groups.find(g => g.id === groupId);
+        if (group) {
+            group.members = group.members.filter(p => p !== phone);
+            updateAllLists();
+            io.emit('group_updated', group);
+        }
+    });
+
+    socket.on('add_community_member', ({ communityId, phone }) => {
+        const com = communities.find(c => c.id === communityId);
+        if (com && !com.subscribers.includes(phone)) {
+            com.subscribers.push(phone);
+            updateAllLists();
+            io.emit('community_updated', com);
+        }
+    });
+
+    socket.on('remove_community_member', ({ communityId, phone }) => {
+        const com = communities.find(c => c.id === communityId);
+        if (com) {
+            com.subscribers = com.subscribers.filter(p => p !== phone);
+            updateAllLists();
+            io.emit('community_updated', com);
+        }
+    });
+
+    // --- ЛИЧНЫЕ СООБЩЕНИЯ И ИЗБРАННОЕ ---
     socket.on('private_message', ({ toPhone, message, file }) => {
         const senderPhone = getPhoneBySocket(socket.id);
         let senderName = 'Пользователь';
@@ -226,6 +270,7 @@ io.on('connection', (socket) => {
         }
         if (!senderPhone) return;
 
+        // Если отправляем себе (Избранное) — фиксированный ключ, чтобы чат не очищался
         const chatKey = senderPhone === toPhone ? `${senderPhone}_${senderPhone}` : [senderPhone, toPhone].sort().join('_');
 
         if (!messages[chatKey]) messages[chatKey] = [];
@@ -244,6 +289,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // --- СООБЩЕНИЯ ГРУПП ---
     socket.on('group_message', ({ groupId, message, file }) => {
         const senderPhone = getPhoneBySocket(socket.id);
         let senderName = 'Пользователь';
@@ -272,6 +318,7 @@ io.on('connection', (socket) => {
         }
     });
 
+    // --- СООБЩЕНИЯ СООБЩЕСТВ ---
     socket.on('community_message', ({ communityId, message, file }) => {
         const senderPhone = getPhoneBySocket(socket.id);
         let senderName = 'Пользователь';
