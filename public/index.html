@@ -320,10 +320,14 @@
                 <input type="text" id="friendLoginInput" placeholder="Логин друга..." style="font-size:13px; padding:8px;">
                 <button onclick="addFriend()" style="font-size:12px; padding:8px;">+ Добавить друга</button>
             </div>
+            
+            <!-- Блок управления и поиска сообществ -->
             <div id="addGroupBox" class="hidden" style="margin-bottom: 10px; display: flex; flex-direction: column; gap: 6px;">
-                <input type="text" id="groupNameInput" placeholder="Название группы..." style="font-size:13px; padding:8px;">
+                <input type="text" id="groupSearchInput" placeholder="Поиск сообщества по названию..." oninput="updateTabContent()" style="font-size:13px; padding:8px;">
+                <input type="text" id="groupNameInput" placeholder="Название новой группы..." style="font-size:13px; padding:8px;">
                 <button onclick="createGroup()" style="font-size:12px; padding:8px;">+ Создать группу</button>
             </div>
+            
             <div class="pane-list" id="paneList"></div>
         </div>
 
@@ -744,27 +748,6 @@
         reader.readAsDataURL(file);
     }
 
-    async function saveProfile() {
-        const newName = document.getElementById('editNameInput').value.trim();
-        const newEmail = document.getElementById('editEmailInput').value.trim();
-        const userData = dbData.users[currentUserLogin];
-        const avatarToSave = newAvatarEditUrl || userData.avatar;
-
-        const res = await fetch('/api/update-profile', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ login: currentUserLogin, name: newName, email: newEmail, avatar: avatarToSave })
-        });
-        const data = await res.json();
-        if (data.success) {
-            dbData = data.db;
-            initApp();
-            toggleProfileModal();
-            showNeonAlert('Успешно', 'Настройки профиля сохранены!');
-        }
-    }
-
-    // Настройки сообщества и роли
     function openGroupSettingsModal() {
         if (!isGroupChat || !currentPartner) return;
         editingGroupId = currentPartner;
@@ -796,7 +779,6 @@
             row.style.borderBottom = '1px solid #1f2833';
 
             let roleControl = `<span style="color:#66fcf1; font-size:12px;">${role}</span>`;
-            // Только Создатель может менять чужие роли (кроме себя)
             if (g.creator === currentUserLogin && mLogin !== g.creator) {
                 roleControl = `
                     <select onchange="changeMemberRole('${editingGroupId}', '${mLogin}', this.value)" style="font-size:11px; padding:4px; background:#1f2833;">
@@ -1027,22 +1009,43 @@
             });
         } else if (currentTab === 'groups') {
             const groups = dbData.groups || {};
-            const groupKeys = Object.keys(groups);
-            if (groupKeys.length === 0) {
-                listDiv.innerHTML = '<i style="color:#45a29e; font-size:12px; padding:5px;">Нет сообществ</i>';
+            const searchQuery = (document.getElementById('groupSearchInput')?.value || '').trim().toLowerCase();
+            
+            // Превращаем в массив и сортируем: сначала те, где пользователь участник, а также сортировка по количеству участников (от большего к меньшему)
+            let groupEntries = Object.entries(groups).filter(([gId, g]) => {
+                if (!g || !g.name) return false;
+                if (searchQuery && !g.name.toLowerCase().includes(searchQuery)) return false;
+                return true;
+            });
+
+            groupEntries.sort((a, b) => {
+                const countA = a[1].members ? a[1].members.length : 0;
+                const countB = b[1].members ? b[1].members.length : 0;
+                return countB - countA; // Сортировка по количеству участников от большего к меньшему
+            });
+
+            if (groupEntries.length === 0) {
+                listDiv.innerHTML = '<i style="color:#45a29e; font-size:12px; padding:5px;">Сообщества не найдены</i>';
                 return;
             }
-            groupKeys.forEach(gId => {
-                const g = groups[gId];
-                if (!g || !g.members) return;
-                const isMember = g.members.includes(currentUserLogin);
+
+            // Заголовок рекомендуемых
+            const recHeader = document.createElement('div');
+            recHeader.style.cssText = 'font-size:11px; color:#66fcf1; text-transform:uppercase; margin:4px 0; font-weight:bold;';
+            recHeader.textContent = searchQuery ? 'Результаты поиска:' : 'Популярные / Рекомендуемые:';
+            listDiv.appendChild(recHeader);
+
+            groupEntries.forEach(([gId, g]) => {
+                const isMember = g.members && g.members.includes(currentUserLogin);
                 const myRole = g.roles?.[currentUserLogin] || (g.creator === currentUserLogin ? 'Создатель' : 'Участник');
+                const memberCount = g.members ? g.members.length : 0;
+
                 const div = document.createElement('div');
                 div.className = `item-card ${currentPartner === gId ? 'active' : ''}`;
                 div.innerHTML = `
                     <img class="avatar-sm" src="${g.avatar || 'https://api.iconify.design/lucide:users.svg?color=%2366fcf1'}">
-                    <span style="flex-grow:1;">🏠 ${g.name}<br><small style="color:#66fcf1">${myRole}</small></span> 
-                    <small style="color:${isMember?'#66fcf1':'#888'}">${isMember ? '' : 'Вступить'}</small>
+                    <span style="flex-grow:1;">🏠 ${g.name}<br><small style="color:#aaa;">👥 ${memberCount} уч. | <span style="color:#66fcf1">${isMember ? myRole : 'Рекомендация'}</span></small></span> 
+                    <small style="color:${isMember?'#66fcf1':'#ff007f'}">${isMember ? '' : 'Вступить'}</small>
                 `;
                 div.onclick = () => {
                     if (!isMember) {
