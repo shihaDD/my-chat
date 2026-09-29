@@ -68,18 +68,22 @@
         /* Главный интерфейс */
         .app-content { display: flex; gap: 15px; height: 100%; overflow: hidden; }
         
-        /* Левое главное меню (Вкладки) */
         .main-nav { width: 180px; border-right: 1px solid #45a29e; display: flex; flex-direction: column; gap: 8px; padding-right: 10px; }
         .nav-btn { background: #0b0c10; border: 1px solid #45a29e; color: #c5c6c7; padding: 10px; text-align: left; border-radius: 6px; cursor: pointer; font-size: 13px; text-transform: uppercase; }
         .nav-btn:hover, .nav-btn.active { border-color: #66fcf1; color: #66fcf1; background: rgba(102, 252, 241, 0.05); }
 
-        /* Панель контента вкладки */
         .tab-pane { width: 220px; border-right: 1px solid #45a29e; padding-right: 10px; display: flex; flex-direction: column; }
-        .pane-list { overflow-y: auto; flex-grow: 1; margin-top: 10px; }
-        .item-card { padding: 10px; cursor: pointer; border-radius: 6px; margin-bottom: 6px; background: #0b0c10; border: 1px solid transparent; transition: all 0.2s; color: #c5c6c7; font-size: 14px; }
+        .pane-list { overflow-y: auto; flex-grow: 1; margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+        
+        .item-card { padding: 10px; cursor: pointer; border-radius: 6px; background: #0b0c10; border: 1px solid transparent; transition: all 0.2s; color: #c5c6c7; font-size: 14px; display: flex; align-items: center; justify-content: space-between; }
         .item-card:hover, .item-card.active { border-color: #66fcf1; color: #66fcf1; background: rgba(102, 252, 241, 0.05); }
+        .item-card.favorite-item { border-color: #45a29e; background: rgba(69, 162, 158, 0.1); font-weight: bold; }
 
-        /* Чат или просмотр контента */
+        /* Индикатор статуса */
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .status-online { background: #66fcf1; box-shadow: 0 0 6px #66fcf1; }
+        .status-offline { background: #555; }
+
         .content-area { flex-grow: 1; display: flex; flex-direction: column; height: 100%; }
         .messages { flex-grow: 1; border: 1px solid #45a29e; border-radius: 8px; padding: 15px; overflow-y: auto; margin-bottom: 12px; background: #0b0c10; }
         .msg { margin-bottom: 10px; padding: 8px 12px; border-radius: 8px; max-width: 75%; word-break: break-word; color: #fff; }
@@ -88,7 +92,6 @@
         .send-panel { display: flex; gap: 10px; }
         .send-panel input { flex-grow: 1; }
 
-        /* Новостные карточки */
         .news-item { background: #0b0c10; border: 1px solid #45a29e; padding: 10px; border-radius: 6px; margin-bottom: 8px; font-size: 13px; color: #c5c6c7; text-decoration: none; display: block; }
         .news-item:hover { border-color: #66fcf1; color: #66fcf1; }
 
@@ -123,27 +126,27 @@
 
     <!-- ГЛАВНЫЙ ЭКРАН -->
     <div id="app-screen" class="hidden app-content">
-        <!-- Навигация слева -->
         <div class="main-nav">
             <h4 style="font-size:12px; margin-bottom:5px;">МЕНЮ</h4>
             <button class="nav-btn active" onclick="switchTab('messages')">💬 Сообщения</button>
             <button class="nav-btn" onclick="switchTab('friends')">👥 Друзья</button>
-            <button class="nav-btn" onclick="switchTab('favorites')">⭐ Избранное</button>
             <button class="nav-btn" onclick="switchTab('news')">📰 Новости</button>
-            <div style="margin-top: auto; font-size: 11px; color: #45a29e;">Профиль: <br><b id="currentUserName"></b></div>
+            <button class="nav-btn" onclick="logout()" style="margin-top:auto; border-color:#ff007f; color:#ff007f;">Выйти</button>
         </div>
 
-        <!-- Подменю -->
         <div class="tab-pane" id="leftPane">
-            <h4 id="paneTitle">Чаты</h4>
+            <h4 id="paneTitle">Сообщения</h4>
+            <!-- Форма добавления друга по номеру (показывается только во вкладке Друзья) -->
+            <div id="addFriendBox" class="hidden" style="margin-bottom: 10px; display: flex; flex-direction: column; gap: 6px;">
+                <input type="text" id="friendPhoneInput" placeholder="+7 (___) ___-__-__" style="font-size:13px; padding:8px;">
+                <button onclick="addFriendByPhone()" style="font-size:12px; padding:8px;">+ Добавить друга</button>
+            </div>
             <div class="pane-list" id="paneList"></div>
         </div>
 
-        <!-- Область контента -->
         <div class="content-area">
             <h4 id="contentTitle" style="margin-bottom: 10px;">Выбери чат</h4>
             
-            <!-- Окно чата -->
             <div id="chatContainer" class="hidden" style="display: flex; flex-direction: column; height: 100%;">
                 <div class="messages" id="messagesBox"></div>
                 <div class="send-panel" id="sendBox">
@@ -152,7 +155,6 @@
                 </div>
             </div>
 
-            <!-- Окно новостей -->
             <div id="newsContainer" class="hidden" style="overflow-y: auto; height: 100%; padding-right: 5px;">
                 <div id="newsList">Загрузка новостей из Google...</div>
             </div>
@@ -161,34 +163,58 @@
 </div>
 
 <script>
-    let currentUser = '';
+    let currentUser = localStorage.getItem('v_odno_eblo_user') || '';
     let currentPartner = '';
-    let currentPhone = '';
     let currentTab = 'messages';
     let dbData = {};
     let googleNews = [];
 
-    // Маска ввода телефона (+7 (XXX) XXX-XX-XX)
-    const phoneInput = document.getElementById('phoneInput');
-    phoneInput.addEventListener('input', function (e) {
-        let matrix = '+7 (___) ___-__-__',
-            i = 0,
-            def = matrix.replace(/\D/g, ''),
-            val = this.value.replace(/\D/g, '');
-        
-        if (val.length >= 1 && val[0] === '8') val = val.slice(1);
-        if (val.length >= 1 && val[0] === '7') val = val.slice(1);
+    // Маски телефонов
+    function applyPhoneMask(inputElement) {
+        inputElement.addEventListener('input', function (e) {
+            let matrix = '+7 (___) ___-__-__',
+                i = 0,
+                val = this.value.replace(/\D/g, '');
+            if (val.length >= 1 && val[0] === '8') val = val.slice(1);
+            if (val.length >= 1 && val[0] === '7') val = val.slice(1);
 
-        let res = matrix.replace(/./g, function (a) {
-            return /[_\d]/.test(a) && i < val ? val.charAt(i++) : i >= val ? '' : a;
+            let res = matrix.replace(/./g, function (a) {
+                return /[_\d]/.test(a) && i < val ? val.charAt(i++) : i >= val ? '' : a;
+            });
+            this.value = (i === 0) ? '' : res;
         });
-        
-        if (i === 0) {
-            this.value = '';
+    }
+
+    applyPhoneMask(document.getElementById('phoneInput'));
+    applyPhoneMask(document.getElementById('friendPhoneInput'));
+
+    // Проверка сохраненной сессии при загрузке
+    window.onload = async () => {
+        await loadData();
+        if (currentUser && dbData.users?.includes(currentUser)) {
+            document.getElementById('auth-screen').classList.add('hidden');
+            document.getElementById('app-screen').classList.remove('hidden');
+            document.getElementById('currentUserName']?.textContent || '';
+            switchTab('messages');
+            startHeartbeat();
         } else {
-            this.value = res;
+            localStorage.removeItem('v_odno_eblo_user');
         }
-    });
+        fetchNews();
+        setInterval(loadData, 3000);
+    };
+
+    function startHeartbeat() {
+        setInterval(() => {
+            if (currentUser) {
+                fetch('/api/ping', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: currentUser })
+                });
+            }
+        }, 10000);
+    }
 
     async function loadData() {
         const res = await fetch('/api/data');
@@ -196,6 +222,7 @@
         if (currentUser) updateTabContent();
     }
 
+    let currentPhone = '';
     async function requestVerificationCode() {
         const name = document.getElementById('nameInput').value.trim();
         const phone = document.getElementById('phoneInput').value.trim();
@@ -227,18 +254,23 @@
 
         if (data.success) {
             currentUser = data.username;
+            localStorage.setItem('v_odno_eblo_user', currentUser);
             dbData = data.db;
+
             document.getElementById('codeModal').classList.add('hidden');
             document.getElementById('auth-screen').classList.add('hidden');
             document.getElementById('app-screen').classList.remove('hidden');
-            document.getElementById('currentUserName').textContent = currentUser;
 
             switchTab('messages');
-            fetchNews();
-            setInterval(loadData, 3000);
+            startHeartbeat();
         } else {
             alert('Неверный код!');
         }
+    }
+
+    function logout() {
+        localStorage.removeItem('v_odno_eblo_user');
+        location.reload();
     }
 
     async function fetchNews() {
@@ -249,7 +281,7 @@
                 googleNews = data.news;
                 if (currentTab === 'news') renderNews();
             }
-        } catch (e) { console.error('Ошибка загрузки новостей'); }
+        } catch (e) {}
     }
 
     function switchTab(tab) {
@@ -259,6 +291,7 @@
 
         document.getElementById('chatContainer').classList.add('hidden');
         document.getElementById('newsContainer').classList.add('hidden');
+        document.getElementById('addFriendBox').classList.add('hidden');
 
         if (tab === 'news') {
             document.getElementById('paneTitle').textContent = 'Google Новости';
@@ -268,45 +301,83 @@
             renderNews();
         } else {
             document.getElementById('leftPane').classList.remove('hidden');
-            if (tab === 'messages') document.getElementById('paneTitle').textContent = 'Сообщения';
-            if (tab === 'friends') document.getElementById('paneTitle').textContent = 'Друзья';
-            if (tab === 'favorites') document.getElementById('paneTitle').textContent = 'Избранное';
+            if (tab === 'messages') {
+                document.getElementById('paneTitle').textContent = 'Сообщения';
+            } else if (tab === 'friends') {
+                document.getElementById('paneTitle').textContent = 'Друзья';
+                document.getElementById('addFriendBox').classList.remove('hidden');
+            }
             updateTabContent();
         }
+    }
+
+    function isOnline(username) {
+        const last = dbData.lastSeen?.[username] || 0;
+        return (Date.now() - last) < 20000; // в сети, если был пинг менее 20 секунд назад
     }
 
     function updateTabContent() {
         const listDiv = document.getElementById('paneList');
         listDiv.innerHTML = '';
 
-        if (currentTab === 'messages' || currentTab === 'friends') {
+        if (currentTab === 'messages') {
+            // 1. Сначала закрепленное Избранное (чат с самим собой)
+            const favDiv = document.createElement('div');
+            favDiv.className = `item-card favorite-item ${currentPartner === currentUser ? 'active' : ''}`;
+            favDiv.innerHTML = `<span>⭐ Избранное</span> <span class="status-dot status-online"></span>`;
+            favDiv.onclick = () => selectPartner(currentUser);
+            listDiv.appendChild(favDiv);
+
+            // 2. Остальные пользователи
             dbData.users.forEach(user => {
                 if (user === currentUser) return;
+                const online = isOnline(user);
                 const div = document.createElement('div');
                 div.className = `item-card ${currentPartner === user ? 'active' : ''}`;
-                div.textContent = user;
+                div.innerHTML = `<span>${user}</span> <span class="status-dot ${online ? 'status-online' : 'status-offline'}"></span>`;
                 div.onclick = () => selectPartner(user);
                 listDiv.appendChild(div);
             });
-        } else if (currentTab === 'favorites') {
-            const favs = dbData.favorites?.[currentUser] || [];
-            if (favs.length === 0) {
-                listDiv.innerHTML = '<i style="color:#45a29e; font-size:12px;">Пусто</i>';
+        } else if (currentTab === 'friends') {
+            const friends = dbData.friends?.[currentUser] || [];
+            if (friends.length === 0) {
+                listDiv.innerHTML = '<i style="color:#45a29e; font-size:12px;">Список друзей пуст</i>';
                 return;
             }
-            favs.forEach(user => {
+            friends.forEach(user => {
+                const online = isOnline(user);
                 const div = document.createElement('div');
                 div.className = `item-card ${currentPartner === user ? 'active' : ''}`;
-                div.textContent = user;
+                div.innerHTML = `<span>${user}</span> <span class="status-dot ${online ? 'status-online' : 'status-offline'}"></span>`;
                 div.onclick = () => selectPartner(user);
                 listDiv.appendChild(div);
             });
         }
     }
 
+    async function addFriendByPhone() {
+        const phone = document.getElementById('friendPhoneInput').value.trim();
+        if (phone.length < 18) return alert('Введите полный номер телефона!');
+
+        const res = await fetch('/api/add-friend-by-phone', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: currentUser, phone })
+        });
+        const data = await res.json();
+        if (data.success) {
+            dbData = data.db;
+            document.getElementById('friendPhoneInput').value = '';
+            alert(`Пользователь ${data.friendName} добавлен в друзья!`);
+            updateTabContent();
+        } else {
+            alert(data.error || 'Ошибка добавления');
+        }
+    }
+
     function selectPartner(user) {
         currentPartner = user;
-        document.getElementById('contentTitle').textContent = `Чат с: ${user}`;
+        document.getElementById('contentTitle').textContent = user === currentUser ? '⭐ Избранное (Заметки)' : `Чат с: ${user}`;
         document.getElementById('chatContainer').classList.remove('hidden');
         renderMessages();
     }
@@ -317,13 +388,13 @@
         const chatHistory = dbData.messagesStore?.[currentUser]?.[currentPartner] || [];
         
         if (chatHistory.length === 0) {
-            messagesBox.innerHTML = '<i style="color:#45a29e;">Нет сообщений. Напиши первым!</i>';
+            messagesBox.innerHTML = '<i style="color:#45a29e;">История пуста. Напишите что-нибудь!</i>';
             return;
         }
 
         chatHistory.forEach(m => {
             const div = document.createElement('div');
-            div.className = `msg ${m.sender === currentUser ? 'me' : 'other'}`;
+            div.className = `msg ${m.sender === currentUser && currentPartner !== currentUser ? 'me' : 'other'}`;
             div.innerHTML = `<b>${m.sender}:</b> ${m.text} <br><small style="font-size:10px; color:#888;">${m.time}</small>`;
             messagesBox.appendChild(div);
         });
