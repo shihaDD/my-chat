@@ -4,7 +4,10 @@ const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+// Увеличиваем лимит размера входящих данных, чтобы картинки (Base64) легко помещались в socket.io запросы
+const io = new Server(server, {
+    maxHttpBufferSize: 10 * 1024 * 1024 // 10 МБ
+});
 
 // Раздаем статические файлы из папки public
 app.use(express.static('public'));
@@ -17,27 +20,26 @@ io.on('connection', (socket) => {
 
     // Регистрация или верификация пользователя
     socket.on('verify_code', (data) => {
-        const { phone, name } = data;
+        const { phone, name, avatar } = data;
         if (!phone || !name) return;
 
-        users[phone] = { socketId: socket.id, phone, name };
+        users[phone] = { socketId: socket.id, phone, name, avatar: avatar || null };
         socket.userPhone = phone;
 
         console.log(`Пользователь вошел: ${name} (${phone})`);
         io.emit('users_list', Object.values(users));
     });
 
-    // Обновление профиля пользователя
+    // Обновление профиля пользователя (включая аватарку)
     socket.on('update_profile', (data) => {
-        const { oldPhone, phone, name } = data;
+        const { oldPhone, phone, name, avatar } = data;
         if (!phone || !name) return;
 
-        // Если номер телефона изменился, удаляем старый ключ
         if (oldPhone && oldPhone !== phone && users[oldPhone]) {
             delete users[oldPhone];
         }
 
-        users[phone] = { socketId: socket.id, phone, name };
+        users[phone] = { socketId: socket.id, phone, name, avatar: avatar || null };
         socket.userPhone = phone;
 
         console.log(`Профиль обновлен: ${name} (${phone})`);
