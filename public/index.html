@@ -49,6 +49,7 @@
             display: flex;
             flex-direction: column;
             background: #0e0e12;
+            position: relative;
         }
 
         .sidebar-header {
@@ -61,12 +62,6 @@
             border-bottom: 1px solid var(--border-color);
             display: flex;
             align-items: center;
-            justify-content: space-between;
-        }
-
-        .header-actions {
-            display: flex;
-            gap: 6px;
         }
 
         .my-profile-info {
@@ -147,36 +142,54 @@
             font-size: 12px;
         }
 
-        .add-contact-box {
-            padding: 15px 20px;
-            border-bottom: 1px solid var(--border-color);
+        /* Шапка личных чатов с кнопкой добавления */
+        .chats-section-header {
+            padding: 12px 20px;
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
             display: flex;
-            gap: 8px;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--border-color);
+            background: #0e0e12;
+            position: relative;
         }
 
-        .add-contact-box input {
-            flex: 1;
-            padding: 8px 12px;
-            background: #1a1a24;
+        .add-dropdown-menu {
+            position: absolute;
+            top: 40px;
+            right: 15px;
+            background: #161622;
             border: 1px solid var(--border-color);
-            color: var(--text-main);
-            border-radius: 6px;
-            font-size: 13px;
+            border-radius: 10px;
+            width: 190px;
+            display: none;
+            flex-direction: column;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+            z-index: 50;
+            overflow: hidden;
         }
 
-        .add-contact-box button {
-            background: var(--accent-color);
-            color: white;
-            border: none;
-            padding: 0 12px;
-            border-radius: 6px;
-            font-weight: 700;
+        .add-dropdown-menu.show {
+            display: flex;
+        }
+
+        .add-dropdown-item {
+            padding: 10px 14px;
+            font-size: 13px;
+            color: var(--text-main);
             cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
             transition: background 0.2s;
         }
 
-        .add-contact-box button:hover {
-            background: var(--accent-hover);
+        .add-dropdown-item:hover {
+            background: rgba(255, 42, 95, 0.15);
+            color: var(--accent-color);
         }
 
         .contacts-list {
@@ -351,7 +364,7 @@
             transform: scale(0.97);
         }
 
-        /* Красивые модальные окна */
+        /* Модальные окна */
         .modal-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -361,12 +374,6 @@
             justify-content: center;
             align-items: center;
             z-index: 1000;
-            animation: fadeIn 0.2s ease-out;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
         }
 
         .auth-card {
@@ -381,12 +388,6 @@
             flex-direction: column;
             gap: 18px;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 0 30px rgba(255, 42, 95, 0.15);
-            animation: scaleUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        @keyframes scaleUp {
-            from { transform: scale(0.95); opacity: 0; }
-            to { transform: scale(1); opacity: 1; }
         }
 
         .auth-card h2 {
@@ -395,7 +396,6 @@
             margin-bottom: 2px;
             text-transform: uppercase;
             font-size: 20px;
-            letter-spacing: 0.5px;
         }
 
         .auth-card p {
@@ -413,7 +413,6 @@
             color: var(--text-main);
             border-radius: 8px;
             font-size: 14px;
-            transition: border-color 0.2s;
         }
 
         .auth-card input[type="text"]:focus {
@@ -441,10 +440,6 @@
             border-radius: 8px;
             font-size: 13px;
             cursor: pointer;
-        }
-
-        .settings-select:focus {
-            border-color: var(--accent-color);
         }
 
         .presets-grid {
@@ -512,16 +507,12 @@
             background: var(--accent-hover);
         }
 
-        .auth-card button.main-action-btn:active {
-            transform: scale(0.98);
-        }
-
         .modal-buttons-row {
             display: flex;
             gap: 10px;
         }
 
-        /* Кастомное красивое всплывающее уведомление (вместо стандартного alert) */
+        /* Тосты */
         .custom-toast-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -531,7 +522,6 @@
             justify-content: center;
             align-items: center;
             z-index: 2000;
-            animation: fadeIn 0.15s ease-out;
         }
 
         .custom-toast-card {
@@ -545,7 +535,6 @@
             flex-direction: column;
             gap: 16px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5), 0 0 20px rgba(255, 42, 95, 0.2);
-            animation: scaleUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
         .custom-toast-card p {
@@ -561,11 +550,6 @@
             font-weight: 700;
             border-radius: 8px;
             cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        .custom-toast-card button:hover {
-            background: var(--accent-hover);
         }
     </style>
 </head>
@@ -667,18 +651,26 @@
         </div>
     </div>
 
+    <!-- Модалка добавления контакта -->
+    <div id="addContactModal" class="modal-overlay" style="display: none;">
+        <div class="auth-card">
+            <h2>Добавить контакт</h2>
+            <input type="text" id="targetPhoneInput" placeholder="+7 (___) ___-__-__">
+            <div class="modal-buttons-row">
+                <button id="addContactConfirmBtn" class="main-action-btn">ДОБАВИТЬ</button>
+                <button id="addContactCancelBtn" class="main-action-btn" style="background: #222230;">ОТМЕНА</button>
+            </div>
+        </div>
+    </div>
+
     <div class="app-container">
         <!-- Левая колонка -->
         <div class="sidebar">
             <div class="sidebar-header">
                 <span>⚡ В одно ебало</span>
-                <div class="header-actions">
-                    <button class="icon-btn" id="openGroupModalBtn" title="Создать группу">👥</button>
-                    <button class="icon-btn" id="openCommunityModalBtn" title="Создать сообщество">📢</button>
-                </div>
             </div>
             
-            <!-- Профиль пользователя с кнопками управления -->
+            <!-- Профиль пользователя -->
             <div class="my-profile-info" id="myProfileInfo">
                 <div class="my-profile-left">
                     <div class="avatar" id="myAvatar">Я</div>
@@ -693,10 +685,18 @@
                 </div>
             </div>
 
-            <div class="add-contact-box">
-                <input type="text" id="targetPhoneInput" placeholder="+7 (___) ___-__-__">
-                <button id="addContactBtn">+</button>
+            <!-- Шапка раздела чатов с кнопкой плюса и выпадающим меню -->
+            <div class="chats-section-header">
+                <span>Чаты и сообщества</span>
+                <button class="icon-btn" id="toggleAddMenuBtn" title="Создать...">+</button>
+                
+                <div class="add-dropdown-menu" id="addDropdownMenu">
+                    <div class="add-dropdown-item" id="menuAddContact">👤 Добавить контакт</div>
+                    <div class="add-dropdown-item" id="menuCreateGroup">👥 Создать группу</div>
+                    <div class="add-dropdown-item" id="menuCreateCommunity">📢 Создать сообщество</div>
+                </div>
             </div>
+
             <div class="contacts-list" id="contactsList">
                 <!-- Контакты, группы и сообщества будут здесь -->
             </div>
@@ -734,13 +734,12 @@
         let myAvatarData = localStorage.getItem('chat_avatar') || 'linear-gradient(135deg, #ff2a5f, #7b2cbf)';
         let notificationSoundType = localStorage.getItem('chat_sound') || 'beep';
         let activeChatId = null;
-        let activeChatType = 'private'; // 'private', 'group', 'community'
+        let activeChatType = 'private';
         let allMessages = {};
         let contacts = [];
         let groups = [];
         let communities = [];
 
-        // Функция красивого уведомления вместо стандартного alert
         function showToast(text, callback) {
             const overlay = document.createElement('div');
             overlay.className = 'custom-toast-overlay';
@@ -820,6 +819,97 @@
             }
         }
 
+        // Выпадающее меню по кнопке +
+        const toggleAddMenuBtn = document.getElementById('toggleAddMenuBtn');
+        const addDropdownMenu = document.getElementById('addDropdownMenu');
+
+        toggleAddMenuBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            addDropdownMenu.classList.toggle('show');
+        });
+
+        document.addEventListener('click', () => {
+            addDropdownMenu.classList.remove('show');
+        });
+
+        // Пункты выпадающего меню
+        document.getElementById('menuAddContact').addEventListener('click', () => {
+            document.getElementById('addContactModal').style.display = 'flex';
+        });
+
+        document.getElementById('menuCreateGroup').addEventListener('click', () => {
+            const listEl = document.getElementById('groupMembersList');
+            listEl.innerHTML = '';
+            contacts.forEach(c => {
+                const label = document.createElement('label');
+                label.style.display = 'flex';
+                label.style.alignItems = 'center';
+                label.style.gap = '8px';
+                label.style.color = 'var(--text-main)';
+                label.style.fontSize = '13px';
+                label.innerHTML = `<input type="checkbox" value="${c.phone}" style="accent-color: var(--accent-color);"> ${c.name} (${c.phone})`;
+                listEl.appendChild(label);
+            });
+            document.getElementById('groupModal').style.display = 'flex';
+        });
+
+        document.getElementById('menuCreateCommunity').addEventListener('click', () => {
+            document.getElementById('communityModal').style.display = 'flex';
+        });
+
+        // Закрытие модалок
+        document.getElementById('addContactCancelBtn').addEventListener('click', () => {
+            document.getElementById('addContactModal').style.display = 'none';
+        });
+        document.getElementById('createGroupCancelBtn').addEventListener('click', () => {
+            document.getElementById('groupModal').style.display = 'none';
+        });
+        document.getElementById('createCommunityCancelBtn').addEventListener('click', () => {
+            document.getElementById('communityModal').style.display = 'none';
+        });
+
+        // Создание / добавление
+        document.getElementById('addContactConfirmBtn').addEventListener('click', () => {
+            const targetPhone = document.getElementById('targetPhoneInput').value.trim();
+            if (targetPhone.length < 18) {
+                showToast('Введите полный номер телефона контакта!');
+                return;
+            }
+            socket.emit('add_contact', { myPhone, targetPhone });
+            document.getElementById('targetPhoneInput').value = '';
+            document.getElementById('addContactModal').style.display = 'none';
+        });
+
+        document.getElementById('createGroupConfirmBtn').addEventListener('click', () => {
+            const name = document.getElementById('groupNameInput').value.trim();
+            if (!name) {
+                showToast('Введите название группы!');
+                return;
+            }
+            const checkboxes = document.querySelectorAll('#groupMembersList input[type="checkbox"]:checked');
+            const members = Array.from(checkboxes).map(cb => cb.value);
+            members.push(myPhone);
+
+            socket.emit('create_group', { name, members, creator: myPhone });
+            document.getElementById('groupNameInput').value = '';
+            document.getElementById('groupModal').style.display = 'none';
+        });
+
+        document.getElementById('createCommunityConfirmBtn').addEventListener('click', () => {
+            const name = document.getElementById('communityNameInput').value.trim();
+            const description = document.getElementById('communityDescInput').value.trim();
+            if (!name) {
+                showToast('Введите название сообщества!');
+                return;
+            }
+
+            socket.emit('create_community', { name, description, creator: myPhone });
+            document.getElementById('communityNameInput').value = '';
+            document.getElementById('communityDescInput').value = '';
+            document.getElementById('communityModal').style.display = 'none';
+        });
+
+        // Аватарка входа
         let selectedAvatarStyle = myAvatarData;
         const presetAvs = document.querySelectorAll('#presetsGrid .preset-av');
         presetAvs.forEach(av => {
@@ -846,6 +936,7 @@
             }
         });
 
+        // Настройки профиля
         let settingsAvatarStyle = myAvatarData;
         const settingsPresetAvs = document.querySelectorAll('#settingsPresetsGrid .preset-av');
         
@@ -885,10 +976,6 @@
             }
         });
 
-        document.getElementById('settingsSoundSelect').addEventListener('change', function(e) {
-            playNotificationSound(e.target.value);
-        });
-
         document.getElementById('closeSettingsBtn').addEventListener('click', () => {
             document.getElementById('settingsModal').style.display = 'none';
         });
@@ -916,63 +1003,6 @@
                 localStorage.clear();
                 location.reload();
             });
-        });
-
-        document.getElementById('openGroupModalBtn').addEventListener('click', () => {
-            const listEl = document.getElementById('groupMembersList');
-            listEl.innerHTML = '';
-            contacts.forEach(c => {
-                const label = document.createElement('label');
-                label.style.display = 'flex';
-                label.style.alignItems = 'center';
-                label.style.gap = '8px';
-                label.style.color = 'var(--text-main)';
-                label.style.fontSize = '13px';
-                label.innerHTML = `<input type="checkbox" value="${c.phone}" style="accent-color: var(--accent-color);"> ${c.name} (${c.phone})`;
-                listEl.appendChild(label);
-            });
-            document.getElementById('groupModal').style.display = 'flex';
-        });
-
-        document.getElementById('createGroupCancelBtn').addEventListener('click', () => {
-            document.getElementById('groupModal').style.display = 'none';
-        });
-
-        document.getElementById('createGroupConfirmBtn').addEventListener('click', () => {
-            const name = document.getElementById('groupNameInput').value.trim();
-            if (!name) {
-                showToast('Введите название группы!');
-                return;
-            }
-            const checkboxes = document.querySelectorAll('#groupMembersList input[type="checkbox"]:checked');
-            const members = Array.from(checkboxes).map(cb => cb.value);
-            members.push(myPhone);
-
-            socket.emit('create_group', { name, members, creator: myPhone });
-            document.getElementById('groupNameInput').value = '';
-            document.getElementById('groupModal').style.display = 'none';
-        });
-
-        document.getElementById('openCommunityModalBtn').addEventListener('click', () => {
-            document.getElementById('communityModal').style.display = 'flex';
-        });
-
-        document.getElementById('createCommunityCancelBtn').addEventListener('click', () => {
-            document.getElementById('communityModal').style.display = 'none';
-        });
-
-        document.getElementById('createCommunityConfirmBtn').addEventListener('click', () => {
-            const name = document.getElementById('communityNameInput').value.trim();
-            const description = document.getElementById('communityDescInput').value.trim();
-            if (!name) {
-                showToast('Введите название сообщества!');
-                return;
-            }
-
-            socket.emit('create_community', { name, description, creator: myPhone });
-            document.getElementById('communityNameInput').value = '';
-            document.getElementById('communityDescInput').value = '';
-            document.getElementById('communityModal').style.display = 'none';
         });
 
         document.getElementById('clearChatBtn').addEventListener('click', () => {
@@ -1073,16 +1103,6 @@
             applyAvatar(myAvatarEl, avatar, name);
             socket.emit('verify_code', { name, phone, code: '0000' });
         }
-
-        document.getElementById('addContactBtn').addEventListener('click', () => {
-            const targetPhone = document.getElementById('targetPhoneInput').value.trim();
-            if (targetPhone.length < 18) {
-                showToast('Введите полный номер телефона контакта!');
-                return;
-            }
-            socket.emit('add_contact', { myPhone, targetPhone });
-            document.getElementById('targetPhoneInput').value = '';
-        });
 
         socket.on('add_contact_response', (res) => {
             showToast(res.message);
