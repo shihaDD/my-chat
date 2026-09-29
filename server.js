@@ -4,7 +4,7 @@ const path = require('path');
 
 const app = express();
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public'))); // если фронтенд в папке public, либо уберите, если всё в корне
+app.use(express.static(path.join(__dirname, 'public')));
 
 const PORT = process.env.PORT || 3000;
 
@@ -14,7 +14,7 @@ const REPO_OWNER = 'shihaDD';
 const REPO_NAME = 'Chat-Database';
 const FILE_PATH = 'database.json';
 
-// Функция чтения базы данных (сначала пробуем локально, если нет — качаем с GitHub)
+// Функция загрузки базы данных
 async function loadDatabase() {
     try {
         if (fs.existsSync(FILE_PATH)) {
@@ -22,7 +22,7 @@ async function loadDatabase() {
             return JSON.parse(data);
         }
     } catch (e) {
-        console.log('Локального файла нет, пробуем загрузить с GitHub...');
+        console.log('Локального файла нет, загружаем с GitHub...');
     }
 
     try {
@@ -35,14 +35,13 @@ async function loadDatabase() {
         if (response.ok) {
             const json = await response.json();
             const content = Buffer.from(json.content, 'base64').toString('utf8');
-            fs.writeFileSync(FILE_PATH, content, 'utf8'); // сохраняем локально для кэша
+            fs.writeFileSync(FILE_PATH, content, 'utf8');
             return JSON.parse(content);
         }
     } catch (e) {
         console.error('Ошибка загрузки с GitHub:', e);
     }
 
-    // Дефолтная структура, если вообще ничего нет
     return {
         "users": [],
         "userContacts": {},
@@ -50,16 +49,12 @@ async function loadDatabase() {
     };
 }
 
-// Функция сохранения базы данных (и локально, и на GitHub)
+// Функция сохранения базы данных с авто-коммитом на GitHub
 async function saveDatabase(dbData) {
     const jsonString = JSON.stringify(dbData, null, 2);
-    
-    // 1. Сохраняем локально на сервере
     fs.writeFileSync(FILE_PATH, jsonString, 'utf8');
 
-    // 2. Отправляем изменения на GitHub
     try {
-        // Сначала нужно получить текущий sha файла на GitHub (требование API GitHub для обновления)
         const getRes = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${FILE_PATH}`, {
             headers: {
                 'Authorization': `token ${GITHUB_TOKEN}`,
@@ -73,11 +68,9 @@ async function saveDatabase(dbData) {
             fileSha = fileData.sha;
         }
 
-        // Кодируем в Base64
         const contentEncoded = Buffer.from(jsonString, 'utf8').toString('base64');
 
-        // Отправляем PUT запрос на обновление файла
-        const updateRes = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${FILE_PATH}`, {
+        await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${FILE_PATH}`, {
             method: 'PUT',
             headers: {
                 'Authorization': `token ${GITHUB_TOKEN}`,
@@ -85,42 +78,59 @@ async function saveDatabase(dbData) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                message: 'Auto-update database.json from server',
+                message: 'Social Network Data Update',
                 content: contentEncoded,
                 sha: fileSha
             })
         });
-
-        if (updateRes.ok) {
-            console.log('База данных успешно обновлена на GitHub!');
-        } else {
-            const errText = await updateRes.text();
-            console.error('Ошибка при коммите на GitHub:', errText);
-        }
     } catch (e) {
         console.error('Не удалось отправить данные на GitHub:', e);
     }
 }
 
-// Пример маршрута для получения данных
+// Получить всю базу
 app.get('/api/data', async (req, res) => {
     const db = await loadDatabase();
     res.json(db);
 });
 
-// Пример маршрута для обновления данных (например, добавление пользователя/сообщения)
-app.post('/api/update', async (req, res) => {
+// Регистрация пользователя
+app.post('/api/register', async (req, res) => {
+    const { username } = req.body;
+    if (!username) return res.status(400).json({ error: 'Имя не указано' });
+
+    let db = await loadDatabase();
+    if (!db.users.includes(username)) {
+        db.users.push(username);
+        db.userContacts[username] = [];
+        db.messagesStore[username] = {};
+        await saveDatabase(db);
+    }
+    res.json({ success: true, db });
+});
+
+// Отправка сообщения
+app.post('/api/send-message', async (req, res) => {
+    const { sender, receiver, text } = req.body;
+    if (!sender || !receiver || !text) return res.status(400).json({ error: 'Неполные данные' });
+
     let db = await loadDatabase();
     
-    // Здесь вы обновляете нужные поля в объекте db на основе req.body
-    // Например: db.users.push(req.body.user);
+    // Создаем ветку диалога, если её нет
+    if (!db.messagesStore[sender]) db.messagesStore[sender] = {};
+    if (!db.messagesStore[sender][receiver]) db.messagesStore[sender][receiver] = [];
+    if (!db.messagesStore[receiver]) db.messagesStore[receiver] = {};
+    if (!db.messagesStore[receiver][sender]) db.messagesStore[receiver][sender] = [];
+
+    const messageObj = { sender, text, time: new Date().toLocaleTimeString() };
     
-    // Сохраняем (функция сама отправит на GitHub)
+    db.messagesStore[sender][receiver].push(messageObj);
+    db.messagesStore[receiver][sender].push(messageObj);
+
     await saveDatabase(db);
-    
     res.json({ success: true, db });
 });
 
 app.listen(PORT, () => {
-    console.log(`Сервер запущен на порту ${PORT}`);
+    console.log(`Социальная сеть запущена на порту ${PORT}`);
 });
