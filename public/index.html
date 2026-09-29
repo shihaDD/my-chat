@@ -7,14 +7,15 @@
   <script src="/socket.io/socket.io.js"></script>
   <style>
     :root {
-      --bg-color: #0d0e15;
-      --panel-bg: #161925;
-      --accent-color: #00ffcc;
+      --bg-main: #0c0d14;
+      --bg-panel: #141622;
+      --bg-card: #1c1f2e;
+      --accent: #00ffcc;
       --accent-hover: #00b38f;
-      --text-color: #e0e6ed;
-      --text-muted: #8a99ad;
-      --border-color: #2a2f45;
-      --neon-glow: 0 0 10px rgba(0, 255, 204, 0.3);
+      --text: #e2e8f0;
+      --text-muted: #8c9bae;
+      --border: #262c40;
+      --neon: 0 0 12px rgba(0, 255, 204, 0.25);
     }
 
     * {
@@ -25,51 +26,51 @@
     }
 
     body {
-      background-color: var(--bg-color);
-      color: var(--text-color);
+      background-color: var(--bg-main);
+      color: var(--text);
       height: 100vh;
       overflow: hidden;
     }
 
     /* Авторизация */
-    #auth-screen {
+    #auth-container {
       display: flex;
       justify-content: center;
       align-items: center;
       height: 100vh;
-      background: radial-gradient(circle, #1a1f35 0%, #0d0e15 100%);
+      background: radial-gradient(circle, #181d32 0%, #0c0d14 100%);
     }
 
-    .auth-card {
-      background: var(--panel-bg);
+    .auth-box {
+      background: var(--bg-panel);
       padding: 40px;
       border-radius: 12px;
-      border: 1px solid var(--border-color);
-      box-shadow: var(--neon-glow);
-      width: 350px;
+      border: 1px solid var(--border);
+      box-shadow: var(--neon);
+      width: 360px;
       text-align: center;
     }
 
-    .auth-card h2 {
-      margin-bottom: 20px;
-      color: var(--accent-color);
+    .auth-box h2 {
+      margin-bottom: 25px;
+      color: var(--accent);
     }
 
-    .auth-card input {
+    .auth-box input {
       width: 100%;
       padding: 12px;
       margin-bottom: 15px;
-      background: var(--bg-color);
-      border: 1px solid var(--border-color);
+      background: var(--bg-main);
+      border: 1px solid var(--border);
       border-radius: 6px;
-      color: var(--text-color);
+      color: var(--text);
     }
 
-    .auth-card button {
+    .auth-box button {
       width: 100%;
       padding: 12px;
-      background: var(--accent-color);
-      color: var(--bg-color);
+      background: var(--accent);
+      color: var(--bg-main);
       font-weight: bold;
       border: none;
       border-radius: 6px;
@@ -77,75 +78,80 @@
       transition: 0.2s;
     }
 
-    .auth-card button:hover {
+    .auth-box button:hover {
       background: var(--accent-hover);
-      box-shadow: var(--neon-glow);
+      box-shadow: var(--neon);
     }
 
-    .toggle-auth {
+    .auth-switch {
       margin-top: 15px;
       font-size: 14px;
       color: var(--text-muted);
       cursor: pointer;
     }
 
-    /* Главное приложение */
-    #app-screen {
+    /* Главный интерфейс */
+    #app-container {
       display: none;
       height: 100vh;
       display: grid;
-      grid-template-columns: 280px 1fr 350px;
+      grid-template-columns: 280px 1fr 340px;
     }
 
-    /* Левая панель (друзья и навигация) */
-    .sidebar-left {
-      background: var(--panel-bg);
-      border-right: 1px solid var(--border-color);
+    /* Левая панель */
+    .left-sidebar {
+      background: var(--bg-panel);
+      border-right: 1px solid var(--border);
       display: flex;
       flex-direction: column;
       height: 100vh;
     }
 
-    .sidebar-header {
+    .app-logo {
       padding: 20px;
-      border-bottom: 1px solid var(--border-color);
-      font-size: 18px;
+      font-size: 20px;
       font-weight: bold;
-      color: var(--accent-color);
+      color: var(--accent);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
 
-    .tabs {
+    .nav-tabs {
       display: flex;
-      border-bottom: 1px solid var(--border-color);
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-main);
     }
 
     .tab-btn {
       flex: 1;
-      padding: 12px;
+      padding: 12px 8px;
       background: none;
       border: none;
       color: var(--text-muted);
       cursor: pointer;
-      font-weight: bold;
+      font-size: 13px;
+      font-weight: 600;
       transition: 0.2s;
     }
 
     .tab-btn.active {
-      color: var(--accent-color);
-      border-bottom: 2px solid var(--accent-color);
+      color: var(--accent);
+      border-bottom: 2px solid var(--accent);
       background: rgba(0, 255, 204, 0.05);
     }
 
-    .tab-content {
+    .tab-body {
       flex: 1;
       overflow-y: auto;
       padding: 15px;
     }
 
-    .user-item {
+    .user-card {
       padding: 10px;
       margin-bottom: 8px;
-      background: var(--bg-color);
+      background: var(--bg-card);
       border-radius: 6px;
       cursor: pointer;
       display: flex;
@@ -155,20 +161,20 @@
       transition: 0.2s;
     }
 
-    .user-item:hover {
-      border-color: var(--accent-color);
+    .user-card:hover {
+      border-color: var(--accent);
     }
 
-    /* Центральная панель (Чат или Лента) */
-    .center-panel {
+    /* Центральная часть */
+    .center-area {
       display: flex;
       flex-direction: column;
       height: 100vh;
-      background: var(--bg-color);
+      background: var(--bg-main);
       position: relative;
     }
 
-    .chat-messages {
+    .chat-box {
       flex: 1;
       overflow-y: auto;
       padding: 20px;
@@ -177,57 +183,56 @@
       gap: 15px;
     }
 
-    .message {
-      background: var(--panel-bg);
+    .chat-message {
+      background: var(--bg-panel);
       padding: 12px 16px;
       border-radius: 8px;
       max-width: 70%;
-      border: 1px solid var(--border-color);
+      border: 1px solid var(--border);
     }
 
-    .message .sender {
+    .chat-message .author {
       font-size: 12px;
-      color: var(--accent-color);
+      color: var(--accent);
       margin-bottom: 4px;
     }
 
-    .message img {
+    .chat-message img {
       max-width: 100%;
       border-radius: 6px;
       margin-top: 8px;
     }
 
-    /* Индикатор печати / отправки фото */
-    #typing-indicator {
-      padding: 5px 20px;
+    #typing-status-bar {
+      padding: 4px 20px;
       font-size: 13px;
       color: var(--text-muted);
       font-style: italic;
       height: 24px;
     }
 
-    .chat-input-area {
+    .chat-controls {
       padding: 15px 20px;
-      background: var(--panel-bg);
-      border-top: 1px solid var(--border-color);
+      background: var(--bg-panel);
+      border-top: 1px solid var(--border);
       display: flex;
       gap: 10px;
       align-items: center;
     }
 
-    .chat-input-area input[type="text"] {
+    .chat-controls input[type="text"] {
       flex: 1;
       padding: 10px 15px;
-      background: var(--bg-color);
-      border: 1px solid var(--border-color);
+      background: var(--bg-main);
+      border: 1px solid var(--border);
       border-radius: 6px;
-      color: var(--text-color);
+      color: var(--text);
     }
 
-    .chat-input-area label {
+    .chat-controls label {
       cursor: pointer;
-      background: var(--bg-color);
-      border: 1px solid var(--border-color);
+      background: var(--bg-main);
+      border: 1px solid var(--border);
       padding: 10px;
       border-radius: 6px;
       display: flex;
@@ -236,27 +241,27 @@
       transition: 0.2s;
     }
 
-    .chat-input-area label:hover {
-      border-color: var(--accent-color);
-      color: var(--accent-color);
+    .chat-controls label:hover {
+      border-color: var(--accent);
+      color: var(--accent);
     }
 
-    .chat-input-area input[type="file"] {
+    .chat-controls input[type="file"] {
       display: none;
     }
 
-    .chat-input-area button {
+    .chat-controls button {
       padding: 10px 20px;
-      background: var(--accent-color);
-      color: var(--bg-color);
+      background: var(--accent);
+      color: var(--bg-main);
       border: none;
       border-radius: 6px;
       font-weight: bold;
       cursor: pointer;
     }
 
-    /* Лента Мемов и TikTok (Изолированный бесконечный скролл + Синхронизация) */
-    .feed-container {
+    /* Лента TikTok и мемов (Изолированный бесконечный скролл) */
+    .feed-wrapper {
       flex: 1;
       overflow-y: auto;
       padding: 20px;
@@ -264,12 +269,12 @@
       flex-direction: column;
       align-items: center;
       gap: 30px;
-      height: 100vh; /* Строго фиксированная высота для изоляции скролла */
+      height: 100vh;
     }
 
-    .feed-item {
-      background: var(--panel-bg);
-      border: 1px solid var(--border-color);
+    .feed-post {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
       border-radius: 12px;
       width: 100%;
       max-width: 450px;
@@ -277,24 +282,24 @@
       box-shadow: 0 4px 15px rgba(0,0,0,0.5);
     }
 
-    .feed-media {
+    .feed-content {
       width: 100%;
       max-height: 500px;
       object-fit: cover;
       display: block;
     }
 
-    .feed-footer {
+    .feed-info {
       padding: 15px;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
 
-    /* Правая панель (Профиль друга или Управление рацией) */
-    .sidebar-right {
-      background: var(--panel-bg);
-      border-left: 1px solid var(--border-color);
+    /* Правая панель (Профиль друга + Настройки + Рация) */
+    .right-sidebar {
+      background: var(--bg-panel);
+      border-left: 1px solid var(--border);
       padding: 20px;
       display: flex;
       flex-direction: column;
@@ -303,49 +308,42 @@
       overflow-y: auto;
     }
 
-    .profile-card {
-      background: var(--bg-color);
-      border: 1px solid var(--border-color);
-      padding: 20px;
+    .panel-box {
+      background: var(--bg-main);
+      border: 1px solid var(--border);
+      padding: 15px;
       border-radius: 8px;
-      text-align: center;
     }
 
-    .profile-card h3 {
-      color: var(--accent-color);
-      margin-bottom: 15px;
+    .panel-box h3 {
+      color: var(--accent);
+      margin-bottom: 12px;
+      font-size: 16px;
     }
 
-    .profile-card input {
+    .panel-box input, .panel-box select {
       width: 100%;
       padding: 8px;
-      margin: 10px 0;
-      background: var(--panel-bg);
-      border: 1px solid var(--border-color);
-      color: var(--text-color);
+      margin: 8px 0;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      color: var(--text);
       border-radius: 4px;
     }
 
-    .profile-card button {
+    .panel-box button {
       width: 100%;
       padding: 10px;
-      margin-top: 8px;
-      background: var(--accent-color);
-      color: var(--bg-color);
+      margin-top: 6px;
+      background: var(--accent);
+      color: var(--bg-main);
       border: none;
       border-radius: 4px;
       font-weight: bold;
       cursor: pointer;
     }
 
-    .ptt-section {
-      background: var(--bg-color);
-      border: 1px solid var(--border-color);
-      padding: 15px;
-      border-radius: 8px;
-    }
-
-    .ptt-button {
+    .ptt-btn {
       width: 100%;
       padding: 15px;
       background: #ff3366;
@@ -358,97 +356,106 @@
       text-transform: uppercase;
     }
 
-    .ptt-button.active {
-      background: #00ffcc;
-      color: #0d0e15;
-      box-shadow: var(--neon-glow);
+    .ptt-btn.active {
+      background: var(--accent);
+      color: var(--bg-main);
+      box-shadow: var(--neon);
     }
   </style>
 </head>
 <body>
 
   <!-- Экран авторизации -->
-  <div id="auth-screen">
-    <div class="auth-card">
+  <div id="auth-container">
+    <div class="auth-box">
       <h2 id="auth-title">Вход</h2>
-      <input type="text" id="username" placeholder="Имя пользователя">
-      <input type="password" id="password" placeholder="Пароль">
-      <button id="auth-submit-btn" onclick="handleAuth()">Войти</button>
-      <div class="toggle-auth" onclick="toggleAuthMode()">Нет аккаунта? Зарегистрироваться</div>
+      <input type="text" id="username-input" placeholder="Логин">
+      <input type="password" id="password-input" placeholder="Пароль">
+      <button id="auth-btn" onclick="performAuth()">Войти</button>
+      <div class="auth-switch" onclick="switchAuthMode()">Нет аккаунта? Зарегистрироваться</div>
     </div>
   </div>
 
-  <!-- Главный экран приложения -->
-  <div id="app-screen">
-    <!-- Левая панель: Вкладки (Чаты / Друзья) -->
-    <div class="sidebar-left">
-      <div class="sidebar-header" id="current-user-display">Профиль</div>
-      <div class="tabs">
-        <button class="tab-btn active" onclick="switchTab('chats')">Чаты</button>
-        <button class="tab-btn" onclick="switchTab('friends')">Друзья</button>
-        <button class="tab-btn" onclick="switchTab('feed')">Лента</button>
+  <!-- Основное приложение -->
+  <div id="app-container">
+    <!-- Левая панель: Навигация и списки -->
+    <div class="left-sidebar">
+      <div class="app-logo">
+        <span id="current-username-view">Профиль</span>
+        <button onclick="toggleSettingsModal()" style="background:none; border:none; color:var(--accent); cursor:pointer; font-size:18px;" title="Настройки">⚙️</button>
       </div>
-      <div class="tab-content" id="tab-content-area">
-        <!-- Контент динамически переключается -->
+      <div class="nav-tabs">
+        <button class="tab-btn active" onclick="switchAppTab('chats')">Чаты</button>
+        <button class="tab-btn" onclick="switchAppTab('friends')">Друзья</button>
+        <button class="tab-btn" onclick="switchAppTab('communities')">Группы</button>
+        <button class="tab-btn" onclick="switchAppTab('feed')">Лента</button>
+      </div>
+      <div class="tab-body" id="left-tab-content">
+        <!-- Динамическое наполнение -->
       </div>
     </div>
 
-    <!-- Центральная панель -->
-    <div class="center-panel" id="center-main-area">
-      <div class="chat-messages" id="chat-messages">
-        <!-- Сообщения чата -->
-      </div>
-      <div id="typing-indicator"></div>
-      <div class="chat-input-area" id="chat-input-container">
-        <input type="text" id="message-input" placeholder="Введите сообщение..." oninput="onUserTypingInput()">
+    <!-- Центральная область: Чаты или Лента -->
+    <div class="center-area" id="center-dynamic-area">
+      <div class="chat-box" id="chat-messages-box"></div>
+      <div id="typing-status-bar"></div>
+      <div class="chat-controls">
+        <input type="text" id="chat-text-input" placeholder="Введите сообщение..." oninput="emitTypingEvent()">
         <label title="Отправить фото">
           📷
-          <input type="file" id="photo-file-input" accept="image/*" onchange="handlePhotoUpload(event)">
+          <input type="file" id="photo-picker" accept="image/*" onchange="sendPhotoFile(event)">
         </label>
-        <button onclick="sendMessage()">Отправить</button>
+        <button onclick="sendChatMessage()">Отправить</button>
       </div>
     </div>
 
-    <!-- Правая панель: Профиль выбранного человека / Рация -->
-    <div class="sidebar-right">
-      <div class="profile-card" id="right-profile-panel">
+    <!-- Правая панель: Профиль друга и Рация с привязкой мыши -->
+    <div class="right-sidebar">
+      <div class="panel-box" id="right-profile-box">
         <h3>Профиль</h3>
-        <p style="color: var(--text-muted); font-size: 14px;">Выберите пользователя во вкладке «Друзья», чтобы открыть его профиль здесь.</p>
+        <p style="color: var(--text-muted); font-size: 13px;">Выберите пользователя во вкладке «Друзья», чтобы управлять им здесь.</p>
       </div>
 
-      <div class="ptt-section">
+      <div class="panel-box">
         <h3>Рация (Push-to-Talk)</h3>
-        <p id="ptt-hint" style="font-size: 12px; color: var(--accent-color); margin-top: 5px;">Активная кнопка: Левая кнопка мыши (ЛКМ) или кнопка ниже</p>
-        <button class="ptt-button" id="ptt-btn" onmousedown="startPTT()" onmouseup="stopPTT()">Удерживайте для речи</button>
-        <button style="width:100%; margin-top:8px; padding:8px; background:var(--border-color); color:var(--text-color); border:none; border-radius:4px; cursor:pointer;" onclick="bindMouseKey()">Привязать кнопку мыши</button>
+        <p id="ptt-hint-text" style="font-size: 12px; color: var(--accent); margin-bottom: 5px;">Активная кнопка: Левая кнопка мыши (ЛКМ)</p>
+        <button class="ptt-btn" id="ptt-action-btn" onmousedown="startPTT()" onmouseup="stopPTT()">Удерживайте для речи</button>
+        <button style="background:var(--border); color:var(--text); margin-top:8px;" onclick="bindCustomMouseKey()">Привязать кнопку мыши</button>
+      </div>
+
+      <div class="panel-box" id="settings-panel-box" style="display:none;">
+        <h3>Настройки аудио</h3>
+        <label style="font-size:12px; color:var(--text-muted);">Микрофон:</label>
+        <select id="mic-select"><option>Основной микрофон</option></select>
+        <label style="font-size:12px; color:var(--text-muted); margin-top:8px; display:block;">Динамики:</label>
+        <select id="speaker-select"><option>Основные динамики</option></select>
       </div>
     </div>
   </div>
 
   <script>
     let socket;
-    let isRegisterMode = false;
-    let currentUser = null;
-    let currentActiveTab = 'chats';
-    let selectedProfileUser = null;
-    let currentFeedItems = [];
-    let boundMouseKeyName = 'Левая кнопка мыши (ЛКМ)';
-    let isBindingKey = false;
-    let typingTimer = null;
+    let isReg = false;
+    let myUser = null;
+    let activeTab = 'chats';
+    let feedDataCache = [];
+    let activeKeyName = 'Левая кнопка мыши (ЛКМ)';
+    let waitingForKeyBind = false;
+    let typingTimeout = null;
 
-    function toggleAuthMode() {
-      isRegisterMode = !isRegisterMode;
-      document.getElementById('auth-title').innerText = isRegisterMode ? 'Регистрация' : 'Вход';
-      document.getElementById('auth-submit-btn').innerText = isRegisterMode ? 'Зарегистрироваться' : 'Войти';
-      document.querySelector('.toggle-auth').innerText = isRegisterMode ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Зарегистрироваться';
+    function switchAuthMode() {
+      isReg = !isReg;
+      document.getElementById('auth-title').innerText = isReg ? 'Регистрация' : 'Вход';
+      document.getElementById('auth-btn').innerText = isReg ? 'Зарегистрироваться' : 'Войти';
+      document.querySelector('.auth-switch').innerText = isReg ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Зарегистрироваться';
     }
 
-    async function handleAuth() {
-      const username = document.getElementById('username').value.trim();
-      const password = document.getElementById('password').value.trim();
+    async function performAuth() {
+      const username = document.getElementById('username-input').value.trim();
+      const password = document.getElementById('password-input').value.trim();
       if (!username || !password) return alert('Заполните все поля!');
 
-      const endpoint = isRegisterMode ? '/api/register' : '/api/login';
+      const endpoint = isReg ? '/api/register' : '/api/login';
       try {
         const res = await fetch(endpoint, {
           method: 'POST',
@@ -458,167 +465,163 @@
         const data = await res.json();
         if (data.error) return alert(data.error);
 
-        currentUser = data.username;
-        document.getElementById('auth-screen').style.display = 'none';
-        document.getElementById('app-screen').style.display = 'grid';
-        document.getElementById('current-user-display').innerText = currentUser;
+        myUser = data.username;
+        document.getElementById('auth-container').style.display = 'none';
+        document.getElementById('app-container').style.display = 'grid';
+        document.getElementById('current-username-view').innerText = myUser;
 
-        initSocket();
+        setupSocket();
       } catch (err) {
-        alert('Ошибка соединения с сервером');
+        alert('Ошибка связи с сервером');
       }
     }
 
-    function initSocket() {
+    function setupSocket() {
       socket = io();
-
-      socket.emit('auth', { username: currentUser });
+      socket.emit('auth', { username: myUser });
 
       socket.on('init_data', (data) => {
-        renderMessages(data.messages);
-        currentFeedItems = data.feed;
-        renderTabContent(data.users);
+        renderChatMessages(data.messages);
+        feedDataCache = data.feed;
+        renderLeftTab(data.users);
       });
 
       socket.on('users_list', (users) => {
-        renderTabContent(users);
+        renderLeftTab(users);
       });
 
       socket.on('chat_message', (msg) => {
-        appendMessage(msg);
+        appendChatMessage(msg);
       });
 
       socket.on('user_typing', (data) => {
-        const indicator = document.getElementById('typing-indicator');
+        const statusElem = document.getElementById('typing-status-bar');
         if (data.active) {
-          if (data.type === 'photo') {
-            indicator.innerText = `${data.username} отправляет фото...`;
-          } else {
-            indicator.innerText = `${data.username} печатает...`;
-          }
+          statusElem.innerText = data.type === 'photo' ? `${data.username} отправляет фото...` : `${data.username} печатает...`;
         } else {
-          indicator.innerText = '';
+          statusElem.innerText = '';
         }
       });
 
       socket.on('feed_updated', (feed) => {
-        currentFeedItems = feed;
-        if (currentActiveTab === 'feed') {
-          renderFeedContent();
-        }
+        feedDataCache = feed;
+        if (activeTab === 'feed') renderFeedStream();
       });
 
       socket.on('custom_name_updated', (data) => {
-        alert(`Псевдоним для ${data.targetUser} успешно обновлен!`);
+        alert(`Псевдоним для ${data.targetUser} сохранен!`);
       });
     }
 
-    function switchTab(tab) {
-      currentActiveTab = tab;
+    function switchAppTab(tab) {
+      activeTab = tab;
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       event.target.classList.add('active');
 
-      const centerArea = document.getElementById('center-main-area');
+      const center = document.getElementById('center-dynamic-area');
       if (tab === 'feed') {
-        centerArea.innerHTML = `
-          <div class="feed-container" id="feed-container" onscroll="checkFeedScroll()">
-            <!-- Лента мемов и TikTok -->
-          </div>
+        center.innerHTML = `
+          <div class="feed-wrapper" id="feed-scroll-box" onscroll="handleFeedScroll()"></div>
         `;
-        renderFeedContent();
+        renderFeedStream();
       } else {
-        centerArea.innerHTML = `
-          <div class="chat-messages" id="chat-messages"></div>
-          <div id="typing-indicator"></div>
-          <div class="chat-input-area" id="chat-input-container">
-            <input type="text" id="message-input" placeholder="Введите сообщение..." oninput="onUserTypingInput()">
+        center.innerHTML = `
+          <div class="chat-box" id="chat-messages-box"></div>
+          <div id="typing-status-bar"></div>
+          <div class="chat-controls">
+            <input type="text" id="chat-text-input" placeholder="Введите сообщение..." oninput="emitTypingEvent()">
             <label title="Отправить фото">
               📷
-              <input type="file" id="photo-file-input" accept="image/*" onchange="handlePhotoUpload(event)">
+              <input type="file" id="photo-picker" accept="image/*" onchange="sendPhotoFile(event)">
             </label>
-            <button onclick="sendMessage()">Отправить</button>
+            <button onclick="sendChatMessage()">Отправить</button>
           </div>
         `;
-        // Запросим свежие сообщения
       }
     }
 
-    function renderTabContent(usersList) {
-      const container = document.getElementById('tab-content-area');
+    function renderLeftTab(usersList) {
+      const container = document.getElementById('left-tab-content');
       container.innerHTML = '';
 
-      if (currentActiveTab === 'chats') {
+      if (activeTab === 'chats') {
         container.innerHTML = '<p style="color:var(--text-muted); font-size:13px;">Общий чат активен в центре.</p>';
-      } else if (currentActiveTab === 'friends') {
+      } else if (activeTab === 'friends') {
         usersList.forEach(u => {
-          if (u.username === currentUser) return;
+          if (u.username === myUser) return;
           const div = document.createElement('div');
-          div.className = 'user-item';
+          div.className = 'user-card';
           div.innerHTML = `
             <span>${u.customName}</span>
-            <button style="padding:4px 8px; background:var(--accent-color); border:none; border-radius:4px; cursor:pointer;" onclick="selectFriendProfile('${u.username}', '${u.customName}')">Профиль</button>
+            <button style="padding:4px 8px; background:var(--accent); border:none; border-radius:4px; cursor:pointer;" onclick="openUserProfile('${u.username}', '${u.customName}')">Профиль</button>
           `;
           container.appendChild(div);
         });
-      } else if (currentActiveTab === 'feed') {
-        container.innerHTML = '<p style="color:var(--text-muted); font-size:13px;">Совместный скролл активен в центре.</p>';
+      } else if (activeTab === 'communities') {
+        container.innerHTML = '<p style="color:var(--text-muted); font-size:13px;">Группы и сообщества.</p>';
+      } else if (activeTab === 'feed') {
+        container.innerHTML = '<p style="color:var(--text-muted); font-size:13px;">Совместный просмотр ленты.</p>';
       }
     }
 
-    // 2. Открытие профиля человека справа
-    function selectFriendProfile(username, customName) {
-      selectedProfileUser = username;
-      const rightPanel = document.getElementById('right-profile-panel');
-      rightPanel.innerHTML = `
+    // 2. Открытие профиля в правой панели
+    function openUserProfile(username, customName) {
+      const rightBox = document.getElementById('right-profile-box');
+      rightBox.innerHTML = `
         <h3>Профиль: ${customName}</h3>
-        <p style="font-size:13px; color:var(--text-muted); margin-bottom:10px;">Логин: ${username}</p>
-        <label style="font-size:12px; text-align:left; display:block; color:var(--text-muted);">Изменить имя/псевдоним:</label>
-        <input type="text" id="custom-name-input" value="${customName}">
-        <button onclick="saveCustomName('${username}')">Сохранить псевдоним</button>
-        <button style="background:#00ffcc; color:#0d0e15;" onclick="startCall('${username}')">Позвонить</button>
-        <button style="background:#3366ff; color:#fff;" onclick="openDirectChat('${username}')">Написать</button>
+        <p style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">Аккаунт: ${username}</p>
+        <label style="font-size:12px; color:var(--text-muted);">Изменить псевдоним:</label>
+        <input type="text" id="edit-custom-name" value="${customName}">
+        <button onclick="saveUserAlias('${username}')">Сохранить</button>
+        <button style="background:var(--accent); color:var(--bg-main);" onclick="callUser('${username}')">Позвонить</button>
+        <button style="background:#3366ff; color:#fff;" onclick="messageUser('${username}')">Написать</button>
       `;
     }
 
-    function saveCustomName(targetUser) {
-      const val = document.getElementById('custom-name-input').value.trim();
+    function saveUserAlias(targetUser) {
+      const val = document.getElementById('edit-custom-name').value.trim();
       socket.emit('set_custom_name', { targetUser, customName: val });
     }
 
-    function startCall(username) {
-      alert(`Инициирован звонок пользователю ${username}...`);
+    function callUser(username) {
+      alert(`Звонок пользователю ${username}...`);
     }
 
-    function openDirectChat(username) {
+    function messageUser(username) {
       alert(`Открыт чат с ${username}`);
-      switchTab('chats');
+      switchAppTab('chats');
     }
 
-    // 1. Индикатор печати / отправки фото
-    function onUserTypingInput() {
+    // Настройки аудиоустройств
+    function toggleSettingsModal() {
+      const panel = document.getElementById('settings-panel-box');
+      panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    }
+
+    // 1. Индикатор печати и отправки фото
+    function emitTypingEvent() {
       socket.emit('typing_status', { type: 'typing', active: true });
-      clearTimeout(typingTimer);
-      typingTimer = setTimeout(() => {
+      clearTimeout(typingTimeout);
+      typingTimeout = setTimeout(() => {
         socket.emit('typing_status', { type: 'typing', active: false });
       }, 1500);
     }
 
-    function handlePhotoUpload(event) {
-      const file = event.target.files[0];
+    function sendPhotoFile(e) {
+      const file = e.target.files[0];
       if (!file) return;
 
       socket.emit('typing_status', { type: 'photo', active: true });
-
       const reader = new FileReader();
-      reader.onload = function(e) {
-        socket.emit('chat_message', { text: '', image: e.target.result });
+      reader.onload = function(evt) {
+        socket.emit('chat_message', { text: '', image: evt.target.result });
         socket.emit('typing_status', { type: 'photo', active: false });
       };
       reader.readAsDataURL(file);
     }
 
-    function sendMessage() {
-      const input = document.getElementById('message-input');
+    function sendChatMessage() {
+      const input = document.getElementById('chat-text-input');
       const text = input.value.trim();
       if (!text) return;
 
@@ -627,93 +630,92 @@
       socket.emit('typing_status', { type: 'typing', active: false });
     }
 
-    function appendMessage(msg) {
-      const chatContainer = document.getElementById('chat-messages');
-      if (!chatContainer) return;
+    function appendChatMessage(msg) {
+      const box = document.getElementById('chat-messages-box');
+      if (!box) return;
 
       const div = document.createElement('div');
-      div.className = 'message';
+      div.className = 'chat-message';
       div.innerHTML = `
-        <div class="sender">${msg.sender} <span style="float:right; color:var(--text-muted);">${msg.timestamp}</span></div>
+        <div class="author">${msg.sender} <span style="float:right; color:var(--text-muted);">${msg.timestamp}</span></div>
         <div>${msg.text}</div>
-        ${msg.image ? `<img src="${msg.image}" alt="photo">` : ''}
+        ${msg.image ? `<img src="${msg.image}" alt="img">` : ''}
       `;
-      chatContainer.appendChild(div);
-      chatContainer.scrollTop = chatContainer.scrollHeight;
+      box.appendChild(div);
+      box.scrollTop = box.scrollHeight;
     }
 
-    function renderMessages(messages) {
-      const chatContainer = document.getElementById('chat-messages');
-      if (!chatContainer) return;
-      chatContainer.innerHTML = '';
-      messages.forEach(m => appendMessage(m));
+    function renderChatMessages(messages) {
+      const box = document.getElementById('chat-messages-box');
+      if (!box) return;
+      box.innerHTML = '';
+      messages.forEach(m => appendChatMessage(m));
     }
 
-    // 3 & 4. Совместный и бесконечный скролл ленты TikTok
-    function renderFeedContent() {
-      const container = document.getElementById('feed-container');
+    // 3 & 4. Совместный и бесконечный скролл ленты
+    function renderFeedStream() {
+      const container = document.getElementById('feed-scroll-box');
       if (!container) return;
 
       container.innerHTML = '';
-      currentFeedItems.forEach(item => {
+      feedDataCache.forEach(item => {
         const div = document.createElement('div');
-        div.className = 'feed-item';
+        div.className = 'feed-post';
         div.innerHTML = `
           ${item.type === 'video' 
-            ? `<video class="feed-media" src="${item.url}" controls loop></video>`
-            : `<img class="feed-media" src="${item.url}" alt="meme">`
+            ? `<video class="feed-content" src="${item.url}" controls loop></video>`
+            : `<img class="feed-content" src="${item.url}" alt="post">`
           }
-          <div class="feed-footer">
+          <div class="feed-info">
             <span>${item.caption}</span>
-            <button onclick="likeFeedItem(${item.id})" style="background:none; border:none; color:var(--accent-color); cursor:pointer;">❤️ ${item.likes}</button>
+            <button onclick="likeFeed(${item.id})" style="background:none; border:none; color:var(--accent); cursor:pointer;">❤️ ${item.likes}</button>
           </div>
         `;
         container.appendChild(div);
       });
     }
 
-    function checkFeedScroll() {
-      const container = document.getElementById('feed-container');
+    function handleFeedScroll() {
+      const container = document.getElementById('feed-scroll-box');
       if (!container) return;
-      // Если прокрутили до низа — запрашиваем новые элементы для бесконечного скролла
       if (container.scrollTop + container.clientHeight >= container.scrollHeight - 50) {
         socket.emit('load_more_feed');
       }
     }
 
-    function likeFeedItem(itemId) {
+    function likeFeed(itemId) {
       socket.emit('like_feed_item', { itemId });
     }
 
-    // 5. Привязка мыши к рации и актуальная подсказка
-    function bindMouseKey() {
-      isBindingKey = true;
-      const hint = document.getElementById('ptt-hint');
-      hint.innerText = 'Нажмите любую кнопку мыши для привязки...';
+    // 5. Привязка мыши к рации с подсказкой
+    function bindCustomMouseKey() {
+      waitingForKeyBind = true;
+      const hint = document.getElementById('ptt-hint-text');
+      hint.innerText = 'Нажмите нужную кнопку мыши...';
 
-      window.addEventListener('mousedown', function mouseListener(e) {
-        if (!isBindingKey) return;
-        isBindingKey = false;
-        
-        let buttonName = 'Левая кнопка мыши (ЛКМ)';
-        if (e.button === 1) buttonName = 'Средняя кнопка мыши (СКМ)';
-        if (e.button === 2) buttonName = 'Правая кнопка мыши (ПКМ)';
-        if (e.button > 2) buttonName = `Кнопка мыши #${e.button + 1}`;
+      window.addEventListener('mousedown', function listener(e) {
+        if (!waitingForKeyBind) return;
+        waitingForKeyBind = false;
 
-        boundMouseKeyName = buttonName;
-        hint.innerText = `Активная кнопка: ${boundMouseKeyName}`;
-        window.removeEventListener('mousedown', mouseListener);
+        let name = 'Левая кнопка мыши (ЛКМ)';
+        if (e.button === 1) name = 'Средняя кнопка мыши (СКМ)';
+        if (e.button === 2) name = 'Правая кнопка мыши (ПКМ)';
+        if (e.button > 2) name = `Кнопка мыши #${e.button + 1}`;
+
+        activeKeyName = name;
+        hint.innerText = `Активная кнопка: ${activeKeyName}`;
+        window.removeEventListener('mousedown', listener);
       }, { once: true });
     }
 
     function startPTT() {
-      const btn = document.getElementById('ptt-btn');
+      const btn = document.getElementById('ptt-action-btn');
       btn.classList.add('active');
       btn.innerText = 'Передача речи...';
     }
 
     function stopPTT() {
-      const btn = document.getElementById('ptt-btn');
+      const btn = document.getElementById('ptt-action-btn');
       btn.classList.remove('active');
       btn.innerText = 'Удерживайте для речи';
     }
