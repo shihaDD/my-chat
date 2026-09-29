@@ -263,7 +263,7 @@
         let toastTimeout = null;
         let latestUsersData = [];
 
-        // Функция воспроизведения звука уведомления (через AudioContext)
+        // Воспроизведение звука уведомления
         function playNotificationSound() {
             try {
                 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -271,7 +271,7 @@
                 const gainNode = audioCtx.createGain();
                 
                 osc.type = 'sine';
-                osc.frequency.setValueAtTime(800, audioCtx.currentTime); // Частота звука
+                osc.frequency.setValueAtTime(800, audioCtx.currentTime);
                 osc.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.15);
                 
                 gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
@@ -496,11 +496,14 @@
                     avatarHtml = `<div class="user-avatar"><img src="${user.avatar}" alt="Avatar"></div>`;
                 }
 
+                // Статус: в сети (зеленый) или время последнего входа
+                let statusText = user.isOnline ? '<span style="color: #00a884;">в сети</span>' : (user.lastSeen ? `был(а) в ${user.lastSeen}` : user.phone);
+
                 li.innerHTML = `
                     ${avatarHtml}
                     <div class="contact-info">
                         <span class="contact-name">${displayName}</span>
-                        <span class="contact-status">${user.phone}</span>
+                        <span class="contact-status">${statusText}</span>
                     </div>
                 `;
                 
@@ -519,10 +522,8 @@
                     document.querySelectorAll('#users-list li').forEach(el => el.classList.remove('active'));
                     li.classList.add('active');
                     
-                    // Когда открываем чат, сообщаем серверу, что прочитали сообщения этого пользователя
                     socket.emit('mark_as_read', { fromPhone: activeRecipientPhone });
 
-                    // Локально переводим исходящие сообщения в прочитанные
                     if (messagesStore[activeRecipientPhone]) {
                         messagesStore[activeRecipientPhone].forEach(m => {
                             if (!m.incoming) m.status = 'read';
@@ -545,28 +546,24 @@
             activeChatPhone.textContent = phone;
         }
 
-        // Получение нового сообщения
         socket.on('message', (data) => {
             if (!messagesStore[data.fromPhone]) messagesStore[data.fromPhone] = [];
             messagesStore[data.fromPhone].push({ text: data.text, time: data.time, incoming: true });
             saveMessages();
             
-            playNotificationSound(); // Проигрываем звук уведомления
+            playNotificationSound();
 
             if (activeRecipientPhone === data.fromPhone) {
                 renderMessages();
-                // Если чат открыт, сразу отправляем статус прочтения отправителю
                 socket.emit('mark_as_read', { fromPhone: activeRecipientPhone });
             }
         });
 
-        // Обработка смены статуса сообщения (доставлено / прочитано)
         socket.on('message_status_update', (data) => {
-            // data.toPhone - кому отправляли, data.status - 'delivered' или 'read'
             if (messagesStore[data.toPhone]) {
                 messagesStore[data.toPhone].forEach(m => {
                     if (!m.incoming) {
-                        m.status = data.status; // обновляем статус
+                        m.status = data.status;
                     }
                 });
                 saveMessages();
@@ -586,7 +583,6 @@
             if (!messagesStore[activeRecipientPhone]) messagesStore[activeRecipientPhone] = [];
             const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             
-            // Статус по умолчанию при отправке: sent (одна галочка)
             messagesStore[activeRecipientPhone].push({ text, time, incoming: false, status: 'sent' });
             saveMessages();
 
@@ -608,14 +604,14 @@
                 
                 let metaHtml = `<span class="time">${m.time}</span>`;
                 if (!m.incoming) {
-                    let checksHtml = '✓'; // 1) Отправлено
+                    let checksHtml = '✓'; 
                     let checksClass = 'checks';
                     
                     if (m.status === 'delivered') {
-                        checksHtml = '✓✓'; // 2) Доставлено (серо-зеленые двойные галочки)
+                        checksHtml = '✓✓'; 
                     } else if (m.status === 'read') {
                         checksHtml = '✓✓'; 
-                        checksClass = 'checks read'; // 3) Прочитано (синие галочки)
+                        checksClass = 'checks read'; 
                     }
                     metaHtml += `<span class="${checksClass}">${checksHtml}</span>`;
                 }
