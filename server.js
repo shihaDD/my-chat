@@ -24,7 +24,7 @@ function loadDatabase() {
                 groups: data.groups || [],
                 communities: data.communities || [],
                 messages: data.messages || {},
-                mutedChats: data.mutedChats || {} // Хранилище заглушенных чатов: { phone: [chatId1, chatId2] }
+                mutedChats: data.mutedChats || {}
             };
         } catch (e) {
             console.error('Ошибка чтения базы данных, создаем новую:', e);
@@ -266,7 +266,9 @@ io.on('connection', (socket) => {
         }
         if (!senderPhone) return;
 
-        const chatKey = [senderPhone, toPhone].sort().join('_');
+        // Если отправляем себе (Избранное), формируем специальный ключ чата
+        const chatKey = senderPhone === toPhone ? `${senderPhone}_${senderPhone}` : [senderPhone, toPhone].sort().join('_');
+
         if (!messages[chatKey]) messages[chatKey] = [];
         const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const msgData = { fromPhone: senderPhone, fromName: senderName, text: message, file, time };
@@ -275,7 +277,7 @@ io.on('connection', (socket) => {
         saveDatabase();
 
         const targetSocketId = activeUsers[toPhone];
-        if (targetSocketId) {
+        if (targetSocketId && senderPhone !== toPhone) {
             const recipientMuted = mutedChats[toPhone] && mutedChats[toPhone].includes(chatKey);
             io.to(targetSocketId).emit('message', { ...msgData, isMuted: recipientMuted });
         } else if (senderPhone === toPhone) {
