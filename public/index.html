@@ -282,6 +282,22 @@
             color: #00ff88;
         }
 
+        .delete-btn {
+            background: transparent;
+            color: var(--text-muted);
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 5px;
+            border-radius: 4px;
+            transition: color 0.2s, background 0.2s;
+        }
+
+        .delete-btn:hover {
+            color: var(--accent-color);
+            background: rgba(255, 42, 95, 0.1);
+        }
+
         .chat-area {
             flex: 1;
             display: flex;
@@ -423,7 +439,6 @@
             transform: scale(0.97);
         }
 
-        /* Панель смайликов */
         .emoji-picker {
             position: absolute;
             bottom: 75px;
@@ -715,6 +730,14 @@
                 </select>
             </div>
 
+            <div class="settings-group">
+                <label>Ссылка-приглашение в друзья:</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="myInviteLinkInput" readonly style="font-size: 12px; background: #1a1a24; padding: 10px;">
+                    <button class="main-action-btn" id="copyMyInviteBtn" style="width: 100px; padding: 10px; font-size: 12px;">Копировать</button>
+                </div>
+            </div>
+
             <div class="modal-buttons-row">
                 <button id="saveSettingsBtn" class="main-action-btn">СОХРАНИТЬ</button>
                 <button id="closeSettingsBtn" class="main-action-btn" style="background: #222230;">ОТМЕНА</button>
@@ -767,6 +790,14 @@
         <div class="auth-card">
             <h2 id="manageModalTitle">Управление</h2>
             
+            <div class="settings-group">
+                <label>Ссылка-приглашение в чат:</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" id="chatInviteLinkInput" readonly style="font-size: 12px; background: #1a1a24; padding: 10px;">
+                    <button class="main-action-btn" id="copyChatInviteBtn" style="width: 100px; padding: 10px; font-size: 12px;">Копировать</button>
+                </div>
+            </div>
+
             <div class="settings-group" id="editChatInfoSection">
                 <label>Название и описание:</label>
                 <input type="text" id="editChatNameInput" placeholder="Название...">
@@ -785,6 +816,10 @@
                 <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 10px 0;">
                 <p style="text-align: left;" id="inviteSectionTitle">Пригласить участника:</p>
                 <div id="inviteMembersContainer" style="max-height: 100px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px;"></div>
+            </div>
+
+            <div class="settings-group" id="deleteChatSection" style="margin-top: 15px;">
+                <button id="deleteChatBtn" class="main-action-btn" style="background: #ff2a5f;">УДАЛИТЬ ЧАТ / СООБЩЕСТВО</button>
             </div>
 
             <div class="modal-buttons-row" style="margin-top: 10px;">
@@ -847,7 +882,6 @@
             </div>
             
             <div class="chat-input-area" id="inputArea" style="display: none;">
-                <!-- Панель смайликов -->
                 <div class="emoji-picker" id="emojiPicker">
                     <button class="emoji-item">😀</button>
                     <button class="emoji-item">😂</button>
@@ -976,7 +1010,38 @@
             }
         }
 
-        // Логика панели смайликов
+        window.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const addPhone = urlParams.get('add');
+            const joinGroup = urlParams.get('group');
+            const joinCom = urlParams.get('com');
+
+            if (addPhone) {
+                setTimeout(() => {
+                    if (addPhone !== myPhone) {
+                        socket.emit('check_contact', { phone: addPhone, autoAdd: true });
+                    }
+                }, 1000);
+            } else if (joinGroup) {
+                setTimeout(() => {
+                    socket.emit('join_group_by_link', { groupId: joinGroup, myPhone });
+                }, 1000);
+            } else if (joinCom) {
+                setTimeout(() => {
+                    socket.emit('join_community_by_link', { communityId: joinCom, myPhone });
+                }, 1000);
+            }
+        });
+
+        socket.on('auto_added_contact', (contact) => {
+            if (!myContacts.some(c => c.phone === contact.phone)) {
+                myContacts.push(contact);
+                localStorage.setItem('chat_my_contacts', JSON.stringify(myContacts));
+                renderSidebar();
+                showToast(`Вы добавлены в контакты пользователя ${contact.name}!`);
+            }
+        });
+
         const emojiBtn = document.getElementById('emojiBtn');
         const emojiPicker = document.getElementById('emojiPicker');
         const messageInput = document.getElementById('messageInput');
@@ -998,7 +1063,6 @@
             }
         });
 
-        // Отправка файлов / фото / видео
         const attachFileBtn = document.getElementById('attachFileBtn');
         const chatFileInput = document.getElementById('chatFileInput');
 
@@ -1009,12 +1073,10 @@
         chatFileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
-
             if (file.size > 15 * 1024 * 1024) {
                 showToast('Файл слишком большой! Максимальный размер 15 МБ.');
                 return;
             }
-
             const reader = new FileReader();
             reader.onload = function(event) {
                 const fileData = {
@@ -1150,6 +1212,9 @@
         });
 
         document.getElementById('manageChatBtn').addEventListener('click', () => {
+            const inviteInput = document.getElementById('chatInviteLinkInput');
+            const deleteBtnSec = document.getElementById('deleteChatSection');
+
             if (activeChatType === 'group') {
                 const group = groups.find(g => g.id === activeChatId);
                 if (!group) return;
@@ -1160,8 +1225,11 @@
                 currentEditingAvatar = group.avatar || '';
                 applyAvatar(document.getElementById('editChatAvatarPreview'), currentEditingAvatar, '👥');
 
+                inviteInput.value = `${window.location.origin}/?group=${group.id}`;
+
                 const isCreator = group.creator === myPhone;
                 document.getElementById('editChatInfoSection').style.display = isCreator ? 'flex' : 'none';
+                deleteBtnSec.style.display = isCreator ? 'flex' : 'none';
 
                 const membersContainer = document.getElementById('manageMembersContainer');
                 membersContainer.innerHTML = '<b style="font-size:12px; color:var(--text-muted);">Текущие участники:</b>';
@@ -1213,8 +1281,11 @@
                 currentEditingAvatar = com.avatar || '';
                 applyAvatar(document.getElementById('editChatAvatarPreview'), currentEditingAvatar, '📢');
 
+                inviteInput.value = `${window.location.origin}/?com=${com.id}`;
+
                 const isCreator = com.creator === myPhone;
                 document.getElementById('editChatInfoSection').style.display = isCreator ? 'flex' : 'none';
+                deleteBtnSec.style.display = isCreator ? 'flex' : 'none';
 
                 const membersContainer = document.getElementById('manageMembersContainer');
                 membersContainer.innerHTML = `<b style="font-size:12px; color:var(--text-muted);">Подписчиков: ${com.subscribers.length}</b>`;
@@ -1256,6 +1327,31 @@
 
                 document.getElementById('manageMembersModal').style.display = 'flex';
             }
+        });
+
+        document.getElementById('copyChatInviteBtn').addEventListener('click', () => {
+            const input = document.getElementById('chatInviteLinkInput');
+            input.select();
+            navigator.clipboard.writeText(input.value);
+            showToast('Ссылка-приглашение скопирована в буфер обмена!');
+        });
+
+        document.getElementById('deleteChatBtn').addEventListener('click', () => {
+            showToast('Вы уверены, что хотите удалить этот чат?', () => {
+                if (activeChatType === 'group') {
+                    socket.emit('delete_group', { groupId: activeChatId, myPhone });
+                } else if (activeChatType === 'community') {
+                    socket.emit('delete_community', { communityId: activeChatId, myPhone });
+                }
+                document.getElementById('manageMembersModal').style.display = 'none';
+                activeChatId = null;
+                document.getElementById('chatHeaderText').innerText = 'Выберите чат слева';
+                document.getElementById('chatHeaderDesc').innerText = '';
+                document.getElementById('activeAvatar').style.display = 'none';
+                document.getElementById('chatHeaderActions').style.display = 'none';
+                document.getElementById('inputArea').style.display = 'none';
+                document.getElementById('messagesContainer').innerHTML = '<div style="color: var(--text-muted); text-align: center; margin-top: auto; margin-bottom: auto;">Выберите контакт для общения</div>';
+            });
         });
 
         document.getElementById('saveChatInfoBtn').addEventListener('click', () => {
@@ -1304,6 +1400,24 @@
 
         window.addMemberToCommunity = function(communityId, phone) {
             socket.emit('add_community_member', { communityId, phone, myPhone });
+        };
+
+        window.deleteContact = function(phone, event) {
+            event.stopPropagation();
+            showToast('Удалить контакт из списка?', () => {
+                myContacts = myContacts.filter(c => c.phone !== phone);
+                localStorage.setItem('chat_my_contacts', JSON.stringify(myContacts));
+                if (activeChatId === phone) {
+                    activeChatId = null;
+                    document.getElementById('chatHeaderText').innerText = 'Выберите чат слева';
+                    document.getElementById('chatHeaderDesc').innerText = '';
+                    document.getElementById('activeAvatar').style.display = 'none';
+                    document.getElementById('chatHeaderActions').style.display = 'none';
+                    document.getElementById('inputArea').style.display = 'none';
+                    document.getElementById('messagesContainer').innerHTML = '<div style="color: var(--text-muted); text-align: center; margin-top: auto; margin-bottom: auto;">Выберите контакт для общения</div>';
+                }
+                renderSidebar();
+            });
         };
 
         socket.on('group_updated', (updatedGroup) => {
@@ -1356,6 +1470,7 @@
         function openSettingsModal() {
             document.getElementById('settingsName').value = myName;
             document.getElementById('settingsSoundSelect').value = notificationSoundType;
+            document.getElementById('myInviteLinkInput').value = `${window.location.origin}/?add=${myPhone}`;
             settingsAvatarStyle = myAvatarData;
             settingsPresetAvs.forEach(av => {
                 if (av.dataset.bg === myAvatarData) {
@@ -1368,6 +1483,13 @@
         }
 
         document.getElementById('profileSettingsBtn').addEventListener('click', openSettingsModal);
+
+        document.getElementById('copyMyInviteBtn').addEventListener('click', () => {
+            const input = document.getElementById('myInviteLinkInput');
+            input.select();
+            navigator.clipboard.writeText(input.value);
+            showToast('Ваша ссылка-приглашение скопирована!');
+        });
 
         settingsPresetAvs.forEach(av => {
             av.addEventListener('click', () => {
@@ -1651,6 +1773,7 @@
                             </div>
                         </div>
                     </div>
+                    <button class="delete-btn" title="Удалить контакт" onclick="deleteContact('${c.phone}', event)">✕</button>
                 `;
                 item.onclick = () => selectChat(c.phone, 'private', c.name);
                 listEl.appendChild(item);
@@ -1747,19 +1870,22 @@
                 socket.emit('community_message', { communityId: activeChatId, message: text, file: fileObj });
             }
 
-            let chatKey = '';
-            if (activeChatType === 'group') chatKey = `group_${activeChatId}`;
-            else if (activeChatType === 'community') chatKey = `community_${activeChatId}`;
-            else chatKey = [myPhone, activeChatId].sort().join('_');
+            // Избранное не дублируем локально вручную, так как сервер обрабатывает его корректно
+            if (activeChatId !== myPhone) {
+                let chatKey = '';
+                if (activeChatType === 'group') chatKey = `group_${activeChatId}`;
+                else if (activeChatType === 'community') chatKey = `community_${activeChatId}`;
+                else chatKey = [myPhone, activeChatId].sort().join('_');
 
-            if (!allMessages[chatKey]) allMessages[chatKey] = [];
-            allMessages[chatKey].push({
-                fromName: myName,
-                fromPhone: myPhone,
-                text: text,
-                file: fileObj,
-                time: time
-            });
+                if (!allMessages[chatKey]) allMessages[chatKey] = [];
+                allMessages[chatKey].push({
+                    fromName: myName,
+                    fromPhone: myPhone,
+                    text: text,
+                    file: fileObj,
+                    time: time
+                });
+            }
 
             input.value = '';
             emojiPicker.classList.remove('show');
