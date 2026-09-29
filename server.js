@@ -76,7 +76,7 @@ app.post('/api/register', (req, res) => {
     const newUser = {
         login: cleanLogin,
         password,
-        avatar: avatar || 'https://via.placeholder.com/150',
+        avatar: avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
         bio: 'Всем привет!',
         email: ''
     };
@@ -132,7 +132,7 @@ app.post('/api/news', (req, res) => {
     res.json({ success: true, db });
 });
 
-// Псевдонимы (Локальные имена)
+// Псевдонимы
 app.post('/api/set-nickname', (req, res) => {
     const { owner, target, nickname } = req.body;
     if (!db.customNicknames[owner]) db.customNicknames[owner] = {};
@@ -178,6 +178,19 @@ app.post('/api/add-friend', (req, res) => {
     }
 
     db.friendRequests[actualTargetName].push(login);
+    saveDb();
+    res.json({ success: true, db });
+});
+
+// Удаление из друзей
+app.post('/api/remove-friend', (req, res) => {
+    const { login, targetLogin } = req.body;
+    if (db.friends[login]) {
+        db.friends[login] = db.friends[login].filter(u => u !== targetLogin);
+    }
+    if (db.friends[targetLogin]) {
+        db.friends[targetLogin] = db.friends[targetLogin].filter(u => u !== login);
+    }
     saveDb();
     res.json({ success: true, db });
 });
@@ -343,6 +356,7 @@ app.post('/api/delete-group-message', (req, res) => {
 
 // Socket.IO
 const userSockets = {};
+const groupCallRooms = {}; // groupId -> [{ login, socketId }]
 
 io.on('connection', (socket) => {
     socket.on('register', (login) => {
@@ -366,7 +380,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // WebRTC звонки
+    // Одиночные WebRTC звонки
     socket.on('call-user', ({ to, offer, from }) => {
         if (userSockets[to]) {
             io.to(userSockets[to]).emit('incoming-call', { from, offer });
@@ -391,12 +405,49 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Групповые WebRTC звонки
+    socket.on('join-group-call', ({ groupId, login }) => {
+        if (!groupCallRooms[groupId]) groupCallRooms[groupId] = [];
+        groupCallRooms[groupId] = groupCallRooms[groupId].filter(p => p.login !== login);
+        
+        const existingUsers = [...groupCallRooms[groupId]];
+        groupCallRooms[groupId].push({ login, socketId: socket.id });
+        socket.join(groupId);
+
+        socket.emit('group-call-users', existingUsers);
+        socket.to(groupId).emit('user-joined-group-call', { login, socketId: socket.id });
+    });
+
+    socket.on('group-signal', ({ toSocketId, signal, fromLogin }) => {
+        io.to(toSocketId).emit('group-signal', {
+            fromSocketId: socket.id,
+            fromLogin,
+            signal
+        });
+    });
+
+    socket.on('leave-group-call', ({ groupId, login }) => {
+        if (groupCallRooms[groupId]) {
+            groupCallRooms[groupId] = groupCallRooms[groupId].filter(p => p.login !== login);
+            socket.to(groupId).emit('user-left-group-call', { socketId: socket.id, login });
+        }
+        socket.leave(groupId);
+    });
+
     socket.on('disconnect', () => {
         for (const [login, id] of Object.entries(userSockets)) {
             if (id === socket.id) {
                 delete userSockets[login];
                 db.lastSeen[login] = Date.now();
                 break;
+            }
+        }
+        for (const [groupId, participants] of Object.entries(groupCallRooms)) {
+            const userIndex = participants.findIndex(p => p.socketId === socket.id);
+            if (userIndex !== -1) {
+                const user = participants[userIndex];
+                participants.splice(userIndex, 1);
+                io.to(groupId).emit('user-left-group-call', { socketId: socket.id, login: user.login });
             }
         }
     });
