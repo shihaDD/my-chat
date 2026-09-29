@@ -65,7 +65,7 @@
         .code-input { font-size: 24px; text-align: center; letter-spacing: 12px; width: 80%; margin-bottom: 15px; background: #0b0c10; color: #66fcf1; border: 1px solid #45a29e; }
         .debug-hint { font-size: 12px; color: #ff007f; background: rgba(255, 0, 127, 0.1); border: 1px solid #ff007f; padding: 8px; border-radius: 4px; margin-bottom: 15px; }
 
-        /* Основной интерфейс */
+        /* Главный интерфейс */
         .app-content { display: flex; gap: 15px; height: 100%; overflow: hidden; }
         
         /* Левое главное меню (Вкладки) */
@@ -104,7 +104,7 @@
         <div class="auth-box">
             <h3>В Одно Ебло</h3>
             <input type="text" id="nameInput" placeholder="Твое имя...">
-            <input type="text" id="phoneInput" placeholder="Телефон (+7...)">
+            <input type="text" id="phoneInput" placeholder="+7 (___) ___-__-__">
             <button onclick="requestVerificationCode()">Продолжить</button>
         </div>
     </div>
@@ -133,13 +133,13 @@
             <div style="margin-top: auto; font-size: 11px; color: #45a29e;">Профиль: <br><b id="currentUserName"></b></div>
         </div>
 
-        <!-- Подменю (список друзей, чатов или избранного) -->
+        <!-- Подменю -->
         <div class="tab-pane" id="leftPane">
             <h4 id="paneTitle">Чаты</h4>
             <div class="pane-list" id="paneList"></div>
         </div>
 
-        <!-- Область контента справа (Чат или лента новостей) -->
+        <!-- Область контента -->
         <div class="content-area">
             <h4 id="contentTitle" style="margin-bottom: 10px;">Выбери чат</h4>
             
@@ -168,6 +168,28 @@
     let dbData = {};
     let googleNews = [];
 
+    // Маска ввода телефона (+7 (XXX) XXX-XX-XX)
+    const phoneInput = document.getElementById('phoneInput');
+    phoneInput.addEventListener('input', function (e) {
+        let matrix = '+7 (___) ___-__-__',
+            i = 0,
+            def = matrix.replace(/\D/g, ''),
+            val = this.value.replace(/\D/g, '');
+        
+        if (val.length >= 1 && val[0] === '8') val = val.slice(1);
+        if (val.length >= 1 && val[0] === '7') val = val.slice(1);
+
+        let res = matrix.replace(/./g, function (a) {
+            return /[_\d]/.test(a) && i < val ? val.charAt(i++) : i >= val ? '' : a;
+        });
+        
+        if (i === 0) {
+            this.value = '';
+        } else {
+            this.value = res;
+        }
+    });
+
     async function loadData() {
         const res = await fetch('/api/data');
         dbData = await res.json();
@@ -177,7 +199,7 @@
     async function requestVerificationCode() {
         const name = document.getElementById('nameInput').value.trim();
         const phone = document.getElementById('phoneInput').value.trim();
-        if (!name || !phone) return alert('Заполни имя и телефон!');
+        if (!name || phone.length < 18) return alert('Заполни имя и корректный номер телефона!');
 
         const res = await fetch('/api/send-code', {
             method: 'POST',
@@ -240,7 +262,7 @@
 
         if (tab === 'news') {
             document.getElementById('paneTitle').textContent = 'Google Новости';
-            document.getElementById('leftPane').classList.add('hidden'); // прячем боковую панель для новостей
+            document.getElementById('leftPane').classList.add('hidden');
             document.getElementById('contentTitle').textContent = 'Свежие новости от Google';
             document.getElementById('newsContainer').classList.remove('hidden');
             renderNews();
