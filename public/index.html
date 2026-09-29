@@ -8,7 +8,7 @@
         :root {
             --bg-color: #0b0b0e;
             --panel-bg: #13131a;
-            --accent-color: #ff2a5f; /* Дерзкий неоново-розовый / красный */
+            --accent-color: #ff2a5f;
             --accent-hover: #ff0040;
             --text-main: #f0f0f5;
             --text-muted: #8a8a9e;
@@ -43,7 +43,6 @@
             border-right: 1px solid var(--border-color);
         }
 
-        /* Левая панель (Контакты / Меню) */
         .sidebar {
             width: 350px;
             border-right: 1px solid var(--border-color);
@@ -63,10 +62,55 @@
             display: flex;
             align-items: center;
             gap: 10px;
+            justify-content: space-between;
         }
 
-        .sidebar-header span {
-            font-size: 24px;
+        .my-profile-info {
+            padding: 15px 20px;
+            background: #111116;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 13px;
+            color: var(--text-muted);
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .my-profile-info b {
+            color: var(--text-main);
+            font-size: 14px;
+        }
+
+        .add-contact-box {
+            padding: 15px 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            gap: 8px;
+        }
+
+        .add-contact-box input {
+            flex: 1;
+            padding: 8px 12px;
+            background: #1a1a24;
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .add-contact-box button {
+            background: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 0 12px;
+            border-radius: 6px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .add-contact-box button:hover {
+            background: var(--accent-hover);
         }
 
         .contacts-list {
@@ -93,7 +137,26 @@
             border-left: 4px solid var(--accent-color);
         }
 
-        /* Правая панель (Чат) */
+        .contact-info {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        .contact-name {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .contact-status {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .contact-status.online {
+            color: #00ff88;
+        }
+
         .chat-area {
             flex: 1;
             display: flex;
@@ -125,6 +188,7 @@
             font-size: 14px;
             line-height: 1.4;
             position: relative;
+            word-break: break-word;
         }
 
         .message.incoming {
@@ -142,7 +206,13 @@
             box-shadow: 0 4px 15px rgba(255, 42, 95, 0.3);
         }
 
-        /* Поле ввода */
+        .message-time {
+            font-size: 10px;
+            opacity: 0.7;
+            text-align: right;
+            margin-top: 4px;
+        }
+
         .chat-input-area {
             padding: 20px;
             background: #0e0e12;
@@ -157,7 +227,7 @@
             border-radius: 8px;
         }
 
-        input {
+        .chat-input-area input {
             flex: 1;
             background: #1a1a24;
             border: 1px solid var(--border-color);
@@ -167,7 +237,7 @@
             transition: border-color 0.2s;
         }
 
-        input:focus {
+        .chat-input-area input:focus {
             border-color: var(--accent-color);
         }
 
@@ -188,37 +258,99 @@
             transform: scale(0.97);
         }
 
-        /* Адаптив для мобилок */
-        @media (max-width: 768px) {
-            .sidebar {
-                width: 100%;
-            }
-            .app-container {
-                flex-direction: column;
-            }
+        /* Модалка входа */
+        #authModal {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(11, 11, 14, 0.95);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .auth-card {
+            background: #13131a;
+            border: 1px solid var(--border-color);
+            padding: 30px;
+            border-radius: 12px;
+            width: 350px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            box-shadow: 0 0 40px rgba(255, 42, 95, 0.2);
+        }
+
+        .auth-card h2 {
+            color: var(--accent-color);
+            text-align: center;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            font-size: 22px;
+        }
+
+        .auth-card input {
+            width: 100%;
+            padding: 12px;
+            background: #1a1a24;
+            border: 1px solid var(--border-color);
+            color: var(--text-main);
+            border-radius: 8px;
+        }
+
+        .auth-card button {
+            width: 100%;
+            padding: 12px;
+            background: var(--accent-color);
+            color: white;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .auth-card button:hover {
+            background: var(--accent-hover);
         }
     </style>
 </head>
 <body>
 
+    <!-- Окно авторизации -->
+    <div id="authModal">
+        <div class="auth-card">
+            <h2>В одно ебало</h2>
+            <input type="text" id="authName" placeholder="Ваше имя...">
+            <input type="text" id="authPhone" placeholder="Ваш номер телефона...">
+            <button id="authBtn">ВОЙТИ В ЧАТ</button>
+        </div>
+    </div>
+
     <div class="app-container">
         <!-- Левая колонка -->
         <div class="sidebar">
             <div class="sidebar-header">
-                <span>⚡</span> В одно ебало
+                <span>⚡ В одно ебало</span>
+            </div>
+            <div class="my-profile-info" id="myProfileInfo">
+                <b id="myNameDisplay">Имя</b>
+                <span id="myPhoneDisplay">+7XXXXXXXXXX</span>
+            </div>
+            <div class="add-contact-box">
+                <input type="text" id="targetPhoneInput" placeholder="Номер контакта...">
+                <button id="addContactBtn">+</button>
             </div>
             <div class="contacts-list" id="contactsList">
-                <!-- Сюда динамически подгружаются контакты -->
+                <!-- Контакты будут здесь -->
             </div>
         </div>
 
         <!-- Правая колонка (Чат) -->
         <div class="chat-area">
-            <div class="chat-header" id="chatHeader">Выберите чат</div>
+            <div class="chat-header" id="chatHeader">Выберите чат слева</div>
             <div class="messages-container" id="messagesContainer">
-                <!-- История сообщений -->
+                <div style="color: var(--text-muted); text-align: center; margin-top: auto; margin-bottom: auto;">Выберите контакт для общения</div>
             </div>
-            <div class="chat-input-area">
+            <div class="chat-input-area" id="inputArea" style="display: none;">
                 <input type="text" id="messageInput" placeholder="Написать сообщение...">
                 <button class="send-btn" id="sendBtn">SEND</button>
             </div>
@@ -227,9 +359,158 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        // Здесь подключается ваш клиентский скрипт для работы с Socket.IO
         const socket = io();
-        // Пример базового функционала можно связать с вашими существующими обработчиками
+
+        let myPhone = localStorage.getItem('chat_phone') || '';
+        let myName = localStorage.getItem('chat_name') || '';
+        let activeContactPhone = null;
+        let allMessages = {};
+        let contacts = [];
+
+        const authModal = document.getElementById('authModal');
+        const authNameInput = document.getElementById('authName');
+        const authPhoneInput = document.getElementById('authPhone');
+        const authBtn = document.getElementById('authBtn');
+
+        if (myPhone && myName) {
+            authModal.style.display = 'none';
+            loginUser(myName, myPhone);
+        }
+
+        authBtn.addEventListener('click', () => {
+            const name = authNameInput.value.trim();
+            const phone = authPhoneInput.value.trim();
+            if (!name || !phone) {
+                alert('Заполните все поля!');
+                return;
+            }
+            localStorage.setItem('chat_name', name);
+            localStorage.setItem('chat_phone', phone);
+            myPhone = phone;
+            myName = name;
+            authModal.style.display = 'none';
+            loginUser(name, phone);
+        });
+
+        function loginUser(name, phone) {
+            document.getElementById('myNameDisplay').innerText = name;
+            document.getElementById('myPhoneDisplay').innerText = phone;
+            socket.emit('verify_code', { name, phone });
+        }
+
+        document.getElementById('addContactBtn').addEventListener('click', () => {
+            const targetPhone = document.getElementById('targetPhoneInput').value.trim();
+            if (!targetPhone) return;
+            socket.emit('add_contact', { myPhone, targetPhone });
+            document.getElementById('targetPhoneInput').value = '';
+        });
+
+        socket.on('add_contact_response', (res) => {
+            alert(res.message);
+        });
+
+        socket.on('contacts_list', (list) => {
+            contacts = list;
+            renderContacts();
+        });
+
+        function renderContacts() {
+            const listEl = document.getElementById('contactsList');
+            listEl.innerHTML = '';
+            contacts.forEach(c => {
+                const item = document.createElement('div');
+                item.className = `contact-item ${activeContactPhone === c.phone ? 'active' : ''}`;
+                item.innerHTML = `
+                    <div class="contact-info">
+                        <div class="contact-name">${c.name}</div>
+                        <div class="contact-status ${c.isOnline ? 'online' : ''}">
+                            ${c.isOnline ? '● в сети' : (c.lastSeen ? 'был в ' + c.lastSeen : 'не в сети')}
+                        </div>
+                    </div>
+                `;
+                item.onclick = () => selectContact(c);
+                listEl.appendChild(item);
+            });
+        }
+
+        function selectContact(contact) {
+            activeContactPhone = contact.phone;
+            document.getElementById('chatHeader').innerText = contact.name;
+            document.getElementById('inputArea').style.display = 'flex';
+            renderContacts();
+            renderMessages();
+        }
+
+        socket.on('all_messages', (messages) => {
+            allMessages = messages;
+            renderMessages();
+        });
+
+        socket.on('message', (msg) => {
+            const chatKey = [msg.fromPhone, myPhone].sort().join('_');
+            if (!allMessages[chatKey]) allMessages[chatKey] = [];
+            allMessages[chatKey].push({
+                fromPhone: msg.fromPhone,
+                text: msg.text,
+                time: msg.time
+            });
+            renderMessages();
+        });
+
+        document.getElementById('sendBtn').addEventListener('click', sendMessage);
+        document.getElementById('messageInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+            if (!text || !activeContactPhone) return;
+
+            socket.emit('private_message', {
+                toPhone: activeContactPhone,
+                message: text
+            });
+
+            const chatKey = [myPhone, activeContactPhone].sort().join('_');
+            if (!allMessages[chatKey]) allMessages[chatKey] = [];
+            
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            allMessages[chatKey].push({
+                fromPhone: myPhone,
+                text: text,
+                time: time
+            });
+
+            input.value = '';
+            renderMessages();
+        }
+
+        function renderMessages() {
+            if (!activeContactPhone) return;
+            const container = document.getElementById('messagesContainer');
+            container.innerHTML = '';
+
+            const chatKey = [myPhone, activeContactPhone].sort().join('_');
+            const messages = allMessages[chatKey] || [];
+
+            if (messages.length === 0) {
+                container.innerHTML = '<div style="color: var(--text-muted); text-align: center; margin: auto;">Нет сообщений. Напишите первыми!</div>';
+                return;
+            }
+
+            messages.forEach(m => {
+                const msgEl = document.createElement('div');
+                const isOutgoing = m.fromPhone === myPhone;
+                msgEl.className = `message ${isOutgoing ? 'outgoing' : 'incoming'}`;
+                msgEl.innerHTML = `
+                    <div>${m.text}</div>
+                    <div class="message-time">${m.time || ''}</div>
+                `;
+                container.appendChild(msgEl);
+            });
+            container.scrollTop = container.scrollHeight;
+        }
     </script>
 </body>
 </html>
