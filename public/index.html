@@ -245,7 +245,6 @@
             <p style="font-size: 12px; margin: 0; color: #aaa; text-align: left;">Сменить аватар:</p>
             <input type="file" id="editAvatarFile" accept="image/*" style="font-size:12px; padding:6px;" onchange="previewEditAvatar(event)">
             
-            <!-- Кнопка включения микрофона с запросом разрешений -->
             <button onclick="requestMicrophonePermission()" style="background: #1f2833; border: 1px solid #66fcf1; color: #66fcf1; margin-top: 5px;">🎤 Включить микрофон</button>
 
             <div style="display: flex; gap: 10px; margin-top: 10px;">
@@ -278,7 +277,8 @@
             <button class="nav-btn active" onclick="switchTab('messages')">💬 Сообщения</button>
             <button class="nav-btn" onclick="switchTab('friends')">👥 Друзья</button>
             <button class="nav-btn" onclick="switchTab('groups')">🏠 Сообщества</button>
-            <button class="nav-btn" onclick="switchTab('news')">🖼 Лента</button>
+            <button class="nav-btn" onclick="switchTab('feed')">📰 Лента</button>
+            <button class="nav-btn" onclick="switchTab('news')">🖼 Мемы</button>
             
             <div style="margin-top:auto; font-size: 11px; color: #45a29e; word-break: break-all; display:flex; align-items:center; gap:8px; cursor:pointer;" onclick="toggleProfileModal()" title="Нажмите для открытия профиля">
                 <img id="navUserAvatar" class="avatar-sm" src="" alt="">
@@ -289,7 +289,7 @@
             </div>
             <div id="lastLoginInfo" style="font-size: 9px; color: #777;">Последний вход: <span id="lastLoginText"></span></div>
             
-            <!-- КНОПКА ШЕСТЕРЕНКИ И КНОПКА ВЫХОДА РЯДОМ -->
+            <!-- КНОПКА ШЕСТЕРЕНКИ И КНОПКА ВЫХОДА -->
             <div style="display: flex; gap: 4px; margin-top: 4px;">
                 <button class="nav-btn" onclick="toggleProfileModal()" style="flex: 1; text-align: center; border-color: #45a29e; color: #66fcf1; font-size: 18px; padding: 8px;" title="Настройки">⚙</button>
                 <button class="nav-btn" onclick="logout()" style="flex: 1; text-align: center; border-color: #ff007f; color: #ff007f;">Выйти</button>
@@ -330,8 +330,9 @@
                 <div id="filePreviewHint" style="font-size: 11px; color: #66fcf1; display:none; padding: 2px 0;"></div>
             </div>
 
+            <!-- Вкладка для Мемов и Ленты -->
             <div id="newsContainer" class="hidden" style="overflow-y: auto; height: 100%; padding-right: 5px;">
-                <div id="newsList">Загрузка ленты...</div>
+                <div id="newsList">Загрузка...</div>
             </div>
         </div>
     </div>
@@ -364,12 +365,10 @@
         document.getElementById('neonAlertModal').classList.add('hidden');
     }
 
-    // Функция запроса разрешения на использование микрофона
     async function requestMicrophonePermission() {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             showNeonAlert('Микрофон', 'Доступ к микрофону успешно разрешен!');
-            // Сразу останавливаем поток, чтобы не занимать устройство в фоновом режиме
             stream.getTracks().forEach(track => track.stop());
         } catch (e) {
             showNeonAlert('Ошибка', 'Не удалось получить доступ к микрофону. Проверьте настройки браузера.');
@@ -477,22 +476,11 @@
             }
         }
 
-        if (currentPartner && currentUserLogin && !currentPartner.startsWith('group_')) {
-            const oldLen = dbData.messagesStore && dbData.messagesStore[currentUserLogin] && dbData.messagesStore[currentUserLogin][currentPartner] ? dbData.messagesStore[currentUserLogin][currentPartner].length : 0;
-            const newLen = newData.messagesStore && newData.messagesStore[currentUserLogin] && newData.messagesStore[currentUserLogin][currentPartner] ? newData.messagesStore[currentUserLogin][currentPartner].length : 0;
-            if (newLen > oldLen) {
-                const latestMsg = newData.messagesStore[currentUserLogin][currentPartner][newLen - 1];
-                if (latestMsg && latestMsg.sender !== currentUserLogin) {
-                    playNotificationSound();
-                }
-            }
-        }
-
         dbData = newData;
         if (currentUserLogin && dbData.users && dbData.users[currentUserLogin]) {
             updateTabContent();
             if (currentPartner) renderMessages();
-            if (currentTab === 'news') renderMemes();
+            if (currentTab === 'news' || currentTab === 'feed') renderContentList();
         }
     }
 
@@ -648,7 +636,6 @@
 
     function hideForgotModal() {
         document.getElementById('forgotModal').classList.add('hidden');
-        document.getElementById('authModal').classList.add('hidden'); // исправлено
         document.getElementById('authModal').classList.remove('hidden');
     }
 
@@ -800,25 +787,22 @@
         location.reload();
     }
 
-    // Подгрузка русскоязычных мемов, видео-приколов и новостей из сообществ
     async function fetchMemes() {
         try {
-            const res = await fetch('https://meme-api.com/gimme/pikabu/20'); // Пикабу и русскоязычные подборки
+            const res = await fetch('https://meme-api.com/gimme/pikabu/20');
             const data = await res.json();
             memeList = (data.memes || []).map(m => ({
                 title: m.title,
                 url: m.url,
                 isVideos: m.url.endsWith('.mp4') || m.url.endsWith('.webm'),
-                author: m.author || 'Сеть',
-                sourceType: 'meme'
+                author: m.author || 'Сеть'
             }));
-            if (currentTab === 'news') renderMemes();
+            if (currentTab === 'news') renderContentList();
         } catch (e) {
-            // Запасной массив локальных русскоязычных мемов, если API недоступно
             memeList = [
-                { title: 'Когда зашел в мессенджер В Одно Ебло', url: 'https://i.imgur.com/3G722zP.jpg', author: 'Пользователь', sourceType: 'meme' }
+                { title: 'Когда зашел в мессенджер В Одно Ебло', url: 'https://i.imgur.com/3G722zP.jpg', author: 'Пользователь' }
             ];
-            if (currentTab === 'news') renderMemes();
+            if (currentTab === 'news') renderContentList();
         }
     }
 
@@ -835,12 +819,12 @@
         document.getElementById('addGroupBox').classList.add('hidden');
         document.getElementById('callButtons').classList.add('hidden');
 
-        if (tab === 'news') {
-            document.getElementById('paneTitle').textContent = 'Лента';
+        if (tab === 'news' || tab === 'feed') {
+            document.getElementById('paneTitle').textContent = tab === 'news' ? 'Мемы' : 'Лента';
             document.getElementById('leftPane').classList.add('hidden');
-            document.getElementById('contentTitle').textContent = 'Лента новостей и мемов';
+            document.getElementById('contentTitle').textContent = tab === 'news' ? 'Свежие мемы и видео-приколы' : 'Лента новостей из сообществ';
             document.getElementById('newsContainer').classList.remove('hidden');
-            renderMemes();
+            renderContentList();
         } else {
             document.getElementById('leftPane').classList.remove('hidden');
             if (tab === 'messages') {
@@ -1067,65 +1051,77 @@
         messagesBox.scrollTop = messagesBox.scrollHeight;
     }
 
-    // Рендер ленты: собираем мемы из сети + посты из всех сообществ
-    function renderMemes() {
+    // Раздельный рендер для Мемов и Ленты сообществ
+    function renderContentList() {
         const newsList = document.getElementById('newsList');
         newsList.innerHTML = '';
 
-        let feedItems = [...memeList];
-
-        // Собираем новости/сообщения из всех сообществ
-        if (dbData.groups) {
-            Object.values(dbData.groups).forEach(group => {
-                if (group.messages) {
-                    group.messages.forEach(msg => {
-                        feedItems.unshift({
-                            title: `Новость из сообщества: ${group.name}`,
-                            text: msg.text,
-                            url: msg.media ? msg.media.url : null,
-                            mediaType: msg.media ? msg.media.type : null,
-                            author: getDisplayName(msg.sender),
-                            time: msg.time,
-                            sourceType: 'group'
-                        });
-                    });
-                }
-            });
-        }
-
-        if (feedItems.length === 0) {
-            newsList.innerHTML = 'Лента пуста...';
-            return;
-        }
-
-        feedItems.forEach(item => {
-            const div = document.createElement('div');
-            div.className = 'meme-card';
-
-            let mediaContent = '';
-            if (item.sourceType === 'meme') {
-                if (item.isVideos) {
-                    mediaContent = `<video src="${item.url}" controls controlsList="nodownload" style="width:100%; max-height:350px; border-radius:6px;"></video>`;
+        if (currentTab === 'news') {
+            // Вкладка Мемов (только юмор из сети с регулировкой звука для видео)
+            if (memeList.length === 0) {
+                newsList.innerHTML = 'Загрузка мемов...';
+                return;
+            }
+            memeList.forEach(m => {
+                const div = document.createElement('div');
+                div.className = 'meme-card';
+                let mediaContent = '';
+                if (m.isVideos) {
+                    mediaContent = `<video src="${m.url}" controls controlsList="nodownload" style="width:100%; max-height:350px; border-radius:6px;"></video>`;
                 } else {
-                    mediaContent = `<img src="${item.url}" alt="мем" loading="lazy">`;
+                    mediaContent = `<img src="${m.url}" alt="мем" loading="lazy">`;
                 }
-            } else {
-                // Из сообществ
+                div.innerHTML = `
+                    <p>${m.title}</p>
+                    ${mediaContent}
+                    <br><small style="color:#888; font-size:11px;">Автор: ${m.author}</small>
+                `;
+                newsList.appendChild(div);
+            });
+        } else if (currentTab === 'feed') {
+            // Вкладка Ленты (только посты и новости из сообществ)
+            let feedItems = [];
+            if (dbData.groups) {
+                Object.values(dbData.groups).forEach(group => {
+                    if (group.messages) {
+                        group.messages.forEach(msg => {
+                            feedItems.unshift({
+                                title: `Сообщество: ${group.name}`,
+                                text: msg.text,
+                                url: msg.media ? msg.media.url : null,
+                                mediaType: msg.media ? msg.media.type : null,
+                                author: getDisplayName(msg.sender),
+                                time: msg.time
+                            });
+                        });
+                    }
+                });
+            }
+
+            if (feedItems.length === 0) {
+                newsList.innerHTML = '<i style="color:#45a29e;">В ленте пока нет записей из сообществ.</i>';
+                return;
+            }
+
+            feedItems.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'meme-card';
+                let mediaContent = '';
                 if (item.mediaType === 'image') {
                     mediaContent = `<img src="${item.url}" alt="фото" loading="lazy">`;
                 } else if (item.mediaType === 'video') {
                     mediaContent = `<video src="${item.url}" controls controlsList="nodownload" style="width:100%; max-height:350px; border-radius:6px;"></video>`;
                 }
-            }
 
-            div.innerHTML = `
-                <p>${item.title}</p>
-                ${item.text ? `<p style="font-weight:normal; color:#fff; font-size:13px; margin:5px 0;">${item.text}</p>` : ''}
-                ${mediaContent}
-                <br><small style="color:#888; font-size:11px;">Автор: ${item.author} ${item.time ? '• ' + item.time : ''}</small>
-            `;
-            newsList.appendChild(div);
-        });
+                div.innerHTML = `
+                    <p>${item.title}</p>
+                    ${item.text ? `<p style="font-weight:normal; color:#fff; font-size:13px; margin:5px 0;">${item.text}</p>` : ''}
+                    ${mediaContent}
+                    <br><small style="color:#888; font-size:11px;">Автор: ${item.author} ${item.time ? '• ' + item.time : ''}</small>
+                `;
+                newsList.appendChild(div);
+            });
+        }
     }
 
     async function sendMessage() {
