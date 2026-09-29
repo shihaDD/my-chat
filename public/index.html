@@ -101,7 +101,10 @@
         .message-text { padding-right: 50px; }
         .message-meta { position: absolute; bottom: 3px; right: 6px; display: flex; align-items: center; gap: 3px; }
         .message .time { font-size: 11px; color: #667781; }
-        .message .checks { font-size: 13px; color: #53bdeb; font-weight: bold; }
+        
+        /* Стили для галочек */
+        .message .checks { font-size: 13px; color: #8696a0; font-weight: bold; }
+        .message .checks.read { color: #53bdeb; } /* Синие галочки при прочтении */
 
         .chat-input-area { min-height: 62px; padding: 10px 16px; background: #f0f2f5; display: flex; align-items: center; gap: 10px; }
         .chat-input-area input { flex: 1; padding: 12px 16px; border: none; border-radius: 8px; outline: none; background: #ffffff; font-size: 15px; color: #3b4a54; }
@@ -123,7 +126,6 @@
         .save-settings-btn { padding: 12px; background: #00a884; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: 600; margin-top: 10px; }
         .save-settings-btn:hover { background: #008f72; }
 
-        /* Всплывающее уведомление (тост) */
         #custom-toast {
             position: fixed;
             top: 20px;
@@ -155,7 +157,6 @@
 
     <div class="whatsapp-bg-top"></div>
 
-    <!-- Красивое кастомное окно уведомлений -->
     <div id="custom-toast">
         <span style="font-size: 20px;">💬</span>
         <div id="custom-toast-text">Текст уведомления</div>
@@ -261,6 +262,30 @@
         let tempAvatarBase64 = null;
         let toastTimeout = null;
         let latestUsersData = [];
+
+        // Функция воспроизведения звука уведомления (через AudioContext)
+        function playNotificationSound() {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, audioCtx.currentTime); // Частота звука
+                osc.frequency.exponentialRampToValueAtTime(400, audioCtx.currentTime + 0.15);
+                
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.15);
+                
+                osc.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.15);
+            } catch (e) {
+                console.log('Звук не воспроизведен из-за ограничений браузера', e);
+            }
+        }
 
         function showNotification(text) {
             const toast = document.getElementById('custom-toast');
@@ -426,26 +451,22 @@
             showNotification('Профиль успешно обновлен!');
         };
 
-        // Кнопка переименования друга (карандашик в шапке чата)
         renameContactBtn.onclick = () => {
             if (!activeRecipientPhone) return;
             const currentDisplayName = customNames[activeRecipientPhone] || 
                 (latestUsersData.find(u => u.phone === activeRecipientPhone)?.name || '');
             
             const newName = prompt('Введите новое имя для этого контакта:', currentDisplayName);
-            if (newName === null) return; // Нажали отмену
+            if (newName === null) return;
 
             const trimmed = newName.trim();
             if (!trimmed) {
-                // Если стерли имя, удаляем кастомное имя, возвращается оригинальное
                 delete customNames[activeRecipientPhone];
             } else {
                 customNames[activeRecipientPhone] = trimmed;
             }
 
             localStorage.setItem('whatsapp_custom_names', JSON.stringify(customNames));
-            
-            // Обновляем шапку и список чатов
             updateActiveChatHeader(activeRecipientPhone);
             renderUsersList(latestUsersData);
             showNotification('Имя контакта изменено!');
@@ -497,6 +518,18 @@
                     renameContactBtn.style.display = 'flex';
                     document.querySelectorAll('#users-list li').forEach(el => el.classList.remove('active'));
                     li.classList.add('active');
+                    
+                    // Когда открываем чат, сообщаем серверу, что прочитали сообщения этого пользователя
+                    socket.emit('mark_as_read', { fromPhone: activeRecipientPhone });
+
+                    // Локально переводим исходящие сообщения в прочитанные
+                    if (messagesStore[activeRecipientPhone]) {
+                        messagesStore[activeRecipientPhone].forEach(m => {
+                            if (!m.incoming) m.status = 'read';
+                        });
+                        saveMessages();
+                    }
+
                     renderMessages();
                 };
                 usersList.appendChild(li);
@@ -512,11 +545,35 @@
             activeChatPhone.textContent = phone;
         }
 
+        // Получение нового сообщения
         socket.on('message', (data) => {
             if (!messagesStore[data.fromPhone]) messagesStore[data.fromPhone] = [];
             messagesStore[data.fromPhone].push({ text: data.text, time: data.time, incoming: true });
             saveMessages();
-            if (activeRecipientPhone === data.fromPhone) renderMessages();
+            
+            playNotificationSound(); // Проигрываем звук уведомления
+
+            if (activeRecipientPhone === data.fromPhone) {
+                renderMessages();
+                // Если чат открыт, сразу отправляем статус прочтения отправителю
+                socket.emit('mark_as_read', { fromPhone: activeRecipientPhone });
+            }
+        });
+
+        // Обработка смены статуса сообщения (доставлено / прочитано)
+        socket.on('message_status_update', (data) => {
+            // data.toPhone - кому отправляли, data.status - 'delivered' или 'read'
+            if (messagesStore[data.toPhone]) {
+                messagesStore[data.toPhone].forEach(m => {
+                    if (!m.incoming) {
+                        m.status = data.status; // обновляем статус
+                    }
+                });
+                saveMessages();
+                if (activeRecipientPhone === data.toPhone) {
+                    renderMessages();
+                }
+            }
         });
 
         sendBtn.onclick = sendMessage;
@@ -528,7 +585,9 @@
 
             if (!messagesStore[activeRecipientPhone]) messagesStore[activeRecipientPhone] = [];
             const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            messagesStore[activeRecipientPhone].push({ text, time, incoming: false });
+            
+            // Статус по умолчанию при отправке: sent (одна галочка)
+            messagesStore[activeRecipientPhone].push({ text, time, incoming: false, status: 'sent' });
             saveMessages();
 
             socket.emit('private_message', { toPhone: activeRecipientPhone, message: text });
@@ -548,7 +607,18 @@
                 div.className = `message ${m.incoming ? 'incoming' : 'outgoing'}`;
                 
                 let metaHtml = `<span class="time">${m.time}</span>`;
-                if (!m.incoming) metaHtml += `<span class="checks">✓✓</span>`;
+                if (!m.incoming) {
+                    let checksHtml = '✓'; // 1) Отправлено
+                    let checksClass = 'checks';
+                    
+                    if (m.status === 'delivered') {
+                        checksHtml = '✓✓'; // 2) Доставлено (серо-зеленые двойные галочки)
+                    } else if (m.status === 'read') {
+                        checksHtml = '✓✓'; 
+                        checksClass = 'checks read'; // 3) Прочитано (синие галочки)
+                    }
+                    metaHtml += `<span class="${checksClass}">${checksHtml}</span>`;
+                }
 
                 div.innerHTML = `
                     <div class="message-text">${escapeHtml(m.text)}</div>
