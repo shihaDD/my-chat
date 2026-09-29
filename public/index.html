@@ -64,13 +64,60 @@
             justify-content: space-between;
         }
 
+        .settings-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 18px;
+            transition: color 0.2s, transform 0.2s;
+        }
+
+        .settings-btn:hover {
+            color: var(--text-main);
+            transform: rotate(45deg);
+        }
+
         .my-profile-info {
             padding: 15px 20px;
             background: #111116;
             border-bottom: 1px solid var(--border-color);
             display: flex;
             align-items: center;
+            justify-content: space-between;
+        }
+
+        .my-profile-left {
+            display: flex;
+            align-items: center;
             gap: 12px;
+            overflow: hidden;
+        }
+
+        .my-profile-actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        .icon-btn {
+            background: #1a1a24;
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+            width: 32px;
+            height: 32px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .icon-btn:hover {
+            background: var(--accent-color);
+            color: white;
+            border-color: var(--accent-color);
         }
 
         .avatar {
@@ -150,7 +197,7 @@
             padding: 15px 20px;
             display: flex;
             align-items: center;
-            gap: 15px;
+            justify-content: space-between;
             cursor: pointer;
             border-bottom: 1px solid rgba(255, 255, 255, 0.03);
             transition: background 0.2s;
@@ -165,15 +212,26 @@
             border-left: 4px solid var(--accent-color);
         }
 
+        .contact-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            overflow: hidden;
+        }
+
         .contact-info {
             display: flex;
             flex-direction: column;
             gap: 3px;
+            overflow: hidden;
         }
 
         .contact-name {
             font-weight: 600;
             font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .contact-status {
@@ -183,6 +241,11 @@
 
         .contact-status.online {
             color: #00ff88;
+        }
+
+        .contact-actions {
+            display: flex;
+            gap: 5px;
         }
 
         .chat-area {
@@ -200,7 +263,18 @@
             font-size: 16px;
             display: flex;
             align-items: center;
+            justify-content: space-between;
+        }
+
+        .chat-header-left {
+            display: flex;
+            align-items: center;
             gap: 12px;
+        }
+
+        .chat-header-actions {
+            display: flex;
+            gap: 8px;
         }
 
         .messages-container {
@@ -250,6 +324,7 @@
             border-top: 1px solid var(--border-color);
             display: flex;
             gap: 10px;
+            align-items: center;
         }
 
         input, button {
@@ -276,6 +351,7 @@
             background: var(--accent-color);
             color: white;
             padding: 0 24px;
+            height: 45px;
             font-weight: 700;
             cursor: pointer;
             transition: background 0.2s, transform 0.1s;
@@ -335,7 +411,6 @@
             border-radius: 8px;
         }
 
-        /* Выбор аватарок в модалке */
         .avatar-picker-section {
             display: flex;
             flex-direction: column;
@@ -393,7 +468,7 @@
             color: var(--text-main);
         }
 
-        #fileAvatarInput {
+        .file-avatar-input {
             display: none;
         }
 
@@ -410,11 +485,16 @@
         .auth-card button.main-action-btn:hover {
             background: var(--accent-hover);
         }
+
+        .modal-buttons-row {
+            display: flex;
+            gap: 10px;
+        }
     </style>
 </head>
 <body>
 
-    <!-- Окно авторизации (Шаг 1: Имя, Телефон и Аватарка) -->
+    <!-- Окно авторизации -->
     <div id="authModal" class="modal-overlay">
         <div class="auth-card">
             <h2>В одно ебало</h2>
@@ -430,14 +510,14 @@
                     <div class="preset-av" style="background: linear-gradient(135deg, #4361ee, #3a0ca3);" data-bg="linear-gradient(135deg, #4361ee, #3a0ca3)">🚀</div>
                 </div>
                 <label class="upload-file-label" for="fileAvatarInput">📁 Загрузить свою картинку</label>
-                <input type="file" id="fileAvatarInput" accept="image/*">
+                <input type="file" id="fileAvatarInput" class="file-avatar-input" accept="image/*">
             </div>
 
             <button id="authBtn" class="main-action-btn">ПРОДОЛЖИТЬ</button>
         </div>
     </div>
 
-    <!-- Окно подтверждения по коду (Шаг 2) -->
+    <!-- Окно подтверждения по коду -->
     <div id="codeModal" class="modal-overlay" style="display: none;">
         <div class="auth-card">
             <h2>Код подтверждения</h2>
@@ -447,19 +527,54 @@
         </div>
     </div>
 
+    <!-- Окно настроек профиля -->
+    <div id="settingsModal" class="modal-overlay" style="display: none;">
+        <div class="auth-card">
+            <h2>Редактировать профиль</h2>
+            <input type="text" id="settingsName" placeholder="Ваше имя...">
+            
+            <div class="avatar-picker-section">
+                <label>Сменить аватарку:</label>
+                <div class="presets-grid" id="settingsPresetsGrid">
+                    <div class="preset-av" style="background: linear-gradient(135deg, #ff2a5f, #7b2cbf);" data-bg="linear-gradient(135deg, #ff2a5f, #7b2cbf)">⚡</div>
+                    <div class="preset-av" style="background: linear-gradient(135deg, #00ff88, #00b4d8);" data-bg="linear-gradient(135deg, #00ff88, #00b4d8)">🔥</div>
+                    <div class="preset-av" style="background: linear-gradient(135deg, #f72585, #b5179e);" data-bg="linear-gradient(135deg, #f72585, #b5179e)">💀</div>
+                    <div class="preset-av" style="background: linear-gradient(135deg, #4361ee, #3a0ca3);" data-bg="linear-gradient(135deg, #4361ee, #3a0ca3)">🚀</div>
+                </div>
+                <label class="upload-file-label" for="settingsFileAvatarInput">📁 Загрузить свою картинку</label>
+                <input type="file" id="settingsFileAvatarInput" class="file-avatar-input" accept="image/*">
+            </div>
+
+            <div class="modal-buttons-row">
+                <button id="saveSettingsBtn" class="main-action-btn">СОХРАНИТЬ</button>
+                <button id="closeSettingsBtn" class="main-action-btn" style="background: #222230;">ОТМЕНА</button>
+            </div>
+        </div>
+    </div>
+
     <div class="app-container">
         <!-- Левая колонка -->
         <div class="sidebar">
             <div class="sidebar-header">
                 <span>⚡ В одно ебало</span>
+                <button class="settings-btn" id="settingsOpenBtn" title="Настройки профиля">⚙️</button>
             </div>
+            
+            <!-- Профиль пользователя с кнопками управления -->
             <div class="my-profile-info" id="myProfileInfo">
-                <div class="avatar" id="myAvatar">Я</div>
-                <div class="my-details">
-                    <b id="myNameDisplay">Имя</b>
-                    <span id="myPhoneDisplay">+7XXXXXXXXXX</span>
+                <div class="my-profile-left">
+                    <div class="avatar" id="myAvatar">Я</div>
+                    <div class="my-details">
+                        <b id="myNameDisplay">Имя</b>
+                        <span id="myPhoneDisplay">+7XXXXXXXXXX</span>
+                    </div>
+                </div>
+                <div class="my-profile-actions">
+                    <button class="icon-btn" id="profileSettingsBtn" title="Настройки">⚙️</button>
+                    <button class="icon-btn" id="logoutBtn" title="Выйти">🚪</button>
                 </div>
             </div>
+
             <div class="add-contact-box">
                 <input type="text" id="targetPhoneInput" placeholder="+7 (___) ___-__-__">
                 <button id="addContactBtn">+</button>
@@ -472,13 +587,20 @@
         <!-- Правая колонка (Чат) -->
         <div class="chat-area">
             <div class="chat-header" id="chatHeader">
-                <div class="avatar" id="activeAvatar" style="display: none; width: 32px; height: 32px; font-size: 14px;">?</div>
-                <span id="chatHeaderText">Выберите чат слева</span>
+                <div class="chat-header-left">
+                    <div class="avatar" id="activeAvatar" style="display: none; width: 32px; height: 32px; font-size: 14px;">?</div>
+                    <span id="chatHeaderText">Выберите чат слева</span>
+                </div>
+                <div class="chat-header-actions" id="chatHeaderActions" style="display: none;">
+                    <button class="icon-btn" id="clearChatBtn" title="Очистить чат">🧹</button>
+                    <button class="icon-btn" id="blockContactBtn" title="Заблокировать">🚫</button>
+                </div>
             </div>
             <div class="messages-container" id="messagesContainer">
                 <div style="color: var(--text-muted); text-align: center; margin-top: auto; margin-bottom: auto;">Выберите контакт для общения</div>
             </div>
             <div class="chat-input-area" id="inputArea" style="display: none;">
+                <button class="icon-btn" id="attachFileBtn" title="Прикрепить файл">📎</button>
                 <input type="text" id="messageInput" placeholder="Написать сообщение...">
                 <button class="send-btn" id="sendBtn">SEND</button>
             </div>
@@ -496,9 +618,9 @@
         let allMessages = {};
         let contacts = [];
 
-        // Выбор аватарки из заготовленных пресетов
+        // Выбор аватарки в модалке входа
         let selectedAvatarStyle = myAvatarData;
-        const presetAvs = document.querySelectorAll('.preset-av');
+        const presetAvs = document.querySelectorAll('#presetsGrid .preset-av');
         presetAvs.forEach(av => {
             if (av.dataset.bg === myAvatarData) {
                 presetAvs.forEach(p => p.classList.remove('selected'));
@@ -511,7 +633,6 @@
             });
         });
 
-        // Загрузка пользовательского изображения
         document.getElementById('fileAvatarInput').addEventListener('change', function(e) {
             const file = e.target.files[0];
             if (file) {
@@ -524,7 +645,96 @@
             }
         });
 
-        // Функция маски телефона (+7 (XXX) XXX-XX-XX)
+        // Открытие настроек профиля (из шапки сайдбара и из блока профиля)
+        let settingsAvatarStyle = myAvatarData;
+        const settingsPresetAvs = document.querySelectorAll('#settingsPresetsGrid .preset-av');
+        
+        function openSettingsModal() {
+            document.getElementById('settingsName').value = myName;
+            settingsAvatarStyle = myAvatarData;
+            settingsPresetAvs.forEach(av => {
+                if (av.dataset.bg === myAvatarData) {
+                    av.classList.add('selected');
+                } else {
+                    av.classList.remove('selected');
+                }
+            });
+            document.getElementById('settingsModal').style.display = 'flex';
+        }
+
+        document.getElementById('settingsOpenBtn').addEventListener('click', openSettingsModal);
+        document.getElementById('profileSettingsBtn').addEventListener('click', openSettingsModal);
+
+        settingsPresetAvs.forEach(av => {
+            av.addEventListener('click', () => {
+                settingsPresetAvs.forEach(p => p.classList.remove('selected'));
+                av.classList.add('selected');
+                settingsAvatarStyle = av.dataset.bg;
+            });
+        });
+
+        document.getElementById('settingsFileAvatarInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    settingsAvatarStyle = `url(${event.target.result})`;
+                    settingsPresetAvs.forEach(p => p.classList.remove('selected'));
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        document.getElementById('closeSettingsBtn').addEventListener('click', () => {
+            document.getElementById('settingsModal').style.display = 'none';
+        });
+
+        document.getElementById('saveSettingsBtn').addEventListener('click', () => {
+            const newName = document.getElementById('settingsName').value.trim();
+            if (!newName) {
+                alert('Имя не может быть пустым!');
+                return;
+            }
+            myName = newName;
+            myAvatarData = settingsAvatarStyle;
+            localStorage.setItem('chat_name', myName);
+            localStorage.setItem('chat_avatar', myAvatarData);
+            
+            document.getElementById('settingsModal').style.display = 'none';
+            loginUser(myName, myPhone, myAvatarData);
+            socket.emit('verify_code', { name: myName, phone: myPhone, code: '0000' });
+        });
+
+        // Кнопка выхода (Logout)
+        document.getElementById('logoutBtn').addEventListener('click', () => {
+            if (confirm('Вы уверены, что хотите выйти?')) {
+                localStorage.removeItem('chat_phone');
+                localStorage.removeItem('chat_name');
+                localStorage.removeItem('chat_avatar');
+                location.reload();
+            }
+        });
+
+        // Дополнительные кнопки в чате (очистка, блокировка, прикрепление)
+        document.getElementById('clearChatBtn').addEventListener('click', () => {
+            if (activeContactPhone && confirm('Очистить историю этого чата?')) {
+                const chatKey = [myPhone, activeContactPhone].sort().join('_');
+                allMessages[chatKey] = [];
+                renderMessages();
+            }
+        });
+
+        document.getElementById('blockContactBtn').addEventListener('click', () => {
+            if (activeContactPhone) {
+                alert('Контакт заблокирован.');
+            }
+        });
+
+        document.getElementById('attachFileBtn').addEventListener('click', () => {
+            alert('Функция прикрепления файлов в разработке.');
+        });
+
+        // Маска телефона (+7 (XXX) XXX-XX-XX)
         function setupPhoneMask(input) {
             input.addEventListener('input', (e) => {
                 let value = e.target.value.replace(/\D/g, '');
@@ -573,7 +783,6 @@
             loginUser(myName, myPhone, myAvatarData);
         }
 
-        // Шаг 1: Запрос кода
         authBtn.addEventListener('click', () => {
             tempName = authNameInput.value.trim();
             tempPhone = authPhoneInput.value.trim();
@@ -589,7 +798,6 @@
             codeModal.style.display = 'flex';
         });
 
-        // Шаг 2: Проверка кода
         codeBtn.addEventListener('click', () => {
             const code = codeCodeInput.value.trim();
             if (!code) {
@@ -656,11 +864,13 @@
                 item.className = `contact-item ${activeContactPhone === c.phone ? 'active' : ''}`;
                 const initial = c.name ? c.name.charAt(0).toUpperCase() : '?';
                 item.innerHTML = `
-                    <div class="avatar" style="width: 36px; height: 36px; font-size: 14px;">${initial}</div>
-                    <div class="contact-info">
-                        <div class="contact-name">${c.name}</div>
-                        <div class="contact-status ${c.isOnline ? 'online' : ''}">
-                            ${c.isOnline ? '● в сети' : (c.lastSeen ? 'был в ' + c.lastSeen : 'не в сети')}
+                    <div class="contact-left">
+                        <div class="avatar" style="width: 36px; height: 36px; font-size: 14px;">${initial}</div>
+                        <div class="contact-info">
+                            <div class="contact-name">${c.name}</div>
+                            <div class="contact-status ${c.isOnline ? 'online' : ''}">
+                                ${c.isOnline ? '● в сети' : (c.lastSeen ? 'был в ' + c.lastSeen : 'не в сети')}
+                            </div>
                         </div>
                     </div>
                 `;
@@ -677,6 +887,7 @@
             activeAvatar.innerText = contact.name.charAt(0).toUpperCase();
             document.getElementById('chatHeaderText').innerText = contact.name;
             
+            document.getElementById('chatHeaderActions').style.display = 'flex';
             document.getElementById('inputArea').style.display = 'flex';
             renderContacts();
             renderMessages();
