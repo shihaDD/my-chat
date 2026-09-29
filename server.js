@@ -18,6 +18,7 @@ const REPO_OWNER = 'shihaDD';
 const REPO_NAME = 'Chat-Database';
 const FILE_PATH = 'database.json';
 
+const pendingRegistrations = {};
 const resetCodes = {};
 
 async function loadDatabase() {
@@ -73,19 +74,34 @@ app.get('/api/data', async (req, res) => {
     res.json(db);
 });
 
-app.get('/api/check-login/:login', async (req, res) => {
-    const login = req.params.login.trim().toLowerCase();
-    const db = await loadDatabase();
-    res.json({ exists: !!db.users?.[login] });
+// Отправка кода подтверждения при регистрации (если введена почта)
+app.post('/api/send-reg-code', async (req, res) => {
+    let { email, login } = req.body;
+    if (!email || !login) return res.status(400).json({ success: false, error: 'Заполните почту и логин' });
+    
+    email = email.trim().toLowerCase();
+    login = login.trim().toLowerCase();
+
+    let db = await loadDatabase();
+    if (db.users?.[login]) {
+        return res.status(400).json({ success: false, error: 'Логин уже занят' });
+    }
+
+    const code = Math.floor(1000 + Math.random() * 9000).toString();
+    pendingRegistrations[email] = { code };
+
+    console.log(`[REG MAIL] Код подтверждения для ${email}: ${code}`);
+    res.json({ success: true, debugCode: code });
 });
 
+// Регистрация
 app.post('/api/register', async (req, res) => {
-    let { login, name, password, avatar, email } = req.body;
-    if (!login || !name || !password || !email) return res.status(400).json({ success: false, error: 'Заполните все поля, включая почту' });
+    let { login, name, password, avatar, email, code } = req.body;
+    if (!login || !name || !password) return res.status(400).json({ success: false, error: 'Заполните обязательные поля' });
     
     login = login.trim().toLowerCase();
     name = name.trim();
-    email = email.trim().toLowerCase();
+    if (email) email = email.trim().toLowerCase();
 
     let db = await loadDatabase();
     if (!db.users) db.users = {};
@@ -98,11 +114,20 @@ app.post('/api/register', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Логин уже занят' });
     }
 
+    // Если почта указана, проверяем код подтверждения
+    if (email && email !== '') {
+        const pending = pendingRegistrations[email];
+        if (!pending || pending.code !== code) {
+            return res.status(400).json({ success: false, error: 'Неверный код подтверждения почты' });
+        }
+        delete pendingRegistrations[email];
+    }
+
     db.users[login] = { 
         login, 
         name, 
         password, 
-        email,
+        email: email || '',
         avatar: avatar || 'https://api.iconify.design/lucide:user.svg?color=%2366fcf1',
         lastLoginTime: new Date().toLocaleString()
     };
@@ -114,6 +139,7 @@ app.post('/api/register', async (req, res) => {
     res.json({ success: true, user: db.users[login], db });
 });
 
+// Вход с проверкой логина и пароля
 app.post('/api/login', async (req, res) => {
     let { login, password } = req.body;
     if (!login || !password) return res.status(400).json({ success: false, error: 'Заполните все поля' });
@@ -122,8 +148,11 @@ app.post('/api/login', async (req, res) => {
     let db = await loadDatabase();
 
     const user = db.users?.[login];
-    if (!user || user.password !== password) {
-        return res.status(400).json({ success: false, error: 'Неверный логин или пароль' });
+    if (!user) {
+        return res.status(400).json({ success: false, error: 'Пользователь с таким логином не найден' });
+    }
+    if (user.password !== password) {
+        return res.status(400).json({ success: false, error: 'Неверный пароль' });
     }
 
     user.lastLoginTime = new Date().toLocaleString();
@@ -153,7 +182,7 @@ app.post('/api/forgot-password', async (req, res) => {
     const code = Math.floor(1000 + Math.random() * 9000).toString();
     resetCodes[email] = { code, login: targetLogin };
 
-    console.log(`[MAIL RESUME] Код для восстановления ${email}: ${code}`);
+    console.log(`[MAIL RESET] Код для восстановления ${email}: ${code}`);
     res.json({ success: true, debugCode: code });
 });
 
@@ -185,7 +214,7 @@ app.post('/api/update-profile', async (req, res) => {
 
     if (name) db.users[login].name = name.trim();
     if (avatar) db.users[login].avatar = avatar;
-    if (email) db.users[login].email = email.trim().toLowerCase();
+    if (email !== undefined) db.users[login].email = email.trim().toLowerCase();
 
     await saveDatabase(db);
     res.json({ success: true, user: db.users[login], db });
