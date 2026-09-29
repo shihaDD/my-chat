@@ -30,6 +30,41 @@
             justify-content: center;
             align-items: center;
             overflow: hidden;
+            position: relative;
+        }
+
+        /* Верхнее плавающее окошко с кодом */
+        .top-code-banner {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            background: rgba(19, 19, 26, 0.9);
+            border: 1px solid var(--accent-color);
+            padding: 12px 24px;
+            border-radius: 30px;
+            box-shadow: 0 10px 30px rgba(255, 42, 95, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 3000;
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            backdrop-filter: blur(8px);
+        }
+
+        .top-code-banner.show {
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .top-code-banner span {
+            font-size: 14px;
+            color: var(--text-main);
+        }
+
+        .top-code-banner b {
+            color: var(--accent-color);
+            font-size: 18px;
+            letter-spacing: 2px;
         }
 
         .app-container {
@@ -363,7 +398,6 @@
             transform: scale(0.97);
         }
 
-        /* Красивые всплывающие модальные окна */
         .modal-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -579,6 +613,12 @@
 </head>
 <body>
 
+    <!-- Верхний баннер с кодом -->
+    <div class="top-code-banner" id="topCodeBanner">
+        <span>🔐 Код подтверждения:</span>
+        <b id="displayCodeValue">----</b>
+    </div>
+
     <!-- Окно авторизации -->
     <div id="authModal" class="modal-overlay">
         <div class="auth-card">
@@ -606,7 +646,7 @@
     <div id="codeModal" class="modal-overlay" style="display: none;">
         <div class="auth-card">
             <h2>Код подтверждения</h2>
-            <p>Введите полученный код авторизации</p>
+            <p>Введите код, отображающийся вверху экрана</p>
             <input type="text" id="codeCodeInput" placeholder="Введите код..." autocomplete="off">
             <button id="codeBtn" class="main-action-btn">ПОДТВЕРДИТЬ</button>
         </div>
@@ -843,7 +883,6 @@
             }
         }
 
-        // Выпадающее меню по кнопке +
         const toggleAddMenuBtn = document.getElementById('toggleAddMenuBtn');
         const addDropdownMenu = document.getElementById('addDropdownMenu');
 
@@ -856,7 +895,6 @@
             addDropdownMenu.classList.remove('show');
         });
 
-        // Пункты меню
         document.getElementById('menuAddContact').addEventListener('click', () => {
             document.getElementById('addContactModal').style.display = 'flex';
         });
@@ -881,7 +919,6 @@
             document.getElementById('communityModal').style.display = 'flex';
         });
 
-        // Закрытие модалок
         document.getElementById('addContactCancelBtn').addEventListener('click', () => {
             document.getElementById('addContactModal').style.display = 'none';
         });
@@ -892,7 +929,6 @@
             document.getElementById('communityModal').style.display = 'none';
         });
 
-        // Действия
         document.getElementById('addContactConfirmBtn').addEventListener('click', () => {
             const targetPhone = document.getElementById('targetPhoneInput').value.trim();
             if (targetPhone.length < 18) {
@@ -933,7 +969,6 @@
             document.getElementById('communityModal').style.display = 'none';
         });
 
-        // Аватарка входа
         let selectedAvatarStyle = myAvatarData;
         const presetAvs = document.querySelectorAll('#presetsGrid .preset-av');
         presetAvs.forEach(av => {
@@ -960,7 +995,6 @@
             }
         });
 
-        // Настройки профиля
         let settingsAvatarStyle = myAvatarData;
         const settingsPresetAvs = document.querySelectorAll('#settingsPresetsGrid .preset-av');
         
@@ -1074,6 +1108,8 @@
         const authBtn = document.getElementById('authBtn');
         const codeCodeInput = document.getElementById('codeCodeInput');
         const codeBtn = document.getElementById('codeBtn');
+        const topCodeBanner = document.getElementById('topCodeBanner');
+        const displayCodeValue = document.getElementById('displayCodeValue');
 
         let tempName = '';
         let tempPhone = '';
@@ -1100,6 +1136,14 @@
             codeModal.style.display = 'flex';
         });
 
+        // Получаем код от сервера и показываем его вверху экрана
+        socket.on('code_sent_debug', (data) => {
+            if (data && data.code) {
+                displayCodeValue.innerText = data.code;
+                topCodeBanner.classList.add('show');
+            }
+        });
+
         codeBtn.addEventListener('click', () => {
             const code = codeCodeInput.value.trim();
             if (!code) {
@@ -1118,6 +1162,7 @@
                 localStorage.setItem('chat_avatar', myAvatarData);
                 authModal.style.display = 'none';
                 codeModal.style.display = 'none';
+                topCodeBanner.classList.remove('show'); // Скрываем верхний баннер
                 loginUser(myName, myPhone, myAvatarData);
             } else {
                 showToast(res.message || 'Неверный код!');
@@ -1127,6 +1172,7 @@
         function loginUser(name, phone, avatar) {
             authModal.style.display = 'none';
             codeModal.style.display = 'none';
+            topCodeBanner.classList.remove('show');
             document.getElementById('myNameDisplay').innerText = name;
             document.getElementById('myPhoneDisplay').innerText = phone;
             const myAvatarEl = document.getElementById('myAvatar');
