@@ -14,35 +14,42 @@ const io = new Server(server, {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-const users = {}; // socket.id -> номер телефона
+const users = {}; // socket.id -> { phone, name }
 
 io.on('connection', (socket) => {
     console.log('Пользователь подключился:', socket.id);
 
-    // Регистрация по номеру телефона
-    socket.on('register', (phone, callback) => {
-        const cleanPhone = phone.replace(/\D/g, ''); // убираем всё лишнее для проверки
+    // Регистрация по телефону и имени
+    socket.on('register', (data, callback) => {
+        // data = { phone, name }
+        const cleanPhone = data.phone ? data.phone.replace(/\D/g, '') : '';
+        const name = data.name ? data.name.trim() : '';
+
         if (cleanPhone.length < 10) {
             return callback({ success: false, message: 'Введите корректный номер телефона!' });
         }
+        if (!name) {
+            return callback({ success: false, message: 'Введите ваше имя!' });
+        }
         
-        users[socket.id] = phone.trim();
-        socket.phone = phone.trim();
+        users[socket.id] = { phone: data.phone.trim(), name: name };
+        socket.userData = users[socket.id];
         
-        callback({ success: true, phone: socket.phone });
+        callback({ success: true, user: users[socket.id] });
         updateUsersList();
     });
 
     // Обработка личных сообщений
     socket.on('private_message', (data) => {
-        // data = { to: 'номер_получателя', message: 'текст' }
+        // data = { toPhone: 'номер', message: 'текст' }
         const recipientSocketId = Object.keys(users).find(
-            key => users[key] === data.to
+            key => users[key].phone === data.toPhone
         );
 
         if (recipientSocketId) {
             io.to(recipientSocketId).emit('message', {
-                from: socket.phone,
+                fromPhone: socket.userData.phone,
+                fromName: socket.userData.name,
                 text: data.message,
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             });
