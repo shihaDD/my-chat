@@ -28,6 +28,8 @@
             font-size: 15px;
             outline: none;
             background: #fff;
+            text-align: center;
+            letter-spacing: 1px;
         }
         #auth-screen button {
             width: 100%;
@@ -75,7 +77,7 @@
             display: flex; 
             flex-direction: column; 
             height: 100%;
-            overflow: hidden; /* Запрещаем левой панели скроллиться целиком */
+            overflow: hidden;
         }
         .sidebar-header {
             height: 60px;
@@ -120,7 +122,7 @@
             color: #3b4a54;
         }
 
-        /* Скроллится только список пользователей внутри левой панели */
+        /* Список пользователей */
         #users-list { 
             list-style: none; 
             overflow-y: auto; 
@@ -163,7 +165,7 @@
             border-bottom: 1px solid #d1d7db;
         }
 
-        /* Контейнер сообщений с отдельным скроллом */
+        /* Контейнер сообщений */
         .messages-container {
             flex: 1;
             padding: 20px 7%;
@@ -224,7 +226,6 @@
             display: flex;
             align-items: center;
             gap: 10px;
-            min-height: 62px;
         }
         .chat-input-area input {
             flex: 1;
@@ -254,19 +255,19 @@
 
     <div class="whatsapp-bg-top"></div>
 
-    <!-- Экран авторизации -->
+    <!-- Экран авторизации по номеру -->
     <div id="auth-screen">
         <h2>WhatsApp Web</h2>
-        <p>Введите свое имя для подключения к чату</p>
-        <input type="text" id="username-input" placeholder="Ваше имя..." autocomplete="off">
-        <button id="login-btn">Войти в чат</button>
+        <p>Введите номер телефона для входа</p>
+        <input type="text" id="phone-input" placeholder="+7 (___) ___-__-__" autocomplete="off">
+        <button id="login-btn">Войти</button>
     </div>
 
     <!-- Основной интерфейс -->
     <div id="chat-screen">
         <div class="sidebar">
             <div class="sidebar-header">
-                <div class="user-avatar-placeholder" id="my-avatar-label">Я</div>
+                <div class="user-avatar-placeholder" id="my-avatar-label">📞</div>
             </div>
             <div class="search-container">
                 <input type="text" class="search-box" placeholder="Поиск или новый чат">
@@ -276,7 +277,7 @@
         
         <div class="chat-area">
             <div class="chat-header">
-                <div class="user-avatar-placeholder" id="active-avatar-label">💬</div>
+                <div class="user-avatar-placeholder" id="active-avatar-label">📱</div>
                 <div style="font-weight: 500; color: #111b21; font-size: 16px;" id="active-chat-title">Выберите чат</div>
             </div>
             
@@ -294,13 +295,13 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        let myUsername = '';
+        let myPhone = '';
         let activeRecipient = null;
         const messagesStore = {};
 
         const authScreen = document.getElementById('auth-screen');
         const chatScreen = document.getElementById('chat-screen');
-        const usernameInput = document.getElementById('username-input');
+        const phoneInput = document.getElementById('phone-input');
         const loginBtn = document.getElementById('login-btn');
         const usersList = document.getElementById('users-list');
         const activeChatTitle = document.getElementById('active-chat-title');
@@ -311,13 +312,31 @@
         const messageInput = document.getElementById('message-input');
         const sendBtn = document.getElementById('send-btn');
 
+        // Простая маска ввода номера телефона
+        phoneInput.oninput = (e) => {
+            let val = e.target.value.replace(/\D/g, '');
+            if (val.startsWith('7') || val.startsWith('8')) {
+                val = val.substring(1);
+            }
+            let res = '+7 ';
+            if (val.length > 0) res += '(' + val.substring(0, 3);
+            if (val.length >= 3) res += ') ' + val.substring(3, 6);
+            if (val.length >= 6) res += '-' + val.substring(6, 8);
+            if (val.length >= 8) res += '-' + val.substring(8, 10);
+            phoneInput.value = val.length === 0 ? '' : res;
+        };
+
         loginBtn.onclick = () => {
-            const name = usernameInput.value.trim();
-            if (!name) return alert('Введите имя!');
-            socket.emit('register', name, (response) => {
+            const phone = phoneInput.value.trim();
+            const cleanDigits = phone.replace(/\D/g, '');
+            if (cleanDigits.length < 11) {
+                return alert('Введите полный номер телефона!');
+            }
+            
+            socket.emit('register', phone, (response) => {
                 if (response.success) {
-                    myUsername = response.username;
-                    myAvatarLabel.textContent = myUsername.charAt(0).toUpperCase();
+                    myPhone = response.phone;
+                    myAvatarLabel.textContent = '📞';
                     authScreen.style.display = 'none';
                     chatScreen.style.display = 'grid';
                 } else {
@@ -328,23 +347,23 @@
 
         socket.on('users_list', (users) => {
             usersList.innerHTML = '';
-            users.forEach(user => {
-                if (user === myUsername) return;
+            users.forEach(userPhone => {
+                if (userPhone === myPhone) return;
                 const li = document.createElement('li');
-                if (user === activeRecipient) li.classList.add('active');
+                if (userPhone === activeRecipient) li.classList.add('active');
                 
                 li.innerHTML = `
-                    <div class="user-avatar-placeholder">${user.charAt(0).toUpperCase()}</div>
+                    <div class="user-avatar-placeholder">📱</div>
                     <div class="contact-info">
-                        <span class="contact-name">${user}</span>
+                        <span class="contact-name">${userPhone}</span>
                         <span class="contact-status">В сети</span>
                     </div>
                 `;
                 
                 li.onclick = () => {
-                    activeRecipient = user;
-                    activeChatTitle.textContent = user;
-                    activeAvatarLabel.textContent = user.charAt(0).toUpperCase();
+                    activeRecipient = userPhone;
+                    activeChatTitle.textContent = userPhone;
+                    activeAvatarLabel.textContent = '📱';
                     inputArea.style.display = 'flex';
                     document.querySelectorAll('#users-list li').forEach(el => el.classList.remove('active'));
                     li.classList.add('active');
