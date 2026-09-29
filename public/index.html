@@ -70,7 +70,6 @@
         .sidebar { background: #ffffff; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; height: 100%; overflow: hidden; }
         .sidebar-header { height: 60px; min-height: 60px; background: #f0f2f5; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; border-right: 1px solid #d1d7db; }
         
-        /* Стили аватарок */
         .user-avatar { width: 40px; height: 40px; border-radius: 50%; background: #dfe2e5; display: flex; align-items: center; justify-content: center; color: #54656f; font-weight: 600; flex-shrink: 0; cursor: pointer; overflow: hidden; object-fit: cover; }
         .user-avatar img { width: 100%; height: 100%; object-fit: cover; }
 
@@ -108,7 +107,6 @@
         .send-btn { background: transparent; border: none; cursor: pointer; color: #54656f; font-size: 22px; display: flex; align-items: center; justify-content: center; padding: 8px; }
         .send-btn:hover { color: #00a884; }
 
-        /* Настройки профиля и аватара */
         .settings-header { height: 60px; min-height: 60px; background: #00a884; color: white; padding: 10px 20px; display: flex; align-items: center; gap: 20px; font-size: 19px; font-weight: 500; }
         .settings-content { padding: 30px; max-width: 500px; display: flex; flex-direction: column; gap: 20px; }
         .settings-group { display: flex; flex-direction: column; gap: 8px; }
@@ -123,11 +121,44 @@
 
         .save-settings-btn { padding: 12px; background: #00a884; color: white; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; font-weight: 600; margin-top: 10px; }
         .save-settings-btn:hover { background: #008f72; }
+
+        /* Кастомное красивое всплывающее уведомление (вместо стандартного alert) */
+        #custom-toast {
+            position: fixed;
+            top: 20px;
+            right: -400px;
+            background: #ffffff;
+            color: #111b21;
+            padding: 16px 20px;
+            border-radius: 10px;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+            z-index: 9999;
+            transition: right 0.3s ease-in-out;
+            max-width: 350px;
+            border-left: 5px solid #00a884;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        #custom-toast.show {
+            right: 20px;
+        }
+        #custom-toast-text {
+            font-size: 14px;
+            line-height: 1.4;
+            word-break: break-word;
+        }
     </style>
 </head>
 <body>
 
     <div class="whatsapp-bg-top"></div>
+
+    <!-- Красивое кастомное окно уведомлений -->
+    <div id="custom-toast">
+        <span style="font-size: 20px;">💬</span>
+        <div id="custom-toast-text">Текст уведомления</div>
+    </div>
 
     <div id="auth-screen">
         <h2>WhatsApp Web</h2>
@@ -139,7 +170,7 @@
         </div>
         
         <div id="step-code-block" style="display: none;">
-            <p>Введите 4-значный код из всплывающего окна</p>
+            <p>Введите 4-значный код из уведомления</p>
             <input type="text" id="sms-code-input" placeholder="____" maxlength="4" autocomplete="off">
             <button id="verify-code-btn">Подтвердить и войти</button>
         </div>
@@ -152,7 +183,7 @@
                     <span id="my-avatar-label">Я</span>
                 </div>
                 <div class="sidebar-icons">
-                    <button class="icon-btn" id="settings-btn" title="Настройки профиля">⚙️</button>
+                    <button class="icon-btn" id="settings-btn" title="Настройки профиля">⚙️️</button>
                 </div>
             </div>
             <div class="search-container">
@@ -161,7 +192,6 @@
             <ul id="users-list"></ul>
         </div>
         
-        <!-- Область чата -->
         <div class="chat-area" id="chat-main-container">
             <div class="chat-header">
                 <div class="user-avatar" id="active-avatar-container">
@@ -183,7 +213,6 @@
             </div>
         </div>
 
-        <!-- Область настроек профиля -->
         <div class="settings-area" id="settings-area">
             <div class="settings-header">
                 <button class="icon-btn" id="close-settings-btn" style="color: white; font-size: 24px;" title="Назад">✕</button>
@@ -218,11 +247,25 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        let myData = null; // { phone, name, avatar }
+        let myData = null;
         let activeRecipientPhone = null;
         let generatedPopupCode = ''; 
         let messagesStore = JSON.parse(localStorage.getItem('whatsapp_messages') || '{}');
-        let tempAvatarBase64 = null; // Временное хранилище выбранной аватарки
+        let tempAvatarBase64 = null;
+        let toastTimeout = null;
+
+        // Функция красивого уведомления вместо alert
+        function showNotification(text) {
+            const toast = document.getElementById('custom-toast');
+            const toastText = document.getElementById('custom-toast-text');
+            toastText.textContent = text;
+            toast.classList.add('show');
+
+            if (toastTimeout) clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3500); // Окно само пропадет через 3.5 секунды
+        }
 
         const authScreen = document.getElementById('auth-screen');
         const chatScreen = document.getElementById('chat-screen');
@@ -244,7 +287,6 @@
         const messageInput = document.getElementById('message-input');
         const sendBtn = document.getElementById('send-btn');
 
-        // Элементы настроек
         const settingsBtn = document.getElementById('settings-btn');
         const closeSettingsBtn = document.getElementById('close-settings-btn');
         const chatMainContainer = document.getElementById('chat-main-container');
@@ -281,11 +323,13 @@
             const name = nameInput.value.trim();
             const cleanDigits = phone.replace(/\D/g, '');
 
-            if (cleanDigits.length < 10) return alert('Введите полный номер телефона!');
-            if (!name) return alert('Введите ваше имя!');
+            if (cleanDigits.length < 10) return showNotification('Введите полный номер телефона!');
+            if (!name) return showNotification('Введите ваше имя!');
 
             generatedPopupCode = Math.floor(1000 + Math.random() * 9000).toString();
-            alert('Ваш проверочный код: ' + generatedPopupCode);
+            
+            // Выводим наш красивый вылетающий тост с кодом!
+            showNotification('Ваш проверочный код: ' + generatedPopupCode);
 
             stepPhoneBlock.style.display = 'none';
             stepCodeBlock.style.display = 'block';
@@ -296,7 +340,7 @@
             const name = nameInput.value.trim();
             const code = smsCodeInput.value.trim();
 
-            if (code.length !== 4) return alert('Введите 4-значный код!');
+            if (code.length !== 4) return showNotification('Введите 4-значный код!');
 
             if (code === generatedPopupCode) {
                 myData = { phone, name, avatar: null };
@@ -304,7 +348,7 @@
                 tempAvatarBase64 = null;
                 startChatSession();
             } else {
-                alert('Неверный код! Попробуйте еще раз.');
+                showNotification('Неверный код! Попробуйте еще раз.');
             }
         };
 
@@ -323,7 +367,6 @@
             chatScreen.style.display = 'grid';
         }
 
-        // Обработка загрузки файла картинки
         avatarFileInput.onchange = (e) => {
             const file = e.target.files[0];
             if (!file) return;
@@ -361,8 +404,8 @@
             const newPhone = editPhoneInput.value.trim();
             const cleanDigits = newPhone.replace(/\D/g, '');
 
-            if (!newName) return alert('Имя не может быть пустым!');
-            if (cleanDigits.length < 10) return alert('Введите корректный номер телефона!');
+            if (!newName) return showNotification('Имя не может быть пустым!');
+            if (cleanDigits.length < 10) return showNotification('Введите корректный номер телефона!');
 
             const oldPhone = myData.phone;
             
@@ -374,7 +417,7 @@
 
             settingsArea.style.display = 'none';
             chatMainContainer.style.display = 'flex';
-            alert('Профиль успешно обновлен!');
+            showNotification('Профиль успешно обновлен!');
         };
 
         socket.on('users_list', (users) => {
