@@ -3,58 +3,160 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Чат с сохранением на GitHub</title>
+    <title>Мини Соцсеть</title>
     <style>
-        body { font-family: Arial, sans-serif; max-width: 600px; margin: 30px auto; padding: 20px; }
-        .box { border: 1px solid #ccc; padding: 15px; margin-bottom: 15px; border-radius: 5px; }
-        pre { background: #f4f4f4; padding: 10px; border-radius: 4px; }
-        button { padding: 8px 15px; cursor: pointer; }
+        body { font-family: Arial, sans-serif; background: #eef2f5; margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 800px; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .hidden { display: none !important; }
+        .flex { display: flex; gap: 15px; }
+        .sidebar { width: 30%; border-right: 1px solid #ddd; padding-right: 10px; }
+        .chat-area { width: 70%; display: flex; flex-direction: column; height: 400px; }
+        .messages { flex-grow: 1; border: 1px solid #ddd; border-radius: 4px; padding: 10px; overflow-y: auto; margin-bottom: 10px; background: #fafafa; }
+        input, button { padding: 10px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+        button { background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .user-item { padding: 8px; cursor: pointer; border-radius: 4px; margin-bottom: 5px; background: #f1f1f1; }
+        .user-item:hover, .user-item.active { background: #007bff; color: white; }
+        .msg { margin-bottom: 8px; padding: 6px 10px; border-radius: 6px; max-width: 70%; }
+        .msg.me { background: #dcf8c6; margin-left: auto; text-align: right; }
+        .msg.other { background: #fff; border: 1px solid #ddd; }
     </style>
 </head>
 <body>
 
-    <h1>Управление базой данных</h1>
+<div class="container">
+    <h2>💬 Мини-соцсеть с сохранением на GitHub</h2>
 
-    <div class="box">
-        <h3>Содержимое database.json с сервера:</h3>
-        <button onclick="loadData()">Обновить данные</button>
-        <pre id="dbContent">Загрузка...</pre>
+    <!-- БЛОК АВТОРИЗАЦИИ -->
+    <div id="auth-screen">
+        <h3>Представьтесь, чтобы войти:</h3>
+        <input type="text" id="usernameInput" placeholder="Ваше имя...">
+        <button onclick="login()">Войти</button>
     </div>
 
-    <div class="box">
-        <h3>Добавить тестовое действие</h3>
-        <button onclick="sendUpdate()">Сделать запрос к /api/update</button>
+    <!-- ОСНОВНОЙ ИНТЕРФЕЙС СОЦСЕТИ -->
+    <div id="app-screen" class="hidden">
+        <p>Вы вошли как: <b id="currentUserName"></b></p>
+        <div class="flex">
+            <!-- Список пользователей -->
+            <div class="sidebar">
+                <h4>Пользователи:</h4>
+                <div id="usersList"></div>
+            </div>
+            <!-- Чат -->
+            <div class="chat-area">
+                <h4 id="chatTitle">Выберите, кому написать</h4>
+                <div class="messages" id="messagesBox">Выберите пользователя слева</div>
+                <div class="flex hidden" id="sendBox">
+                    <input type="text" id="msgInput" placeholder="Введите сообщение..." style="flex-grow: 1;" onkeypress="checkEnter(event)">
+                    <button onclick="sendMessage()">Отправить</button>
+                </div>
+            </div>
+        </div>
     </div>
+</div>
 
-    <script>
-        async function loadData() {
-            try {
-                const response = await fetch('/api/data');
-                const data = await response.json();
-                document.getElementById('dbContent').textContent = JSON.stringify(data, null, 2);
-            } catch (e) {
-                document.getElementById('dbContent').textContent = 'Ошибка загрузки данных';
-            }
+<script>
+    let currentUser = '';
+    let currentPartner = '';
+    let dbData = {};
+
+    async function loadData() {
+        const res = await fetch('/api/data');
+        dbData = await res.json();
+        if (currentUser) {
+            updateUI();
+        }
+    }
+
+    async function login() {
+        const name = document.getElementById('usernameInput').value.trim();
+        if (!name) return alert('Введите имя!');
+
+        const res = await fetch('/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username: name })
+        });
+        const data = await res.json();
+        dbData = data.db;
+        currentUser = name;
+
+        document.getElementById('auth-screen').classList.add('hidden');
+        document.getElementById('app-screen').classList.remove('hidden');
+        document.getElementById('currentUserName').textContent = currentUser;
+        updateUI();
+
+        // Авто-обновление данных каждые 3 секунды (эмуляция реального времени)
+        setInterval(loadData, 3000);
+    }
+
+    function updateUI() {
+        const usersListDiv = document.getElementById('usersList');
+        usersListDiv.innerHTML = '';
+
+        dbData.users.forEach(user => {
+            if (user === currentUser) return; // Себя не показываем в списке контактов
+            const div = document.createElement('div');
+            div.className = `user-item ${currentPartner === user ? 'active' : ''}`;
+            div.textContent = user;
+            div.onclick = () => selectPartner(user);
+            usersListDiv.appendChild(div);
+        });
+
+        if (currentPartner) {
+            renderMessages();
+        }
+    }
+
+    function selectPartner(user) {
+        currentPartner = user;
+        document.getElementById('chatTitle').textContent = `Чат с: ${user}`;
+        document.getElementById('sendBox').classList.remove('hidden');
+        updateUI();
+        renderMessages();
+    }
+
+    function renderMessages() {
+        const messagesBox = document.getElementById('messagesBox');
+        messagesBox.innerHTML = '';
+
+        const chatHistory = dbData.messagesStore?.[currentUser]?.[currentPartner] || [];
+        
+        if (chatHistory.length === 0) {
+            messagesBox.innerHTML = '<i style="color:gray;">Нет сообщений. Напишите первое!</i>';
+            return;
         }
 
-        async function sendUpdate() {
-            try {
-                const response = await fetch('/api/update', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'test', time: new Date().toISOString() })
-                });
-                const result = await response.json();
-                alert('Данные обновлены и отправлены на GitHub!');
-                document.getElementById('dbContent').textContent = JSON.stringify(result.db, null, 2);
-            } catch (e) {
-                alert('Ошибка при обновлении');
-            }
-        }
+        chatHistory.forEach(m => {
+            const div = document.createElement('div');
+            div.className = `msg ${m.sender === currentUser ? 'me' : 'other'}`;
+            div.innerHTML = `<b>${m.sender}:</b> ${m.text} <br><small style="font-size:10px; color:#888;">${m.time}</small>`;
+            messagesBox.appendChild(div);
+        });
+        messagesBox.scrollTop = messagesBox.scrollHeight;
+    }
 
-        // Загружаем данные при открытии страницы
-        loadData();
-    </script>
+    async function sendMessage() {
+        const input = document.getElementById('msgInput');
+        const text = input.value.trim();
+        if (!text || !currentPartner) return;
+
+        const res = await fetch('/api/send-message', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sender: currentUser, receiver: currentPartner, text })
+        });
+        const data = await res.json();
+        dbData = data.db;
+        input.value = '';
+        renderMessages();
+    }
+
+    function checkEnter(e) {
+        if (e.key === 'Enter') sendMessage();
+    }
+</script>
 
 </body>
 </html>
