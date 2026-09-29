@@ -7,54 +7,64 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        /* Кастомный скроллбар */
+        /* Стилизация скроллбара */
         ::-webkit-scrollbar {
             width: 6px;
             height: 6px;
         }
         ::-webkit-scrollbar-track {
-            background: #111827;
+            background: #090d16;
         }
         ::-webkit-scrollbar-thumb {
-            background: #374151;
+            background: #1f2937;
             border-radius: 3px;
         }
         ::-webkit-scrollbar-thumb:hover {
-            background: #4b5563;
+            background: #374151;
         }
         
-        /* Плавная вертикальная прокрутка для TikTok */
+        /* Вертикальный скролл и прилипание для TikTok */
         .snap-y-mandatory {
             scroll-snap-type: y mandatory;
         }
         .snap-start {
             scroll-snap-align: start;
         }
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
     </style>
 </head>
-<body class="bg-gray-950 text-gray-100 h-screen overflow-hidden font-sans">
+<body class="bg-gray-950 text-gray-100 h-screen overflow-hidden font-sans select-none">
 
-    <!-- Форма Авторизации / Регистрации -->
+    <!-- ОКНО АВТОРИЗАЦИИ И РЕГИСТРАЦИИ -->
     <div id="auth-screen" class="fixed inset-0 z-50 bg-gray-950 flex items-center justify-center p-4">
-        <div class="bg-gray-900 border border-gray-800 p-8 rounded-2xl w-full max-w-md shadow-2xl">
-            <h1 class="text-3xl font-extrabold text-center mb-6 text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">
+        <div class="bg-gray-900 border border-gray-800 p-8 rounded-2xl w-full max-w-md shadow-2xl relative overflow-hidden">
+            <div class="absolute -top-10 -right-10 w-32 h-32 bg-purple-600/20 rounded-full blur-2xl"></div>
+            <div class="absolute -bottom-10 -left-10 w-32 h-32 bg-pink-600/20 rounded-full blur-2xl"></div>
+
+            <h1 class="text-3xl font-extrabold text-center mb-6 text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500 relative z-10">
                 Neon Messenger
             </h1>
 
-            <div class="flex border-b border-gray-800 mb-6">
-                <button id="tab-login" onclick="switchAuthTab('login')" class="w-1/2 pb-2 text-center font-bold border-b-2 border-purple-500 text-purple-400">Вход</button>
-                <button id="tab-register" onclick="switchAuthTab('register')" class="w-1/2 pb-2 text-center font-bold text-gray-400 hover:text-gray-200">Регистрация</button>
+            <div class="flex border-b border-gray-800 mb-6 relative z-10">
+                <button id="tab-login" onclick="switchAuthTab('login')" class="w-1/2 pb-2 text-center font-bold border-b-2 border-purple-500 text-purple-400 transition">Вход</button>
+                <button id="tab-register" onclick="switchAuthTab('register')" class="w-1/2 pb-2 text-center font-bold text-gray-400 hover:text-gray-200 transition">Регистрация</button>
             </div>
 
             <!-- Форма Входа -->
-            <form id="form-login" onsubmit="handleLogin(event)" class="space-y-4">
+            <form id="form-login" onsubmit="handleLogin(event)" class="space-y-4 relative z-10">
                 <div>
                     <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Логин</label>
-                    <input type="text" id="login-input" required class="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-purple-500">
+                    <input type="text" id="login-input" required class="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-purple-500 transition">
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Пароль</label>
-                    <input type="password" id="password-input" required class="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-purple-500">
+                    <input type="password" id="password-input" required class="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-purple-500 transition">
                 </div>
                 <button type="submit" class="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white font-bold py-3 rounded-lg shadow-lg transition duration-200">
                     Войти
@@ -62,18 +72,18 @@
             </form>
 
             <!-- Форма Регистрации -->
-            <form id="form-register" onsubmit="handleRegister(event)" class="space-y-4 hidden">
+            <form id="form-register" onsubmit="handleRegister(event)" class="space-y-4 relative z-10 hidden">
                 <div>
                     <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Логин</label>
-                    <input type="text" id="reg-login-input" required class="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-purple-500">
+                    <input type="text" id="reg-login-input" required class="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-purple-500 transition">
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Пароль</label>
-                    <input type="password" id="reg-password-input" required class="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-purple-500">
+                    <input type="password" id="reg-password-input" required class="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-purple-500 transition">
                 </div>
                 <div>
-                    <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Аватар (Ссылка или выбрать ниже)</label>
-                    <input type="text" id="reg-avatar-input" placeholder="https://..." class="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white mb-2 focus:outline-none focus:border-purple-500">
+                    <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Аватар (Ссылка или готовый образ)</label>
+                    <input type="text" id="reg-avatar-input" placeholder="https://..." class="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white mb-2 focus:outline-none focus:border-purple-500 transition">
                     <div class="flex space-x-2">
                         <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100" class="w-10 h-10 rounded-full cursor-pointer border-2 border-transparent hover:border-purple-500 object-cover" onclick="selectRegAvatar(this.src)">
                         <img src="https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=100" class="w-10 h-10 rounded-full cursor-pointer border-2 border-transparent hover:border-purple-500 object-cover" onclick="selectRegAvatar(this.src)">
@@ -88,11 +98,11 @@
         </div>
     </div>
 
-    <!-- Основное Приложение -->
+    <!-- ОСНОВНОЕ ПРИЛОЖЕНИЕ -->
     <div id="main-app" class="flex h-screen w-screen hidden">
         
         <!-- Сайдбар Навигации -->
-        <div class="w-20 bg-gray-900 border-r border-gray-800 flex flex-col items-center py-6 justify-between flex-shrink-0">
+        <div class="w-20 bg-gray-900 border-r border-gray-800 flex flex-col items-center py-6 justify-between flex-shrink-0 z-20">
             <div class="space-y-6 flex flex-col items-center w-full">
                 <div class="w-12 h-12 rounded-xl bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center text-white font-bold text-xl shadow-lg mb-4">
                     N
@@ -110,7 +120,7 @@
                 <button onclick="switchTab('news')" id="nav-news" title="Лента Новостей" class="p-3 rounded-xl hover:bg-gray-800 text-gray-400 transition">
                     📰
                 </button>
-                <button onclick="switchTab('tiktok')" id="nav-tiktok" title="TikTok Лента" class="p-3 rounded-xl hover:bg-gray-800 text-gray-400 transition">
+                <button onclick="switchTab('tiktok')" id="nav-tiktok" title="TikTok / Reels" class="p-3 rounded-xl hover:bg-gray-800 text-gray-400 transition">
                     🎵
                 </button>
             </div>
@@ -128,67 +138,65 @@
             <!-- Вкладка 1: ЧАТЫ -->
             <div id="tab-content-chats" class="flex-1 flex w-full">
                 <!-- Список Диалогов -->
-                <div class="w-80 bg-gray-900/50 border-r border-gray-800 flex flex-col">
+                <div class="w-80 bg-gray-900/60 border-r border-gray-800 flex flex-col flex-shrink-0">
                     <div class="p-4 border-b border-gray-800">
-                        <input type="text" id="chat-search" oninput="filterChats()" placeholder="Поиск по чатам..." class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500">
+                        <input type="text" id="chat-search" oninput="filterChats()" placeholder="Поиск по чатам..." class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500 transition">
                     </div>
                     <div id="chats-list" class="flex-1 overflow-y-auto p-2 space-y-1">
-                        <!-- Динамический список чатов -->
+                        <!-- Диалоги загружаются динамически -->
                     </div>
                 </div>
 
                 <!-- Область Переписки -->
-                <div id="active-chat-area" class="flex-1 flex flex-col bg-gray-950">
-                    <!-- Заглушка, если чат не выбран -->
-                    <div id="no-chat-selected" class="flex-1 flex items-center justify-center text-gray-500">
-                        Выберите чат для начала общения
+                <div id="active-chat-area" class="flex-1 flex flex-col bg-gray-950 relative">
+                    <!-- Заглушка (не выбран чат) -->
+                    <div id="no-chat-selected" class="flex-1 flex flex-col items-center justify-center text-gray-500">
+                        <div class="text-6xl mb-4 opacity-40">💬</div>
+                        <div class="text-lg">Выберите чат или друга для начала общения</div>
                     </div>
 
                     <div id="chat-window" class="flex-1 flex flex-col hidden h-full">
                         <!-- Шапка Чата -->
-                        <div class="p-4 bg-gray-900 border-b border-gray-800 flex items-center justify-between">
+                        <div class="p-4 bg-gray-900/80 backdrop-blur border-b border-gray-800 flex items-center justify-between z-10">
                             <div class="flex items-center space-x-3">
-                                <img id="active-chat-avatar" src="" class="w-10 h-10 rounded-full object-cover">
+                                <img id="active-chat-avatar" src="" class="w-10 h-10 rounded-full object-cover border border-purple-500/50">
                                 <div>
                                     <div id="active-chat-name" class="font-bold text-white"></div>
                                     <div id="active-chat-status" class="text-xs text-gray-400">offline</div>
                                 </div>
                             </div>
                             <div id="chat-actions" class="flex items-center space-x-2">
-                                <!-- Кнопка звонка для личного чата -->
-                                <button id="btn-call-user" onclick="startDirectCall()" class="p-2 bg-green-600 hover:bg-green-500 rounded-lg text-white font-bold text-sm flex items-center space-x-1">
+                                <button id="btn-call-user" onclick="startDirectCall()" class="p-2 px-3 bg-green-600 hover:bg-green-500 rounded-lg text-white font-bold text-xs flex items-center space-x-1 transition shadow-lg">
                                     <span>📞 Звонок</span>
                                 </button>
-                                <!-- Кнопка группового звонка -->
-                                <button id="btn-group-call" onclick="startCurrentGroupCall()" class="p-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-white font-bold text-sm hidden flex items-center space-x-1">
+                                <button id="btn-group-call" onclick="startCurrentGroupCall()" class="p-2 px-3 bg-purple-600 hover:bg-purple-500 rounded-lg text-white font-bold text-xs hidden flex items-center space-x-1 transition shadow-lg">
                                     <span>📞 Групповой звонок</span>
                                 </button>
                             </div>
                         </div>
 
-                        <!-- Сообщения -->
+                        <!-- Контейнер сообщений -->
                         <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-3">
-                            <!-- Динамические сообщения -->
+                            <!-- Сообщения генерация -->
                         </div>
 
-                        <!-- Статус набора текста -->
-                        <div id="typing-indicator" class="px-4 py-1 text-xs text-purple-400 italic min-h-[20px]"></div>
+                        <!-- Индикатор печати -->
+                        <div id="typing-indicator" class="px-4 py-1 text-xs text-purple-400 italic min-h-[22px]"></div>
 
-                        <!-- Ввод Сообщения -->
+                        <!-- Панель Ввода -->
                         <div class="p-4 bg-gray-900 border-t border-gray-800 flex items-center space-x-2">
-                            <label class="cursor-pointer p-2 text-gray-400 hover:text-white">
+                            <label class="cursor-pointer p-2 text-gray-400 hover:text-white transition" title="Прикрепить файл">
                                 📎
                                 <input type="file" id="media-file-input" onchange="handleFileUpload(event)" class="hidden">
                             </label>
                             
-                            <!-- Кнопка голосового сообщения -->
-                            <button id="btn-voice" onclick="toggleVoiceRecord()" class="p-2 text-gray-400 hover:text-red-500 transition">
-                                🎙️ <span id="voice-timer" class="text-xs text-red-500 hidden">00:00</span>
+                            <button id="btn-voice" onclick="toggleVoiceRecord()" title="Голосовое сообщение" class="p-2 text-gray-400 hover:text-red-500 transition flex items-center space-x-1">
+                                🎙️️ <span id="voice-timer" class="text-xs text-red-500 font-mono hidden">00:00</span>
                             </button>
 
-                            <input type="text" id="message-input" oninput="handleTyping()" onkeydown="if(event.key==='Enter') sendMessage()" placeholder="Напишите сообщение..." class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500">
+                            <input type="text" id="message-input" oninput="handleTyping()" onkeydown="if(event.key==='Enter') sendMessage()" placeholder="Напишите сообщение..." class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-purple-500 transition">
                             
-                            <button onclick="sendMessage()" class="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2 rounded-lg font-bold">
+                            <button onclick="sendMessage()" class="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2 rounded-lg font-bold transition shadow-lg">
                                 Отправить
                             </button>
                         </div>
@@ -200,29 +208,27 @@
             <div id="tab-content-friends" class="flex-1 p-6 overflow-y-auto hidden">
                 <h2 class="text-2xl font-bold mb-6 text-purple-400">Управление Друзьями</h2>
                 
-                <!-- Добавление в друзья -->
-                <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl mb-6 max-w-xl">
-                    <h3 class="text-sm font-semibold mb-2 text-gray-300">Добавить друга</h3>
+                <!-- Форма добавления -->
+                <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl mb-6 max-w-xl shadow-lg">
+                    <h3 class="text-sm font-semibold mb-2 text-gray-300">Добавить друга по логину</h3>
                     <div class="flex space-x-2">
-                        <input type="text" id="add-friend-login" placeholder="Логин пользователя..." class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-purple-500">
-                        <button onclick="sendFriendRequest()" class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-lg font-bold">
+                        <input type="text" id="add-friend-login" placeholder="Логин пользователя..." class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-purple-500 transition">
+                        <button onclick="sendFriendRequest()" class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-lg font-bold transition">
                             Отправить
                         </button>
                     </div>
                 </div>
 
-                <!-- Заявки в друзья -->
+                <!-- Входящие заявки -->
                 <div id="friend-requests-section" class="mb-6 max-w-xl hidden">
                     <h3 class="text-sm font-semibold mb-2 text-yellow-400">Входящие заявки</h3>
                     <div id="friend-requests-list" class="space-y-2"></div>
                 </div>
 
-                <!-- Список Друзей -->
+                <!-- Список друзей -->
                 <div class="max-w-xl">
                     <h3 class="text-sm font-semibold mb-3 text-gray-300">Мои Друзья</h3>
-                    <div id="friends-list" class="space-y-2">
-                        <!-- Карточки друзей с кнопками -->
-                    </div>
+                    <div id="friends-list" class="space-y-2"></div>
                 </div>
             </div>
 
@@ -231,21 +237,21 @@
                 <h2 class="text-2xl font-bold mb-6 text-purple-400">Сообщества и Группы</h2>
                 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl">
-                    <!-- Создать Группу -->
-                    <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl">
-                        <h3 class="text-sm font-semibold mb-3 text-gray-300">Создать новую группу</h3>
+                    <!-- Создание группы -->
+                    <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl shadow-lg h-fit">
+                        <h3 class="text-sm font-semibold mb-3 text-gray-300">Создать новое сообщество</h3>
                         <div class="space-y-3">
-                            <input type="text" id="new-group-name" placeholder="Название группы..." class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-purple-500">
-                            <button onclick="createNewGroup()" class="w-full bg-purple-600 hover:bg-purple-500 py-2 rounded-lg font-bold">
+                            <input type="text" id="new-group-name" placeholder="Название группы..." class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-purple-500 transition">
+                            <button onclick="createNewGroup()" class="w-full bg-purple-600 hover:bg-purple-500 py-2 rounded-lg font-bold transition">
                                 Создать Группу
                             </button>
                         </div>
                     </div>
 
-                    <!-- Список доступных групп -->
-                    <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl">
-                        <h3 class="text-sm font-semibold mb-3 text-gray-300">Все Группы</h3>
-                        <div id="groups-list" class="space-y-2 max-h-60 overflow-y-auto"></div>
+                    <!-- Доступные группы -->
+                    <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl shadow-lg">
+                        <h3 class="text-sm font-semibold mb-3 text-gray-300">Все Доступные Сообщества</h3>
+                        <div id="groups-list" class="space-y-2 max-h-96 overflow-y-auto"></div>
                     </div>
                 </div>
             </div>
@@ -255,31 +261,30 @@
                 <div class="max-w-2xl mx-auto space-y-6">
                     <h2 class="text-2xl font-bold text-purple-400">Лента Постов</h2>
 
-                    <!-- Создание Поста -->
-                    <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl space-y-3">
-                        <textarea id="post-text-input" placeholder="Что у вас нового?..." class="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-purple-500 h-24 resize-none"></textarea>
+                    <!-- Публикация -->
+                    <div class="bg-gray-900 border border-gray-800 p-4 rounded-xl space-y-3 shadow-lg">
+                        <textarea id="post-text-input" placeholder="Что у вас нового?..." class="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:outline-none focus:border-purple-500 h-24 resize-none transition"></textarea>
                         <div class="flex justify-between items-center">
-                            <label class="cursor-pointer text-sm text-gray-400 hover:text-white flex items-center space-x-1">
-                                <span>🖼️ Прикрепить фото/видео</span>
+                            <label class="cursor-pointer text-sm text-gray-400 hover:text-white flex items-center space-x-1 transition">
+                                <span>🖼️ Прикрепить медиа</span>
                                 <input type="file" id="post-file-input" onchange="handlePostFileUpload(event)" class="hidden">
                             </label>
-                            <button onclick="publishPost()" class="bg-purple-600 hover:bg-purple-500 px-5 py-2 rounded-lg font-bold">
+                            <button onclick="publishPost()" class="bg-purple-600 hover:bg-purple-500 px-5 py-2 rounded-lg font-bold transition">
                                 Опубликовать
                             </button>
                         </div>
-                        <div id="post-file-preview" class="text-xs text-purple-400"></div>
+                        <div id="post-file-preview" class="text-xs text-purple-400 font-mono"></div>
                     </div>
 
-                    <!-- Список Постов -->
+                    <!-- Лента новостей -->
                     <div id="news-feed-list" class="space-y-4"></div>
                 </div>
             </div>
 
             <!-- Вкладка 5: TIKTOK / REELS ЛЕНТА -->
             <div id="tab-content-tiktok" class="flex-1 bg-black hidden flex justify-center items-center relative">
-                <!-- Вертикальный контейнер с snap-скроллом -->
-                <div id="tiktok-feed" class="w-full max-w-sm h-full overflow-y-scroll snap-y-mandatory scrollbar-none relative">
-                    <!-- Поток видео заменяется динамически -->
+                <div id="tiktok-feed" class="w-full max-w-sm h-full overflow-y-scroll snap-y-mandatory no-scrollbar relative">
+                    <!-- Поток карточек видео -->
                 </div>
             </div>
 
@@ -289,29 +294,29 @@
                     <h2 class="text-2xl font-bold text-purple-400 text-center">Мой Профиль</h2>
 
                     <div class="flex flex-col items-center">
-                        <img id="profile-avatar-preview" src="" class="w-24 h-24 rounded-full border-4 border-purple-500 object-cover mb-3">
+                        <img id="profile-avatar-preview" src="" class="w-24 h-24 rounded-full border-4 border-purple-500 object-cover mb-3 shadow-xl">
                         <div id="profile-username" class="text-xl font-bold text-white"></div>
                     </div>
 
                     <div class="space-y-4">
                         <div>
-                            <label class="block text-xs text-gray-400 uppercase mb-1">Ссылка на новый аватар</label>
-                            <input type="text" id="profile-avatar-input" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white">
+                            <label class="block text-xs text-gray-400 uppercase mb-1">Ссылка на аватар</label>
+                            <input type="text" id="profile-avatar-input" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-purple-500 transition">
                         </div>
                         <div>
                             <label class="block text-xs text-gray-400 uppercase mb-1">О себе (Bio)</label>
-                            <textarea id="profile-bio-input" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white h-20 resize-none"></textarea>
+                            <textarea id="profile-bio-input" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white h-20 resize-none focus:outline-none focus:border-purple-500 transition"></textarea>
                         </div>
                         <div>
                             <label class="block text-xs text-gray-400 uppercase mb-1">Email</label>
-                            <input type="email" id="profile-email-input" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white">
+                            <input type="email" id="profile-email-input" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-purple-500 transition">
                         </div>
                         <div>
                             <label class="block text-xs text-gray-400 uppercase mb-1">Новый пароль</label>
-                            <input type="password" id="profile-password-input" placeholder="Оставьте пустым, если не хотите менять" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white">
+                            <input type="password" id="profile-password-input" placeholder="Заполните для смены пароля" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white focus:outline-none focus:border-purple-500 transition">
                         </div>
 
-                        <button onclick="saveProfile()" class="w-full bg-purple-600 hover:bg-purple-500 py-3 rounded-lg font-bold text-white">
+                        <button onclick="saveProfile()" class="w-full bg-purple-600 hover:bg-purple-500 py-3 rounded-lg font-bold text-white transition shadow-lg">
                             Сохранить Изменения
                         </button>
                         
@@ -325,61 +330,61 @@
         </div>
     </div>
 
-    <!-- Модальное Окно Одиночного Звонка -->
-    <div id="single-call-modal" class="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-between p-6 hidden">
+    <!-- МОДАЛЬНОЕ ОКНО ОДИНОЧНОГО ЗВОНКА -->
+    <div id="single-call-modal" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col items-center justify-between p-6 hidden">
         <div class="text-center text-white">
-            <h2 id="call-partner-name" class="text-2xl font-bold mb-2">Звонок...</h2>
-            <p id="call-status-text" class="text-gray-400 text-sm">Соединение</p>
+            <h2 id="call-partner-name" class="text-2xl font-bold mb-2">Вызов...</h2>
+            <p id="call-status-text" class="text-gray-400 text-sm animate-pulse">Установление соединения</p>
         </div>
 
-        <div class="relative w-full max-w-2xl h-96 bg-gray-900 rounded-2xl overflow-hidden flex items-center justify-center border border-gray-800">
+        <div class="relative w-full max-w-2xl h-96 bg-gray-900 rounded-2xl overflow-hidden flex items-center justify-center border border-gray-800 shadow-2xl">
             <video id="remote-video" autoplay playsinline class="w-full h-full object-cover"></video>
-            <video id="local-video" autoplay playsinline muted class="absolute bottom-4 right-4 w-32 h-24 bg-black rounded-lg border border-purple-500 object-cover"></video>
+            <video id="local-video" autoplay playsinline muted class="absolute bottom-4 right-4 w-36 h-28 bg-black rounded-xl border-2 border-purple-500 object-cover shadow-lg"></video>
         </div>
 
         <div class="flex space-x-4">
-            <button id="btn-accept-call" onclick="acceptCall()" class="bg-green-600 hover:bg-green-500 text-white p-4 rounded-full font-bold hidden">
+            <button id="btn-accept-call" onclick="acceptCall()" class="bg-green-600 hover:bg-green-500 text-white px-6 py-3 rounded-full font-bold hidden transition shadow-lg">
                 📞 Принять
             </button>
-            <button onclick="hangUpCall()" class="bg-red-600 hover:bg-red-500 text-white p-4 rounded-full font-bold">
+            <button onclick="hangUpCall()" class="bg-red-600 hover:bg-red-500 text-white px-6 py-3 rounded-full font-bold transition shadow-lg">
                 ❌ Завершить
             </button>
         </div>
     </div>
 
-    <!-- Модальное Окно Группового Звонка -->
-    <div id="group-call-modal" class="fixed inset-0 z-50 bg-black/95 flex flex-col p-6 hidden">
+    <!-- МОДАЛЬНОЕ ОКНО ГРУППОВОГО ЗВОНКА -->
+    <div id="group-call-modal" class="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col p-6 hidden">
         <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xl font-bold text-purple-400">Групповой Звонок</h2>
-            <button onclick="leaveGroupCall()" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg font-bold">
+            <h2 class="text-xl font-bold text-purple-400">Групповая Конференция</h2>
+            <button onclick="leaveGroupCall()" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg font-bold transition">
                 Покинуть звонок
             </button>
         </div>
 
         <div id="group-video-grid" class="flex-1 grid grid-cols-2 md:grid-cols-3 gap-4 overflow-y-auto">
-            <!-- Видео-тайлы участников -->
+            <!-- Видео-сетка участников -->
         </div>
     </div>
 
 
-    <!-- ЛОГИКА ПРИЛОЖЕНИЯ (JAVASCRIPT) -->
+    <!-- ВСЯ СИСТЕМНАЯ ЛОГИКА (JAVASCRIPT) -->
     <script>
         const socket = io();
 
-        // Состояние приложения
+        // Основное Состояние
         let currentUser = null;
         let db = { users: [], messagesStore: {}, friendRequests: {}, friends: {}, news: [], customNicknames: {}, groups: {}, lastSeen: {} };
         let activeChat = null; // { type: 'user' | 'group' | 'saved', id: string }
         let currentUploadedMedia = null;
         let currentPostMedia = null;
 
-        // Запись голоса
+        // Запись Голоса
         let mediaRecorder = null;
         let audioChunks = [];
         let voiceTimerInterval = null;
         let voiceSeconds = 0;
 
-        // WebRTC Звонки (Одиночные)
+        // WebRTC Звонки (1 на 1)
         let localStream = null;
         let peerConnection = null;
         let callTargetUser = null;
@@ -389,7 +394,7 @@
         let groupPeerConnections = {}; // socketId -> RTCPeerConnection
         let currentCallGroupId = null;
 
-        // TikTok Feed Sample Data
+        // Демо-клипы для TikTok
         const sampleVideos = [
             { url: 'https://assets.mixkit.co/videos/preview/mixkit-vertical-shot-of-a-neon-sign-41527-large.mp4', author: '@neon_vibes', desc: 'Атмосфера ночного города 🌌 #cyberpunk' },
             { url: 'https://assets.mixkit.co/videos/preview/mixkit-forest-stream-in-the-sunlight-529-large.mp4', author: '@nature_go', desc: 'Утренний релакс 🌲 #nature' },
@@ -403,13 +408,13 @@
             if (tab === 'login') {
                 document.getElementById('form-login').classList.remove('hidden');
                 document.getElementById('form-register').classList.add('hidden');
-                document.getElementById('tab-login').className = "w-1/2 pb-2 text-center font-bold border-b-2 border-purple-500 text-purple-400";
-                document.getElementById('tab-register').className = "w-1/2 pb-2 text-center font-bold text-gray-400 hover:text-gray-200";
+                document.getElementById('tab-login').className = "w-1/2 pb-2 text-center font-bold border-b-2 border-purple-500 text-purple-400 transition";
+                document.getElementById('tab-register').className = "w-1/2 pb-2 text-center font-bold text-gray-400 hover:text-gray-200 transition";
             } else {
                 document.getElementById('form-login').classList.add('hidden');
                 document.getElementById('form-register').classList.remove('hidden');
-                document.getElementById('tab-register').className = "w-1/2 pb-2 text-center font-bold border-b-2 border-purple-500 text-purple-400";
-                document.getElementById('tab-login').className = "w-1/2 pb-2 text-center font-bold text-gray-400 hover:text-gray-200";
+                document.getElementById('tab-register').className = "w-1/2 pb-2 text-center font-bold border-b-2 border-purple-500 text-purple-400 transition";
+                document.getElementById('tab-login').className = "w-1/2 pb-2 text-center font-bold text-gray-400 hover:text-gray-200 transition";
             }
         }
 
@@ -452,7 +457,7 @@
             const data = await res.json();
 
             if (data.success) {
-                alert('Регистрация успешна! Войдите в аккаунт.');
+                alert('Регистрация успешна! Войдите под своим логином.');
                 switchAuthTab('login');
             } else {
                 alert(data.error);
@@ -478,7 +483,7 @@
             location.reload();
         }
 
-        // --- ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК ---
+        // --- ВКЛАДКИ И НАВИГАЦИЯ ---
         function switchTab(tab) {
             const tabs = ['chats', 'friends', 'groups', 'news', 'tiktok', 'profile'];
             tabs.forEach(t => {
@@ -496,7 +501,7 @@
             if (tab === 'news') renderNewsFeed();
         }
 
-        // --- ДРУЗЬЯ ---
+        // --- ДРУЗЬЯ И ПСЕВДОНИМЫ ---
         function renderFriends() {
             const list = document.getElementById('friends-list');
             list.innerHTML = '';
@@ -514,8 +519,8 @@
                     div.innerHTML = `
                         <span class="font-bold text-white">@${reqLogin}</span>
                         <div class="space-x-2">
-                            <button onclick="respondFriendRequest('${reqLogin}', true)" class="bg-green-600 hover:bg-green-500 px-3 py-1 rounded text-xs font-bold text-white">Принять</button>
-                            <button onclick="respondFriendRequest('${reqLogin}', false)" class="bg-red-600 hover:bg-red-500 px-3 py-1 rounded text-xs font-bold text-white">Отклонить</button>
+                            <button onclick="respondFriendRequest('${reqLogin}', true)" class="bg-green-600 hover:bg-green-500 px-3 py-1 rounded text-xs font-bold text-white transition">Принять</button>
+                            <button onclick="respondFriendRequest('${reqLogin}', false)" class="bg-red-600 hover:bg-red-500 px-3 py-1 rounded text-xs font-bold text-white transition">Отклонить</button>
                         </div>
                     `;
                     requestsList.appendChild(div);
@@ -535,7 +540,7 @@
                 const customNick = db.customNicknames[currentUser.login]?.[friendLogin] || friendLogin;
 
                 const card = document.createElement('div');
-                card.className = 'flex items-center justify-between p-3 bg-gray-900 border border-gray-800 rounded-xl';
+                card.className = 'flex items-center justify-between p-3 bg-gray-900 border border-gray-800 rounded-xl shadow-sm hover:border-gray-700 transition';
                 card.innerHTML = `
                     <div class="flex items-center space-x-3 cursor-pointer" onclick="openUserChat('${friendLogin}')">
                         <img src="${friendObj.avatar}" class="w-10 h-10 rounded-full object-cover">
@@ -545,10 +550,10 @@
                         </div>
                     </div>
                     <div class="flex items-center space-x-2">
-                        <button onclick="openCustomNickPrompt('${friendLogin}')" title="Задать псевдоним" class="p-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-xs text-gray-300">✏️</button>
-                        <button onclick="openUserChat('${friendLogin}')" title="Написать сообщение" class="p-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-white font-bold text-xs">💬 Сообщение</button>
-                        <button onclick="startDirectCallTo('${friendLogin}')" title="Позвонить" class="p-2 bg-green-600 hover:bg-green-500 rounded-lg text-white font-bold text-xs">📞 Звонок</button>
-                        <button onclick="removeFriend('${friendLogin}')" title="Удалить из друзей" class="p-2 bg-red-600/30 hover:bg-red-600 rounded-lg text-red-300 hover:text-white font-bold text-xs">❌</button>
+                        <button onclick="openCustomNickPrompt('${friendLogin}')" title="Задать локальный псевдоним" class="p-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-xs text-gray-300 transition">✏️</button>
+                        <button onclick="openUserChat('${friendLogin}')" title="Написать сообщение" class="p-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-white font-bold text-xs transition">💬 Сообщение</button>
+                        <button onclick="startDirectCallTo('${friendLogin}')" title="Позвонить" class="p-2 bg-green-600 hover:bg-green-500 rounded-lg text-white font-bold text-xs transition">📞 Звонок</button>
+                        <button onclick="removeFriend('${friendLogin}')" title="Удалить из друзей" class="p-2 bg-red-600/30 hover:bg-red-600 rounded-lg text-red-300 hover:text-white font-bold text-xs transition">❌</button>
                     </div>
                 `;
                 list.appendChild(card);
@@ -607,7 +612,7 @@
 
         async function openCustomNickPrompt(targetLogin) {
             const current = db.customNicknames[currentUser.login]?.[targetLogin] || '';
-            const newNick = prompt(`Введите локальное имя для @${targetLogin}:`, current);
+            const newNick = prompt(`Введите локальное имя для пользователя @${targetLogin}:`, current);
             if (newNick === null) return;
 
             const res = await fetch('/api/set-nickname', {
@@ -623,25 +628,25 @@
             }
         }
 
-        // --- ЧАТЫ И СООБЩЕНИЯ ---
+        // --- СПИСОК ЧАТОВ И МЕССЕНДЖЕР ---
         function renderChatsList() {
             const list = document.getElementById('chats-list');
             list.innerHTML = '';
 
-            // 1. Избранное
+            // Избранное
             const savedCard = document.createElement('div');
             savedCard.className = `p-3 rounded-xl cursor-pointer flex items-center space-x-3 hover:bg-gray-800 transition ${activeChat?.type === 'saved' ? 'bg-gray-800' : ''}`;
             savedCard.onclick = () => selectChat({ type: 'saved', id: currentUser.login });
             savedCard.innerHTML = `
-                <div class="w-10 h-10 rounded-full bg-purple-600/30 text-purple-400 flex items-center justify-center font-bold">📌</div>
-                <div>
-                    <div class="font-bold text-white">Избранное</div>
-                    <div class="text-xs text-gray-400">Заметки и сообщения</div>
+                <div class="w-10 h-10 rounded-full bg-purple-600/30 text-purple-400 flex items-center justify-center font-bold flex-shrink-0">📌</div>
+                <div class="overflow-hidden">
+                    <div class="font-bold text-white truncate">Избранное</div>
+                    <div class="text-xs text-gray-400 truncate">Заметки и сообщения</div>
                 </div>
             `;
             list.appendChild(savedCard);
 
-            // 2. Личные диалоги друзей
+            // Личные чаты с друзьями
             const myFriends = db.friends[currentUser.login] || [];
             myFriends.forEach(friendLogin => {
                 const friendObj = db.users.find(u => u.login === friendLogin) || { avatar: 'https://via.placeholder.com/150' };
@@ -651,30 +656,39 @@
                 item.className = `p-3 rounded-xl cursor-pointer flex items-center space-x-3 hover:bg-gray-800 transition ${activeChat?.type === 'user' && activeChat?.id === friendLogin ? 'bg-gray-800' : ''}`;
                 item.onclick = () => selectChat({ type: 'user', id: friendLogin });
                 item.innerHTML = `
-                    <img src="${friendObj.avatar}" class="w-10 h-10 rounded-full object-cover">
-                    <div>
-                        <div class="font-bold text-white">${displayName}</div>
-                        <div class="text-xs text-gray-400">@${friendLogin}</div>
+                    <img src="${friendObj.avatar}" class="w-10 h-10 rounded-full object-cover flex-shrink-0">
+                    <div class="overflow-hidden">
+                        <div class="font-bold text-white truncate">${displayName}</div>
+                        <div class="text-xs text-gray-400 truncate">@${friendLogin}</div>
                     </div>
                 `;
                 list.appendChild(item);
             });
 
-            // 3. Групповые чаты
+            // Групповые чаты
             Object.values(db.groups || {}).forEach(group => {
                 if (group.members.includes(currentUser.login)) {
                     const item = document.createElement('div');
                     item.className = `p-3 rounded-xl cursor-pointer flex items-center space-x-3 hover:bg-gray-800 transition ${activeChat?.type === 'group' && activeChat?.id === group.id ? 'bg-gray-800' : ''}`;
                     item.onclick = () => selectChat({ type: 'group', id: group.id });
                     item.innerHTML = `
-                        <div class="w-10 h-10 rounded-full bg-blue-600/30 text-blue-400 flex items-center justify-center font-bold">👥</div>
-                        <div>
-                            <div class="font-bold text-white">${group.name}</div>
-                            <div class="text-xs text-gray-400">${group.members.length} участников</div>
+                        <div class="w-10 h-10 rounded-full bg-blue-600/30 text-blue-400 flex items-center justify-center font-bold flex-shrink-0">👥</div>
+                        <div class="overflow-hidden">
+                            <div class="font-bold text-white truncate">${group.name}</div>
+                            <div class="text-xs text-gray-400 truncate">${group.members.length} участников</div>
                         </div>
                     `;
                     list.appendChild(item);
                 }
+            });
+        }
+
+        function filterChats() {
+            const query = document.getElementById('chat-search').value.toLowerCase();
+            const items = document.querySelectorAll('#chats-list > div');
+            items.forEach(item => {
+                const text = item.textContent.toLowerCase();
+                item.style.display = text.includes(query) ? 'flex' : 'none';
             });
         }
 
@@ -696,7 +710,7 @@
             if (chat.type === 'saved') {
                 document.getElementById('active-chat-name').textContent = 'Избранное';
                 document.getElementById('active-chat-avatar').src = currentUser.avatar;
-                document.getElementById('active-chat-status').textContent = 'Ваше личное пространство';
+                document.getElementById('active-chat-status').textContent = 'Личное хранилище';
                 btnCall.classList.add('hidden');
                 btnGroupCall.classList.add('hidden');
             } else if (chat.type === 'user') {
@@ -711,7 +725,7 @@
                 const group = db.groups[chat.id];
                 document.getElementById('active-chat-name').textContent = group.name;
                 document.getElementById('active-chat-avatar').src = 'https://via.placeholder.com/150';
-                document.getElementById('active-chat-status').textContent = `Сообщество (${group.members.length} уч.)`;
+                document.getElementById('active-chat-status').textContent = `Групповой чат (${group.members.length} уч.)`;
                 btnCall.classList.add('hidden');
                 btnGroupCall.classList.remove('hidden');
             }
@@ -740,23 +754,22 @@
 
                 let mediaHTML = '';
                 if (m.media) {
-                    if (m.media.type === 'image') mediaHTML = `<img src="${m.media.url}" class="max-w-xs rounded-lg my-1">`;
-                    if (m.media.type === 'video') mediaHTML = `<video src="${m.media.url}" controls class="max-w-xs rounded-lg my-1"></video>`;
+                    if (m.media.type === 'image') mediaHTML = `<img src="${m.media.url}" class="max-w-xs rounded-lg my-1 shadow">`;
+                    if (m.media.type === 'video') mediaHTML = `<video src="${m.media.url}" controls class="max-w-xs rounded-lg my-1 shadow"></video>`;
                     if (m.media.type === 'audio') mediaHTML = `<audio src="${m.media.url}" controls class="my-1"></audio>`;
                 }
 
                 div.innerHTML = `
-                    <div class="max-w-md px-4 py-2 rounded-2xl ${isMe ? 'bg-purple-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-200 rounded-bl-none'} border border-gray-700/50 relative group">
+                    <div class="max-w-md px-4 py-2 rounded-2xl ${isMe ? 'bg-purple-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-200 rounded-bl-none'} border border-gray-700/50 relative group shadow">
                         ${!isMe && activeChat.type === 'group' ? `<div class="text-xs font-bold text-purple-300 mb-1">${m.sender}</div>` : ''}
                         ${mediaHTML}
-                        <div>${m.text}</div>
+                        <div class="break-words">${m.text}</div>
                         <div class="text-[10px] opacity-60 text-right mt-1">${m.time} ${m.edited ? '(изм.)' : ''}</div>
                         
-                        <!-- Меню действия над сообщением -->
                         ${isMe ? `
-                        <div class="absolute top-1 right-1 hidden group-hover:flex space-x-1 bg-black/60 rounded px-1">
-                            <button onclick="editMsgPrompt(${idx})" class="text-xs text-yellow-300">✏️</button>
-                            <button onclick="deleteMsg(${idx})" class="text-xs text-red-300">❌</button>
+                        <div class="absolute top-1 right-1 hidden group-hover:flex space-x-1 bg-black/70 rounded px-1 backdrop-blur">
+                            <button onclick="editMsgPrompt(${idx})" class="text-xs text-yellow-300 p-1">✏️</button>
+                            <button onclick="deleteMsg(${idx})" class="text-xs text-red-300 p-1">❌</button>
                         </div>` : ''}
                     </div>
                 `;
@@ -897,7 +910,7 @@
                 }, 1000);
 
             } catch (err) {
-                alert('Нет доступа к микрофону!');
+                alert('Не удалось получить доступ к микрофону!');
             }
         }
 
@@ -929,7 +942,7 @@
             document.getElementById('typing-indicator').textContent = '';
         });
 
-        // --- ГРУППЫ И СООБЩЕСТВА ---
+        // --- СООБЩЕСТВА ---
         function renderGroups() {
             const list = document.getElementById('groups-list');
             list.innerHTML = '';
@@ -937,16 +950,16 @@
             Object.values(db.groups || {}).forEach(group => {
                 const isMember = group.members.includes(currentUser.login);
                 const card = document.createElement('div');
-                card.className = 'p-3 bg-gray-800 rounded-lg flex items-center justify-between';
+                card.className = 'p-3 bg-gray-800 rounded-lg flex items-center justify-between border border-gray-700/50';
                 card.innerHTML = `
                     <div>
                         <div class="font-bold text-white">${group.name}</div>
                         <div class="text-xs text-gray-400">${group.members.length} участников</div>
                     </div>
                     ${isMember ? `
-                        <button onclick="selectChat({type:'group', id:'${group.id}'}); switchTab('chats');" class="bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded text-xs font-bold text-white">Открыть</button>
+                        <button onclick="selectChat({type:'group', id:'${group.id}'}); switchTab('chats');" class="bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded text-xs font-bold text-white transition">Открыть</button>
                     ` : `
-                        <button onclick="joinGroup('${group.id}')" class="bg-purple-600 hover:bg-purple-500 px-3 py-1 rounded text-xs font-bold text-white">Войти</button>
+                        <button onclick="joinGroup('${group.id}')" class="bg-purple-600 hover:bg-purple-500 px-3 py-1 rounded text-xs font-bold text-white transition">Вступить</button>
                     `}
                 `;
                 list.appendChild(card);
@@ -986,7 +999,7 @@
             }
         }
 
-        // --- ЛЕНТА НОВОСТЕЙ ---
+        // --- НОВОСТНАЯ ЛЕНТА ---
         function renderNewsFeed() {
             const list = document.getElementById('news-feed-list');
             list.innerHTML = '';
@@ -995,12 +1008,12 @@
                 const authorObj = db.users.find(u => u.login === post.author) || { avatar: 'https://via.placeholder.com/150' };
                 let mediaHTML = '';
                 if (post.media) {
-                    if (post.media.type === 'image') mediaHTML = `<img src="${post.media.url}" class="w-full rounded-xl my-2">`;
-                    if (post.media.type === 'video') mediaHTML = `<video src="${post.media.url}" controls class="w-full rounded-xl my-2"></video>`;
+                    if (post.media.type === 'image') mediaHTML = `<img src="${post.media.url}" class="w-full rounded-xl my-2 border border-gray-800">`;
+                    if (post.media.type === 'video') mediaHTML = `<video src="${post.media.url}" controls class="w-full rounded-xl my-2 border border-gray-800"></video>`;
                 }
 
                 const card = document.createElement('div');
-                card.className = 'bg-gray-900 border border-gray-800 p-4 rounded-xl space-y-2';
+                card.className = 'bg-gray-900 border border-gray-800 p-4 rounded-xl space-y-2 shadow-lg';
                 card.innerHTML = `
                     <div class="flex items-center space-x-3">
                         <img src="${authorObj.avatar}" class="w-10 h-10 rounded-full object-cover">
@@ -1009,7 +1022,7 @@
                             <div class="text-xs text-gray-400">${post.time}</div>
                         </div>
                     </div>
-                    <div class="text-gray-200">${post.text}</div>
+                    <div class="text-gray-200 leading-relaxed">${post.text}</div>
                     ${mediaHTML}
                 `;
                 list.appendChild(card);
@@ -1025,7 +1038,7 @@
                 let type = 'image';
                 if (file.type.startsWith('video/')) type = 'video';
                 currentPostMedia = { type, url: event.target.result };
-                document.getElementById('post-file-preview').textContent = `Файл прикреплен: ${file.name}`;
+                document.getElementById('post-file-preview').textContent = `Файл подготовлен: ${file.name}`;
             };
             reader.readAsDataURL(file);
         }
@@ -1052,7 +1065,7 @@
             }
         }
 
-        // --- БЕСКОНЕЧНАЯ ЛЕНТА TIKTOK / REELS ---
+        // --- ЛЕНТА TIKTOK / REELS ---
         function initTikTokFeed() {
             const feed = document.getElementById('tiktok-feed');
             feed.innerHTML = '';
@@ -1084,17 +1097,17 @@
             for (let i = 0; i < count; i++) {
                 const item = sampleVideos[Math.floor(Math.random() * sampleVideos.length)];
                 const card = document.createElement('div');
-                card.className = 'w-full h-full flex-shrink-0 snap-start relative bg-black flex items-center justify-center';
+                card.className = 'w-full h-full flex-shrink-0 snap-start relative bg-black flex items-center justify-center border-b border-gray-900';
                 card.innerHTML = `
                     <video src="${item.url}" loop playsinline class="w-full h-full object-cover"></video>
                     <div class="absolute bottom-6 left-4 z-10 text-white drop-shadow-md">
                         <div class="font-bold text-lg">${item.author}</div>
-                        <div class="text-sm">${item.desc}</div>
+                        <div class="text-sm opacity-90">${item.desc}</div>
                     </div>
                     <div class="absolute right-4 bottom-12 flex flex-col items-center space-y-4 z-10 text-white">
-                        <button onclick="this.classList.toggle('text-red-500')" class="text-2xl">❤️</button>
-                        <button class="text-2xl">💬</button>
-                        <button class="text-2xl">↪️</button>
+                        <button onclick="this.classList.toggle('text-red-500')" class="text-2xl hover:scale-125 transition">❤️</button>
+                        <button class="text-2xl hover:scale-125 transition">💬</button>
+                        <button class="text-2xl hover:scale-125 transition">↪️</button>
                     </div>
                 `;
                 feed.appendChild(card);
@@ -1102,7 +1115,7 @@
             }
         }
 
-        // --- ОДИНОЧНЫЕ WEBRTC ЗВОНКИ ---
+        // --- ОДИНОЧНЫЕ ЗВОНКИ (WEBRTC) ---
         function startDirectCallTo(targetLogin) {
             openUserChat(targetLogin);
             startDirectCall();
@@ -1112,8 +1125,8 @@
             if (!activeChat || activeChat.type !== 'user') return;
             callTargetUser = activeChat.id;
 
-            document.getElementById('call-partner-name').textContent = `Звонок для @${callTargetUser}`;
-            document.getElementById('call-status-text').textContent = 'Вызов...';
+            document.getElementById('call-partner-name').textContent = `Вызов @${callTargetUser}`;
+            document.getElementById('call-status-text').textContent = 'Звонок...';
             document.getElementById('btn-accept-call').classList.add('hidden');
             document.getElementById('single-call-modal').classList.remove('hidden');
 
@@ -1206,7 +1219,7 @@
             document.getElementById('single-call-modal').classList.add('hidden');
         }
 
-        // --- ГРУППОВЫЕ WEBRTC ЗВОНКИ ---
+        // --- ГРУППОВЫЕ ЗВОНКИ (WEBRTC) ---
         function startCurrentGroupCall() {
             if (!activeChat || activeChat.type !== 'group') return;
             startGroupCall(activeChat.id);
@@ -1312,17 +1325,17 @@
             if (!tile) {
                 tile = document.createElement('div');
                 tile.id = `video-tile-${id}`;
-                tile.className = 'relative bg-gray-900 border border-gray-800 rounded-xl overflow-hidden flex items-center justify-center min-h-[160px]';
+                tile.className = 'relative bg-gray-900 border border-gray-800 rounded-xl overflow-hidden flex items-center justify-center min-h-[160px] shadow-lg';
                 tile.innerHTML = `
                     <video autoplay playsinline ${id === 'local' ? 'muted' : ''} class="w-full h-full object-cover"></video>
-                    <div class="absolute bottom-2 left-2 bg-black/60 px-2 py-1 rounded text-xs text-white font-bold">${label}</div>
+                    <div class="absolute bottom-2 left-2 bg-black/60 px-2 py-1 rounded text-xs text-white font-bold backdrop-blur">${label}</div>
                 `;
                 grid.appendChild(tile);
             }
             tile.querySelector('video').srcObject = stream;
         }
 
-        // --- ПРОФИЛЬ ---
+        // --- ПРОФИЛЬ ПОЛЬЗОВАТЕЛЯ ---
         function fillProfileData() {
             document.getElementById('profile-avatar-preview').src = currentUser.avatar;
             document.getElementById('profile-username').textContent = currentUser.login;
@@ -1345,7 +1358,7 @@
             const data = await res.json();
 
             if (data.success) {
-                alert('Профиль обновлен!');
+                alert('Профиль успешно обновлен!');
                 currentUser = data.user;
                 db = data.db;
                 initApp();
