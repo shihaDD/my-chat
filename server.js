@@ -12,12 +12,12 @@ const io = new Server(server, {
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Так как server.js сам лежит внутри папки public, 
-// __dirname уже указывает прямо на эту папку!
-app.use(express.static(__dirname));
+// 1. Указываем Express отдавать статику из папки 'public'
+app.use(express.static(path.join(__dirname, 'public')));
 
+// 2. Отдаем index.html из папки 'public' при запросе главной страницы
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // Хранилище данных в памяти
