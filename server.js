@@ -19,14 +19,14 @@ const FILE_PATH = 'database.json';
 
 const octokit = new Octokit({ auth: GITHUB_TOKEN });
 
-// Структура данных в памяти (синхронизируется с GitHub)
+// Структура данных в памяти
 let db = {
     users: [],
     userContacts: {},
     messagesStore: {}
 };
 
-// Функция загрузки данных с GitHub при запуске сервера
+// Функция загрузки данных с GitHub
 async function loadDataFromGitHub() {
     try {
         const response = await octokit.rest.repos.getContent({
@@ -35,22 +35,22 @@ async function loadDataFromGitHub() {
             path: FILE_PATH,
         });
         const content = Buffer.from(response.data.content, 'base64').toString('utf8');
-        db = JSON.parse(content);
-        if (!db.userContacts) db.userContacts = {};
-        if (!db.users) db.users = [];
-        if (!db.messagesStore) db.messagesStore = {};
-        console.log('Данные успешно загружены с GitHub!');
+        const parsed = JSON.parse(content);
+        
+        // Объединяем, чтобы точно сохранить структуру
+        if (parsed.users) db.users = parsed.users;
+        if (parsed.userContacts) db.userContacts = parsed.userContacts;
+        if (parsed.messagesStore) db.messagesStore = parsed.messagesStore;
+
+        console.log('📦 Данные успешно загружены с GitHub! Пользователей:', db.users.length, ' Чатов со смещениями:', Object.keys(db.messagesStore).length);
     } catch (e) {
-        console.log('Файл на GitHub еще не создан или ошибка загрузки, используем пустую базу.', e.message);
+        console.log('⚠️ Файл на GitHub не найден или ошибка загрузки, создаем новый:', e.message);
         await saveDataToGitHub();
     }
 }
 
-// Функция сохранения данных на GitHub
-let isSaving = false;
+// Функция надежного сохранения данных на GitHub
 async function saveDataToGitHub() {
-    if (isSaving) return;
-    isSaving = true;
     try {
         let sha;
         try {
@@ -60,7 +60,9 @@ async function saveDataToGitHub() {
                 path: FILE_PATH,
             });
             sha = fileData.data.sha;
-        } catch (err) {}
+        } catch (err) {
+            // Файла еще нет, это нормально
+        }
 
         const contentBase64 = Buffer.from(JSON.stringify(db, null, 2)).toString('base64');
 
@@ -68,21 +70,20 @@ async function saveDataToGitHub() {
             owner: REPO_OWNER,
             repo: REPO_NAME,
             path: FILE_PATH,
-            message: 'Update chat database via auto-save [skip ci]',
+            message: 'Auto-save chat database [skip ci]',
             content: contentBase64,
             sha: sha,
         });
-        console.log('Данные успешно сохранены на GitHub!');
+        console.log('💾 Данные успешно сохранены на GitHub!');
     } catch (e) {
-        console.error('Ошибка сохранения на GitHub:', e);
-    } finally {
-        isSaving = false;
+        console.error('❌ Ошибка сохранения на GitHub:', e);
     }
 }
 
 io.on('connection', (socket) => {
-    console.log('Пользователь подключился:', socket.id);
+    console.log('👤 Пользователь подключился:', socket.id);
 
+    // При подключении сразу отправляем ему его актуальные контакты, если он уже был в базе
     socket.on('verify_code', (userData) => {
         socket.userPhone = userData.phone;
         
@@ -104,13 +105,15 @@ io.on('connection', (socket) => {
             });
         }
 
-        // Гарантируем, что у пользователя есть массив контактов
         if (!db.userContacts[userData.phone]) {
             db.userContacts[userData.phone] = [];
         }
 
         saveDataToGitHub();
         sendUpdatedContacts(userData.phone);
+        
+        // Отправляем историю сообщений со всеми контактами, если она есть
+        sendAllChatsHistory(socket, userData.phone);
     });
 
     socket.on('update_profile', (data) => {
@@ -160,7 +163,6 @@ io.on('connection', (socket) => {
             return;
         }
 
-        // Добавляем контакт навсегда
         db.userContacts[ownerPhone].push({
             phone: targetUser.phone,
             name: targetUser.name,
@@ -194,6 +196,7 @@ io.on('connection', (socket) => {
 
             saveDataToGitHub();
 
+            // Отправляем получателю, если он онлайн
             io.to(recipient.id).emit('message', {
                 fromPhone: sender.phone,
                 text: data.message,
@@ -208,7 +211,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('disconnect', () => {
-        console.log('Пользователь отключился:', socket.id);
+        console.log('❌ Пользователь отключился:', socket.id);
         const user = db.users.find(u => u.id === socket.id);
         if (user) {
             user.isOnline = false;
@@ -250,9 +253,16 @@ function sendUpdatedContacts(phone) {
     }
 }
 
-// Запускаем сервер после загрузки данных из GitHub
+function sendAllChatsHistory(socket, myPhone) {
+    // Если на фронтенде есть логика запроса истории сообщений, отправляем её пакетно
+    socket.emit('all_messages', db.messagesStore);
+}
+
+// Порт для Render или локального запуска
+const PORT = process.env.PORT || 3000;
+
 loadDataFromGitHub().then(() => {
-    server.listen(3000, () => {
-        console.log('Сервер запущен на http://localhost:3000');
+    server.listen(PORT, () => {
+        console.log(`🚀 Сервер запущен на порту ${PORT}`);
     });
 });
