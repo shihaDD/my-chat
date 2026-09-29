@@ -45,7 +45,7 @@ async function loadDatabase() {
         console.error('Ошибка загрузки с GitHub:', e);
     }
 
-    return { "users": {}, "friends": {}, "messagesStore": {}, "lastSeen": {}, "groups": {} };
+    return { "users": {}, "friends": {}, "friendRequests": {}, "nicknames": {}, "messagesStore": {}, "lastSeen": {}, "groups": {} };
 }
 
 async function saveDatabase(dbData) {
@@ -74,7 +74,6 @@ app.get('/api/data', async (req, res) => {
     res.json(db);
 });
 
-// Отправка кода подтверждения при регистрации (если введена почта)
 app.post('/api/send-reg-code', async (req, res) => {
     let { email, login } = req.body;
     if (!email || !login) return res.status(400).json({ success: false, error: 'Заполните почту и логин' });
@@ -89,12 +88,9 @@ app.post('/api/send-reg-code', async (req, res) => {
 
     const code = Math.floor(1000 + Math.random() * 9000).toString();
     pendingRegistrations[email] = { code };
-
-    console.log(`[REG MAIL] Код подтверждения для ${email}: ${code}`);
     res.json({ success: true, debugCode: code });
 });
 
-// Регистрация
 app.post('/api/register', async (req, res) => {
     let { login, name, password, avatar, email, code } = req.body;
     if (!login || !name || !password) return res.status(400).json({ success: false, error: 'Заполните обязательные поля' });
@@ -106,6 +102,8 @@ app.post('/api/register', async (req, res) => {
     let db = await loadDatabase();
     if (!db.users) db.users = {};
     if (!db.friends) db.friends = {};
+    if (!db.friendRequests) db.friendRequests = {};
+    if (!db.nicknames) db.nicknames = {};
     if (!db.messagesStore) db.messagesStore = {};
     if (!db.lastSeen) db.lastSeen = {};
     if (!db.groups) db.groups = {};
@@ -114,7 +112,6 @@ app.post('/api/register', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Логин уже занят' });
     }
 
-    // Если почта указана, проверяем код подтверждения
     if (email && email !== '') {
         const pending = pendingRegistrations[email];
         if (!pending || pending.code !== code) {
@@ -132,6 +129,8 @@ app.post('/api/register', async (req, res) => {
         lastLoginTime: new Date().toLocaleString()
     };
     db.friends[login] = [];
+    db.friendRequests[login] = [];
+    db.nicknames[login] = {};
     db.messagesStore[login] = {};
     db.lastSeen[login] = Date.now();
 
@@ -139,7 +138,6 @@ app.post('/api/register', async (req, res) => {
     res.json({ success: true, user: db.users[login], db });
 });
 
-// Вход с проверкой логина и пароля
 app.post('/api/login', async (req, res) => {
     let { login, password } = req.body;
     if (!login || !password) return res.status(400).json({ success: false, error: 'Заполните все поля' });
@@ -181,8 +179,6 @@ app.post('/api/forgot-password', async (req, res) => {
 
     const code = Math.floor(1000 + Math.random() * 9000).toString();
     resetCodes[email] = { code, login: targetLogin };
-
-    console.log(`[MAIL RESET] Код для восстановления ${email}: ${code}`);
     res.json({ success: true, debugCode: code });
 });
 
@@ -220,6 +216,18 @@ app.post('/api/update-profile', async (req, res) => {
     res.json({ success: true, user: db.users[login], db });
 });
 
+// Сохранение локального псевдонима (переименование друга)
+app.post('/api/set-nickname', async (req, res) => {
+    let { login, targetLogin, nickname } = req.body;
+    let db = await loadDatabase();
+    if (!db.nicknames) db.nicknames = {};
+    if (!db.nicknames[login]) db.nicknames[login] = {};
+
+    db.nicknames[login][targetLogin] = nickname.trim();
+    await saveDatabase(db);
+    res.json({ success: true, db });
+});
+
 app.post('/api/ping', async (req, res) => {
     const { login } = req.body;
     if (!login) return res.sendStatus(400);
@@ -230,6 +238,7 @@ app.post('/api/ping', async (req, res) => {
     res.json({ success: true });
 });
 
+// Отправка заявки в друзья
 app.post('/api/add-friend', async (req, res) => {
     let { login, targetLogin } = req.body;
     login = login ? login.trim().toLowerCase() : '';
@@ -244,11 +253,40 @@ app.post('/api/add-friend', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Нельзя добавить самого себя!' });
     }
 
-    if (!db.friends[login]) db.friends[login] = [];
-    if (!db.friends[login].includes(targetLogin)) db.friends[login].push(targetLogin);
+    if (!db.friends) db.friends = {};
+    if (!db.friendRequests) db.friendRequests = {};
 
-    if (!db.friends[targetLogin]) db.friends[targetLogin] = [];
-    if (!db.friends[targetLogin].includes(login)) db.friends[targetLogin].push(login);
+    if (db.friends[login]?.includes(targetLogin)) {
+        return res.status(400).json({ success: false, error: 'Вы уже друзья!' });
+    }
+
+    if (!db.friendRequests[targetLogin]) db.friendRequests[targetLogin] = [];
+    if (!db.friendRequests[targetLogin].includes(login)) {
+        db.friendRequests[targetLogin].push(login);
+    }
+
+    await saveDatabase(db);
+    res.json({ success: true, db });
+});
+
+// Ответ на заявку в друзья (принять / отклонить)
+app.post('/api/respond-friend-request', async (req, res) => {
+    let { login, requesterLogin, accept } = req.body;
+    login = login.trim().toLowerCase();
+    requesterLogin = requesterLogin.trim().toLowerCase();
+
+    let db = await loadDatabase();
+    if (!db.friendRequests?[login]) return res.status(400).json({ success: false });
+
+    db.friendRequests[login] = db.friendRequests[login].filter(l => l !== requesterLogin);
+
+    if (accept) {
+        if (!db.friends[login]) db.friends[login] = [];
+        if (!db.friends[login].includes(requesterLogin)) db.friends[login].push(requesterLogin);
+
+        if (!db.friends[requesterLogin]) db.friends[requesterLogin] = [];
+        if (!db.friends[requesterLogin].includes(login)) db.friends[requesterLogin].push(login);
+    }
 
     await saveDatabase(db);
     res.json({ success: true, db });
@@ -352,7 +390,7 @@ io.on('connection', (socket) => {
     socket.on('call-user', ({ to, offer, from, callType }) => {
         if (onlineSockets[to]) io.to(onlineSockets[to]).emit('incoming-call', { from, offer, callType });
     });
-    socket.on('call-accepted', ({ to, answer }) => {
+    socket.on('call-answered', ({ to, answer }) => {
         if (onlineSockets[to]) io.to(onlineSockets[to]).emit('call-answered', { answer });
     });
     socket.on('ice-candidate', ({ to, candidate }) => {
