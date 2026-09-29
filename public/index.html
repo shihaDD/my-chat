@@ -156,7 +156,7 @@
         const socket = io();
         let myData = null;
         let activeRecipientPhone = null;
-        let generatedPopupCode = ''; // Переменная для хранения сгенерированного кода
+        let generatedPopupCode = ''; 
         let messagesStore = JSON.parse(localStorage.getItem('whatsapp_messages') || '{}');
 
         const authScreen = document.getElementById('auth-screen');
@@ -197,7 +197,7 @@
             phoneInput.value = val.length === 0 ? '' : res;
         };
 
-        // Кнопка «Получить код»: генерирует случайный 4-значный код и показывает во всплывающем окне
+        // Кнопка «Получить код»: генерирует код локально в браузере и показывает в alert
         getCodeBtn.onclick = () => {
             const phone = phoneInput.value.trim();
             const name = nameInput.value.trim();
@@ -206,10 +206,10 @@
             if (cleanDigits.length < 11) return alert('Введите полный номер телефона!');
             if (!name) return alert('Введите ваше имя!');
 
-            // Генерируем случайный 4-значный код от 1000 до 9999
+            // Генерируем случайный 4-значный код
             generatedPopupCode = Math.floor(1000 + Math.random() * 9000).toString();
 
-            // Показываем код во всплывающем окне (alert)
+            // Показываем код прямо в браузере
             alert(`Ваш проверочный код: ${generatedPopupCode}`);
 
             // Переключаем интерфейс на ввод кода
@@ -217,7 +217,7 @@
             stepCodeBlock.style.display = 'block';
         };
 
-        // Кнопка «Подтвердить и войти»: проверяет совпадение введенного кода
+        // Кнопка «Подтвердить и войти»
         verifyCodeBtn.onclick = () => {
             const phone = phoneInput.value.trim();
             const name = nameInput.value.trim();
@@ -229,9 +229,7 @@
                 myData = { phone, name };
                 localStorage.setItem('whatsapp_user', JSON.stringify(myData));
                 
-                // Регистрируем пользователя на сервере для обмена сообщениями
                 socket.emit('verify_code', { phone, name, code: 'bypass' }, () => {}); 
-                
                 startChatSession();
             } else {
                 alert('Неверный код! Попробуйте еще раз.');
@@ -239,9 +237,7 @@
         };
 
         function startChatSession() {
-            // На всякий случай сообщаем серверу о входе пользователя
             socket.emit('verify_code', { phone: myData.phone, name: myData.name, code: 'bypass' }, () => {}); 
-            
             myAvatarLabel.textContent = myData.name.charAt(0).toUpperCase();
             authScreen.style.display = 'none';
             chatScreen.style.display = 'grid';
