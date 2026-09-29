@@ -14,23 +14,25 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const DB_FILE = path.join(__dirname, 'database.json');
 
+// База данных по умолчанию
 let db = {
-    users: {},          
-    messagesStore: {},  
-    friends: {},        
-    friendRequests: {}, 
-    nicknames: {},      
-    groups: {},         
-    settings: {},       
-    lastSeen: {}        
+    users: {},          // login -> { login, name, password, email, avatar }
+    messagesStore: {},  // login -> { partnerLogin -> [ { sender, text, media, time } ] }
+    friends: {},        // login -> [ friendLogins ]
+    friendRequests: {}, // login -> [ requesterLogins ]
+    nicknames: {},      // login -> { targetLogin -> customNickname }
+    groups: {},         // groupId -> { id, name, creator, members: [], roles: {}, messages: [] }
+    lastSeen: {}        // login -> timestamp
 };
 
+// Загрузка базы данных с диска, если она есть
 if (fs.existsSync(DB_FILE)) {
     try {
         const data = fs.readFileSync(DB_FILE, 'utf8');
-        db = { ...db, ...JSON.parse(data) };
+        const parsed = JSON.parse(data);
+        db = { ...db, ...parsed };
     } catch (e) {
-        console.error('Ошибка чтения database.json:', e);
+        console.error('Ошибка чтения database.json, используется пустая база:', e);
     }
 }
 
@@ -42,6 +44,7 @@ function saveDb() {
     }
 }
 
+// REST API эндпоинты
 app.get('/api/data', (req, res) => {
     res.json(db);
 });
@@ -53,13 +56,12 @@ app.post('/api/register', (req, res) => {
     }
     const cleanLogin = login.trim().toLowerCase();
     if (db.users[cleanLogin]) {
-        return res.json({ success: false, error: 'Пользователь уже существует!' });
+        return res.json({ success: false, error: 'Пользователь с таким логином уже существует!' });
     }
 
-    db.users[cleanLogin] = { login: cleanLogin, name: name.trim(), password, email: email || '', avatar: avatar || '' };
+    db.users[cleanLogin] = { login: cleanLogin, name, password, email: email || '', avatar: avatar || '' };
     db.friends[cleanLogin] = [];
     db.friendRequests[cleanLogin] = [];
-    db.settings[cleanLogin] = { keybinds: { mute: 'M', call: 'Enter' }, mouseDevice: 'Стандартная мышь' };
     db.lastSeen[cleanLogin] = Date.now();
     saveDb();
 
@@ -78,25 +80,9 @@ app.post('/api/login', (req, res) => {
         return res.json({ success: false, error: 'Неверный логин или пароль!' });
     }
 
-    if (!db.settings[cleanLogin]) {
-        db.settings[cleanLogin] = { keybinds: { mute: 'M', call: 'Enter' }, mouseDevice: 'Стандартная мышь' };
-    }
-
     db.lastSeen[cleanLogin] = Date.now();
     saveDb();
     res.json({ success: true, user, db });
-});
-
-app.post('/api/update-settings', (req, res) => {
-    const { login, keybinds, mouseDevice } = req.body;
-    if (!login || !db.users[login]) return res.json({ success: false, error: 'Пользователь не найден' });
-
-    if (!db.settings[login]) db.settings[login] = { keybinds: {}, mouseDevice: '' };
-    if (keybinds) db.settings[login].keybinds = { ...db.settings[login].keybinds, ...keybinds };
-    if (mouseDevice !== undefined) db.settings[login].mouseDevice = mouseDevice;
-
-    saveDb();
-    res.json({ success: true, settings: db.settings[login], db });
 });
 
 app.post('/api/set-nickname', (req, res) => {
@@ -115,12 +101,19 @@ app.post('/api/add-friend', (req, res) => {
     const { login, targetLogin } = req.body;
     const cleanTarget = targetLogin.trim().toLowerCase();
 
-    if (!db.users[cleanTarget]) return res.json({ success: false, error: 'Пользователь не найден!' });
-    if (cleanTarget === login) return res.json({ success: false, error: 'Нельзя добавить самого себя!' });
-    if (db.friends[login]?.includes(cleanTarget)) return res.json({ success: false, error: 'Вы уже друзья!' });
-
+    if (!db.users[cleanTarget]) {
+        return res.json({ success: false, error: 'Пользователь не найден!' });
+    }
+    if (cleanTarget === login) {
+        return res.json({ success: false, error: 'Нельзя добавить самого себя!' });
+    }
+    if (db.friends[login] && db.friends[login].includes(cleanTarget)) {
+        return res.json({ success: false, error: 'Вы уже друзья!' });
+    }
     if (!db.friendRequests[cleanTarget]) db.friendRequests[cleanTarget] = [];
-    if (db.friendRequests[cleanTarget].includes(login)) return res.json({ success: false, error: 'Заявка уже отправлена!' });
+    if (db.friendRequests[cleanTarget].includes(login)) {
+        return res.json({ success: false, error: 'Заявка уже отправлена!' });
+    }
 
     db.friendRequests[cleanTarget].push(login);
     saveDb();
@@ -136,9 +129,74 @@ app.post('/api/respond-friend-request', (req, res) => {
     if (accept) {
         if (!db.friends[login]) db.friends[login] = [];
         if (!db.friends[requesterLogin]) db.friends[requesterLogin] = [];
+
         if (!db.friends[login].includes(requesterLogin)) db.friends[login].push(requesterLogin);
         if (!db.friends[requesterLogin].includes(login)) db.friends[requesterLogin].push(login);
     }
+    saveDb();
+    res.json({ success: true, db });
+});
+
+app.post('/api/create-group', (req, res) => {
+    const { name, creator } = req.body;
+    if (!name || !creator) return res.json({ success: false, error: 'Недостаточно данных' });
+
+    const groupId = 'group_' + Date.now();
+    db.groups[groupId] = {
+        id: groupId,
+        name: name.trim(),
+        creator: creator,
+        members: [creator],
+        roles: { [creator]: 'Создатель' },
+        messages: [],
+        avatar: ''
+    };
+    saveDb();
+    res.json({ success: true, db });
+});
+
+app.post('/api/join-group', (req, res) => {
+    const { groupId, login } = req.body;
+    const group = db.groups[groupId];
+    if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
+
+    if (!group.members.includes(login)) {
+        group.members.push(login);
+        group.roles[login] = 'Участник';
+        saveDb();
+    }
+    res.json({ success: true, db });
+});
+
+app.post('/api/update-group', (req, res) => {
+    const { groupId, login, name } = req.body;
+    const group = db.groups[groupId];
+    if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
+
+    if (group.creator !== login && group.roles[login] !== 'Администратор') {
+        return res.json({ success: false, error: 'Недостаточно прав для редактирования' });
+    }
+
+    if (name) group.name = name.trim();
+    saveDb();
+    res.json({ success: true, db });
+});
+
+app.post('/api/set-group-role', (req, res) => {
+    const { groupId, login, targetLogin, newRole } = req.body;
+    const group = db.groups[groupId];
+    if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
+
+    if (group.creator !== login) {
+        return res.json({ success: false, error: 'Только создатель может менять роли' });
+    }
+
+    if (targetLogin === group.creator) {
+        return res.json({ success: false, error: 'Нельзя изменить роль создателя' });
+    }
+
+    if (!group.roles) group.roles = {};
+    group.roles[targetLogin] = newRole;
     saveDb();
     res.json({ success: true, db });
 });
@@ -148,10 +206,12 @@ app.post('/api/send-message', (req, res) => {
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const msgObj = { sender, text: text || '', media: media || null, time };
 
+    // Сохранение для отправителя
     if (!db.messagesStore[sender]) db.messagesStore[sender] = {};
     if (!db.messagesStore[sender][receiver]) db.messagesStore[sender][receiver] = [];
     db.messagesStore[sender][receiver].push(msgObj);
 
+    // Сохранение для получателя (если это не чат с самим собой)
     if (sender !== receiver) {
         if (!db.messagesStore[receiver]) db.messagesStore[receiver] = {};
         if (!db.messagesStore[receiver][sender]) db.messagesStore[receiver][sender] = [];
@@ -162,7 +222,29 @@ app.post('/api/send-message', (req, res) => {
     res.json({ success: true, db });
 });
 
+app.post('/api/send-group-message', (req, res) => {
+    const { groupId, sender, text, media } = req.body;
+    const group = db.groups[groupId];
+    if (!group) return res.json({ success: false, error: 'Группа не найдена' });
+
+    const myRole = group.roles?.[sender] || (group.creator === sender ? 'Создатель' : 'Участник');
+    if (group.creator !== sender && myRole !== 'Администратор') {
+        return res.json({ success: false, error: 'Нет прав на отправку сообщений в сообщество' });
+    }
+
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const msgObj = { sender, text: text || '', media: media || null, time };
+
+    if (!group.messages) group.messages = [];
+    group.messages.push(msgObj);
+
+    saveDb();
+    res.json({ success: true, db });
+});
+
+// Socket.io для сигнализации звонков и онлайн-статусов
 const activeSockets = {};
+
 io.on('connection', (socket) => {
     socket.on('register', (login) => {
         if (login) {
@@ -171,45 +253,32 @@ io.on('connection', (socket) => {
         }
     });
 
-    // WebRTC Звонки
     socket.on('call-user', ({ to, offer, from }) => {
         const targetSocketId = activeSockets[to];
-        if (targetSocketId) io.to(targetSocketId).emit('incoming-call', { from, offer });
+        if (targetSocketId) {
+            io.to(targetSocketId).emit('incoming-call', { from, offer });
+        }
     });
 
     socket.on('call-accepted', ({ to, answer }) => {
         const targetSocketId = activeSockets[to];
-        if (targetSocketId) io.to(targetSocketId).emit('call-answered', { answer });
+        if (targetSocketId) {
+            io.to(targetSocketId).emit('call-answered', { answer });
+        }
     });
 
     socket.on('ice-candidate', ({ to, candidate }) => {
         const targetSocketId = activeSockets[to];
-        if (targetSocketId) io.to(targetSocketId).emit('ice-candidate', { candidate });
+        if (targetSocketId) {
+            io.to(targetSocketId).emit('ice-candidate', { candidate });
+        }
     });
 
     socket.on('hang-up', ({ to }) => {
         const targetSocketId = activeSockets[to];
-        if (targetSocketId) io.to(targetSocketId).emit('hang-up');
-    });
-
-    // Совместный просмотр TikTok
-    socket.on('invite-watch-party', ({ to, from }) => {
-        const targetSocketId = activeSockets[to];
-        if (targetSocketId) io.to(targetSocketId).emit('watch-party-invite', { from });
-    });
-
-    socket.on('accept-watch-party', ({ to, room }) => {
-        socket.join(room);
-        const targetSocketId = activeSockets[to];
         if (targetSocketId) {
-            const targetSocket = io.sockets.sockets.get(targetSocketId);
-            if (targetSocket) targetSocket.join(room);
+            io.to(targetSocketId).emit('hang-up');
         }
-        io.to(room).emit('watch-party-started', { room });
-    });
-
-    socket.on('sync-feed-scroll', ({ room, index }) => {
-        socket.to(room).emit('sync-feed-scroll', { index });
     });
 
     socket.on('disconnect', () => {
@@ -226,5 +295,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Сервер запущен: http://localhost:${PORT}`);
+    console.log(`Сервер запущен на порту ${PORT}`);
 });
