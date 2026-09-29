@@ -22,6 +22,9 @@
         .tab-content { flex: 1; overflow-y: auto; padding: 10px; }
         .hidden { display: none !important; }
 
+        /* Поиск */
+        .search-box { width: 100%; padding: 8px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #333; background: #1e1e1e; color: #fff; }
+
         /* Контент чатов и друзей */
         .user-item { display: flex; align-items: center; justify-content: space-between; padding: 10px; border-radius: 6px; cursor: pointer; margin-bottom: 4px; background: #1a1a1a; }
         .user-item:hover { background: #252525; }
@@ -74,21 +77,26 @@
                 <button class="tab-btn" onclick="switchTab('settings', this)">Настройки</button>
             </div>
             
+            <!-- Вкладка Чатов -->
             <div id="tab-chats" class="tab-content">
+                <input type="text" id="search-chats-input" class="search-box" placeholder="Поиск по чатам (имя / логин)..." oninput="renderChats()">
                 <div id="chats-list"></div>
             </div>
             
+            <!-- Вкладка Друзей -->
             <div id="tab-friends" class="tab-content hidden">
-                <div style="margin-bottom: 10px;">
-                    <input type="text" id="add-friend-input" placeholder="Логин друга" style="width: 70%; padding: 6px; background:#222; border:1px solid #444; color:#fff; border-radius:4px;">
+                <div style="margin-bottom: 10px; display: flex; gap: 5px;">
+                    <input type="text" id="add-friend-input" placeholder="Логин друга" style="flex: 1; padding: 6px; background:#222; border:1px solid #444; color:#fff; border-radius:4px;">
                     <button onclick="addFriend()" style="padding: 6px 10px; background:#ff0050; border:none; color:#fff; border-radius:4px; cursor:pointer;">Добавить</button>
                 </div>
+                <input type="text" id="search-friends-input" class="search-box" placeholder="Поиск друзей (часть имени/логина)..." oninput="renderFriends()">
                 <h3>Список друзей</h3>
                 <div id="friends-list" style="margin-top: 10px;"></div>
                 <h3 style="margin-top: 15px;">Заявки</h3>
                 <div id="requests-list" style="margin-top: 10px;"></div>
             </div>
 
+            <!-- Вкладка Настроек -->
             <div id="tab-settings" class="tab-content hidden settings-pane">
                 <h3>Настройки управления</h3>
                 <label>Клавиша микрофона (Мьюту):
@@ -218,7 +226,6 @@
         }
 
         function updateDynamicTooltips() {
-            const muteKey = document.getElementById('setting-key-mute').value;
             const callKey = document.getElementById('setting-key-call').value;
             const callBtn = document.getElementById('call-tooltip-btn');
             if(callBtn) callBtn.innerText = `Позвонить (${callKey})`;
@@ -251,15 +258,25 @@
             renderFriends();
         }
 
+        // Фильтрация с поддержкой поиска по половине имени или логина
         function renderChats() {
             const list = document.getElementById('chats-list');
             list.innerHTML = '';
+            const query = (document.getElementById('search-chats-input')?.value || '').trim().toLowerCase();
             const friends = currentDB.friends[currentUser.login] || [];
             
             friends.forEach(fLogin => {
+                const userData = currentDB.users[fLogin] || {};
+                const name = (userData.name || fLogin).toLowerCase();
+                
+                // Проверка: входит ли введенный текст (даже половина) в логин или имя
+                if (query && !fLogin.toLowerCase().includes(query) && !name.includes(query)) {
+                    return;
+                }
+
                 const div = document.createElement('div');
                 div.className = 'user-item';
-                div.innerHTML = `<span>${fLogin}</span>`;
+                div.innerHTML = `<span>${userData.name || fLogin} (${fLogin})</span>`;
                 div.onclick = () => openChat(fLogin);
                 list.appendChild(div);
             });
@@ -268,16 +285,25 @@
         function renderFriends() {
             const fList = document.getElementById('friends-list');
             fList.innerHTML = '';
+            const query = (document.getElementById('search-friends-input')?.value || '').trim().toLowerCase();
             const friends = currentDB.friends[currentUser.login] || [];
             
-            friends.forEach(f => {
+            friends.forEach(fLogin => {
+                const userData = currentDB.users[fLogin] || {};
+                const name = (userData.name || fLogin).toLowerCase();
+
+                // Поиск по части имени или логина
+                if (query && !fLogin.toLowerCase().includes(query) && !name.includes(query)) {
+                    return;
+                }
+
                 const div = document.createElement('div');
                 div.className = 'user-item';
                 div.innerHTML = `
-                    <span>${f}</span>
+                    <span>${userData.name || fLogin} (@${fLogin})</span>
                     <div class="action-btns">
-                        <button class="call-btn" onclick="openChat('${f}'); startCall();">Звонок</button>
-                        <button onclick="openChat('${f}')">Чат</button>
+                        <button class="call-btn" onclick="openChat('${fLogin}'); startCall();">Звонок</button>
+                        <button onclick="openChat('${fLogin}')">Чат</button>
                     </div>
                 `;
                 fList.appendChild(div);
@@ -315,7 +341,8 @@
 
         function openChat(login) {
             activeChatUser = login;
-            document.getElementById('active-chat-title').innerText = login;
+            const userData = currentDB.users[login] || {};
+            document.getElementById('active-chat-title').innerText = userData.name ? `${userData.name} (${login})` : login;
             renderMessages();
         }
 
@@ -351,7 +378,7 @@
 
         // Логика звонков WebRTC
         async function startCall() {
-            if(!activeChatUser) return alert.error || alert('Выберите чат для звонка');
+            if(!activeChatUser) return alert('Выберите чат для звонка');
             document.getElementById('call-modal').classList.remove('hidden');
             
             peerConnection = new RTCPeerConnection(iceServers);
