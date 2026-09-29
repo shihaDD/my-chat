@@ -6,26 +6,12 @@
     <title>Мессенджер</title>
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: sans-serif; }
-        
-        /* ЦВЕТОВЫЕ ТЕМЫ */
-        /* 1. Исходная тема (по умолчанию) */
-        body.theme-default { background: #e5ddd5; color: #333; --bg-sidebar: #fff; --bg-header: #f0f2f5; --bg-chat: #efeae2; --bg-msg-in: #fff; --bg-msg-out: #d9fdd3; --accent: #00a884; --accent-hover: #019073; --border: #e1e2e5; --text-main: #333; --text-sec: #666; }
-        
-        /* 2. Темная тема (Dark) */
-        body.theme-dark { background: #0c1317; color: #e9edef; --bg-sidebar: #111b21; --bg-header: #202c33; --bg-chat: #0b141a; --bg-msg-in: #202c33; --bg-msg-out: #005c4b; --accent: #00a884; --accent-hover: #02896c; --border: #222d34; --text-main: #e9edef; --text-sec: #8696a0; }
-
-        /* 3. Светлая классическая (Light) */
-        body.theme-light { background: #f0f2f5; color: #111; --bg-sidebar: #fff; --bg-header: #f0f2f5; --bg-chat: #fefefe; --bg-msg-in: #f0f2f5; --bg-msg-out: #d9fdd3; --accent: #00a884; --accent-hover: #019073; --border: #d1d7db; --text-main: #111; --text-sec: #667781; }
-
-        /* 4. Неоновая фиолетовая (Neon Purple) */
-        body.theme-neon { background: #120d1a; color: #f3e8ff; --bg-sidebar: #1a1025; --bg-header: #241635; --bg-chat: #0f0a17; --bg-msg-in: #241635; --bg-msg-out: #7c3aed; --accent: #8b5cf6; --accent-hover: #7c3aed; --border: #3b2057; --text-main: #f3e8ff; --text-sec: #c4b5fd; }
-
-        body { display: flex; height: 100vh; background-color: var(--bg-chat, #efeae2); color: var(--text-main, #333); }
+        body { display: flex; height: 100vh; background: #e5ddd5; color: #333; }
         
         /* Авторизация */
         #auth-screen {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #f0f2f5; display: flex; justify-content: center; align-items: center; z-index: 1000; color: #333;
+            background: #f0f2f5; display: flex; justify-content: center; align-items: center; z-index: 1000;
         }
         .auth-card { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); width: 350px; text-align: center; }
         .auth-card h2 { margin-bottom: 20px; }
@@ -34,44 +20,42 @@
         .auth-card button:hover { background: #019073; }
 
         /* Интерфейс мессенджера */
-        .sidebar { width: 350px; background: var(--bg-sidebar, white); border-right: 1px solid var(--border, #e1e2e5); display: flex; flex-direction: column; }
-        .sidebar-header { padding: 15px; background: var(--bg-header, #f0f2f5); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border, #e1e2e5); }
-        .search-box { padding: 10px; background: var(--bg-header, #f6f6f6); }
-        .search-box input { width: 100%; padding: 8px 12px; border: none; border-radius: 20px; background: var(--bg-sidebar, white); color: var(--text-main, #333); outline: none; }
+        .sidebar { width: 350px; background: white; border-right: 1px solid #e1e2e5; display: flex; flex-direction: column; }
+        .sidebar-header { padding: 15px; background: #f0f2f5; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e1e2e5; }
+        .search-box { padding: 10px; background: #f6f6f6; }
+        .search-box input { width: 100%; padding: 8px 12px; border: none; border-radius: 20px; background: white; }
         
         .chat-list { flex: 1; overflow-y: auto; }
-        .chat-item { display: flex; align-items: center; padding: 12px 15px; cursor: pointer; border-bottom: 1px solid var(--border, #f0f2f5); position: relative; }
-        .chat-item:hover { background: var(--bg-header, #f5f5f5); }
-        .chat-item.active { background: var(--bg-header, #ebebeb); }
+        .chat-item { display: flex; align-items: center; padding: 12px 15px; cursor: pointer; border-bottom: 1px solid #f0f2f5; position: relative; }
+        .chat-item:hover { background: #f5f5f5; }
+        .chat-item.active { background: #ebebeb; }
         .avatar { width: 45px; height: 45px; border-radius: 50%; background: #dfe5e7; display: flex; justify-content: center; align-items: center; margin-right: 12px; font-weight: bold; color: #555; overflow: hidden; flex-shrink: 0; }
         .avatar img { width: 100%; height: 100%; object-fit: cover; }
         .chat-info { flex: 1; overflow: hidden; }
-        .chat-name { font-weight: bold; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-main, #333); }
-        .chat-last-msg { font-size: 13px; color: var(--text-sec, #666); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .mute-icon { font-size: 12px; color: var(--text-sec, #888); margin-left: 5px; }
+        .chat-name { font-weight: bold; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .chat-last-msg { font-size: 13px; color: #666; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mute-icon { font-size: 12px; color: #888; margin-left: 5px; }
 
-        .chat-area { flex: 1; display: flex; flex-direction: column; background: var(--bg-chat, #efeae2); }
-        .chat-header { padding: 10px 20px; background: var(--bg-header, #f0f2f5); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border, #e1e2e5); }
+        .chat-area { flex: 1; display: flex; flex-direction: column; background: #efeae2; }
+        .chat-header { padding: 10px 20px; background: #f0f2f5; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e1e2e5; }
         .chat-header-info { display: flex; align-items: center; }
-        .chat-actions select { padding: 6px 10px; border-radius: 4px; border: 1px solid var(--border, #ccc); background: var(--bg-sidebar, white); color: var(--text-main, #333); cursor: pointer; outline: none; }
-        .chat-actions button { background: none; border: none; cursor: pointer; font-size: 16px; margin-left: 15px; color: var(--text-sec, #555); }
-        .chat-actions button:hover { color: var(--text-main, #000); }
+        .chat-actions button { background: none; border: none; cursor: pointer; font-size: 16px; margin-left: 15px; color: #555; }
+        .chat-actions button:hover { color: #000; }
 
         .messages-container { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; }
-        .message { max-width: 60%; padding: 8px 12px; margin-bottom: 8px; border-radius: 8px; position: relative; word-wrap: break-word; color: var(--text-main, #333); }
-        .message.incoming { background: var(--bg-msg-in, white); align-self: flex-start; }
-        .message.outgoing { background: var(--bg-msg-out, #d9fdd3); align-self: flex-end; }
-        .message .msg-time { font-size: 10px; color: var(--text-sec, #999); float: right; margin-left: 10px; margin-top: 5px; }
+        .message { max-width: 60%; padding: 8px 12px; margin-bottom: 8px; border-radius: 8px; position: relative; word-wrap: break-word; }
+        .message.incoming { background: white; align-self: flex-start; }
+        .message.outgoing { background: #d9fdd3; align-self: flex-end; }
+        .message .msg-time { font-size: 10px; color: #999; float: right; margin-left: 10px; margin-top: 5px; }
 
-        .message-input-area { padding: 10px 20px; background: var(--bg-header, #f0f2f5); display: flex; align-items: center; border-top: 1px solid var(--border, #e1e2e5); }
-        .message-input-area input { flex: 1; padding: 10px 15px; border: none; border-radius: 20px; outline: none; background: var(--bg-sidebar, white); color: var(--text-main, #333); }
-        .message-input-area button { background: var(--accent, #00a884); color: white; border: none; padding: 10px 20px; margin-left: 10px; border-radius: 20px; cursor: pointer; font-weight: bold; }
-        .message-input-area button:hover { background: var(--accent-hover, #019073); }
+        .message-input-area { padding: 10px 20px; background: #f0f2f5; display: flex; align-items: center; }
+        .message-input-area input { flex: 1; padding: 10px 15px; border: none; border-radius: 20px; outline: none; }
+        .message-input-area button { background: #00a884; color: white; border: none; padding: 10px 20px; margin-left: 10px; border-radius: 20px; cursor: pointer; font-weight: bold; }
         
         .hidden { display: none !important; }
     </style>
 </head>
-<body class="theme-default">
+<body>
 
     <!-- Экран авторизации -->
     <div id="auth-screen">
@@ -96,7 +80,7 @@
             <input type="text" id="search-input" placeholder="Поиск или новый чат...">
         </div>
         <div class="chat-list" id="chat-list">
-            <!-- Список чатов -->
+            <!-- Список чатов генерируется динамически -->
         </div>
     </div>
 
@@ -106,16 +90,10 @@
                 <div class="avatar" id="active-chat-avatar">#</div>
                 <div>
                     <div id="active-chat-name" style="font-weight: bold;">Выберите чат</div>
-                    <div id="active-chat-status" style="font-size: 12px; color: var(--text-sec, #666);"></div>
+                    <div id="active-chat-status" style="font-size: 12px; color: #666;"></div>
                 </div>
             </div>
-            <div class="chat-actions" style="display: flex; align-items: center;">
-                <select id="theme-selector" onchange="changeTheme(this.value)" title="Выбрать тему оформления">
-                    <option value="default">Исходная (Классик)</option>
-                    <option value="dark">Тёмная (Dark)</option>
-                    <option value="light">Светлая (Modern Light)</option>
-                    <option value="neon">Неоновая фиолетовая</option>
-                </select>
+            <div class="chat-actions">
                 <button id="mute-chat-btn" title="Отключить/включить уведомления" onclick="toggleMuteCurrentChat()">🔕</button>
             </div>
         </div>
@@ -134,13 +112,13 @@
 
         let myPhone = localStorage.getItem('myPhone');
         let myName = localStorage.getItem('myName');
-        let activeChatId = null;
-        let activeChatType = null;
+        let activeChatId = null; // Может быть номером телефона, group_ID или community_ID
+        let activeChatType = null; // 'private', 'group', 'community', 'favorites'
         
         let allMessages = {};
         let groupsList = [];
         let communitiesList = [];
-        let mutedChats = [];
+        let mutedChats = []; // Список ID заглушенных чатов
 
         if (myPhone && myName) {
             document.getElementById('auth-screen').classList.add('hidden');
@@ -162,21 +140,7 @@
             }
         });
 
-        // Получение темы с сервера
-        socket.on('user_theme', ({ theme }) => {
-            setAppTheme(theme);
-        });
-
-        function changeTheme(themeName) {
-            socket.emit('change_theme', { theme: themeName });
-        }
-
-        function setAppTheme(themeName) {
-            document.body.className = `theme-${themeName}`;
-            const selectEl = document.getElementById('theme-selector');
-            if (selectEl) selectEl.value = themeName;
-        }
-
+        // Получение списков и истории
         socket.on('all_messages', (data) => {
             allMessages = data;
             renderChatList();
@@ -227,10 +191,12 @@
             }
         });
 
+        // Функция рендеринга списка чатов в сайдбаре
         function renderChatList() {
             const listEl = document.getElementById('chat-list');
             listEl.innerHTML = '';
 
+            // 1. Чат «Избранное»
             const favKey = `${myPhone}_${myPhone}`;
             const isFavMuted = mutedChats.includes(favKey);
             const favDiv = document.createElement('div');
@@ -245,6 +211,7 @@
             favDiv.onclick = () => selectChat(favKey, 'favorites', 'Избранное', '⭐');
             listEl.appendChild(favDiv);
 
+            // 2. Группы
             groupsList.forEach(group => {
                 if (group.members && group.members.includes(myPhone)) {
                     const chatKey = `group_${group.id}`;
@@ -263,6 +230,7 @@
                 }
             });
 
+            // 3. Сообщества
             communitiesList.forEach(com => {
                 if (com.subscribers && com.subscribers.includes(myPhone)) {
                     const chatKey = `community_${com.id}`;
@@ -308,7 +276,7 @@
                 btn.style.color = '#d9534f';
             } else {
                 btn.innerText = '🔕';
-                btn.style.color = '';
+                btn.style.color = '#555';
             }
         }
 
@@ -327,7 +295,7 @@
                 const isOutgoing = msg.fromPhone === myPhone;
                 div.className = `message ${isOutgoing ? 'outgoing' : 'incoming'}`;
                 div.innerHTML = `
-                    ${!isOutgoing && activeChatType !== 'favorites' ? `<div style="font-size: 11px; font-weight: bold; color: var(--accent, #00a884); margin-bottom: 2px;">${msg.fromName || 'Участник'}</div>` : ''}
+                    ${!isOutgoing && activeChatType !== 'favorites' ? `<div style="font-size: 11px; font-weight: bold; color: #00a884; margin-bottom: 2px;">${msg.fromName || 'Участник'}</div>` : ''}
                     <div>${msg.text}</div>
                     <div class="msg-time">${msg.time || ''}</div>
                 `;
@@ -349,11 +317,9 @@
             if (activeChatType === 'favorites') {
                 socket.emit('private_message', { toPhone: myPhone, message: text });
             } else if (activeChatType === 'group') {
-                // Извлекаем чистый ID группы
                 const groupId = activeChatId.replace('group_', '');
                 socket.emit('group_message', { groupId, message: text });
             } else if (activeChatType === 'community') {
-                // Извлекаем чистый ID сообщества
                 const communityId = activeChatId.replace('community_', '');
                 socket.emit('community_message', { communityId, message: text });
             } else if (activeChatType === 'private') {
