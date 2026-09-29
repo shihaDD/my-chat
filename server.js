@@ -1,206 +1,126 @@
 const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
 const fs = require('fs');
 const path = require('path');
 
 const app = express();
-const server = http.createServer(app);
-const io = new Server(server, {
-    maxHttpBufferSize: 20 * 1024 * 1024
-});
-
-app.use(express.static('public'));
-
-const DB_FILE = path.join(__dirname, 'database.json');
-
-function loadDatabase() {
-    if (fs.existsSync(DB_FILE)) {
-        try {
-            const data = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-            return {
-                pendingCodes: data.pendingCodes || {},
-                registeredUsers: data.registeredUsers || {},
-                groups: data.groups || [],
-                communities: data.communities || [],
-                messages: data.messages || {},
-                mutedChats: data.mutedChats || {} // { phone: [chatId1, chatId2] }
-            };
-        } catch (e) {
-            console.error('Ошибка чтения базы данных, создаем новую:', e);
-        }
-    }
-    return {
-        pendingCodes: {},
-        registeredUsers: {},
-        groups: [],
-        communities: [],
-        messages: {},
-        mutedChats: {}
-    };
-}
-
-function saveDatabase() {
-    const data = {
-        pendingCodes,
-        registeredUsers,
-        groups,
-        communities,
-        messages,
-        mutedChats
-    };
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf8');
-}
-
-let db = loadDatabase();
-let pendingCodes = db.pendingCodes;
-let registeredUsers = db.registeredUsers;
-let groups = db.groups;
-let communities = db.communities;
-let messages = db.messages;
-let mutedChats = db.mutedChats;
-
-io.on('connection', (socket) => {
-    let currentPhone = null;
-
-    socket.on('register_session', ({ phone, name }) => {
-        currentPhone = phone;
-        registeredUsers[phone] = { name, phone };
-        saveDatabase();
-
-        socket.join(phone);
-
-        // Отправляем всю необходимую информацию клиенту
-        socket.emit('all_messages', messages);
-        socket.emit('groups_list', groups);
-        socket.emit('communities_list', communities);
-        socket.emit('muted_chats_list', mutedChats[phone] || []);
-    });
-
-    socket.on('private_message', ({ toPhone, message }) => {
-        if (!currentPhone) return;
-        const chatKey = currentPhone === toPhone ? `${currentPhone}_${currentPhone}` : [currentPhone, toPhone].sort().join('_');
-        
-        if (!messages[chatKey]) messages[chatKey] = [];
-        
-        const msgData = {
-            fromPhone: currentPhone,
-            fromName: registeredUsers[currentPhone]?.name || currentPhone,
-            text: message,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            type: 'private'
-        };
-        
-        messages[chatKey].push(msgData);
-        saveDatabase();
-
-        io.to(currentPhone).emit('message', msgData);
-        if (currentPhone !== toPhone) {
-            io.to(toPhone).emit('message', msgData);
-        }
-    });
-
-    socket.on('group_message', ({ groupId, message }) => {
-        if (!currentPhone) return;
-        const chatKey = `group_${groupId}`;
-        if (!messages[chatKey]) messages[chatKey] = [];
-
-        const msgData = {
-            fromPhone: currentPhone,
-            fromName: registeredUsers[currentPhone]?.name || currentPhone,
-            text: message,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            type: 'group',
-            groupId
-        };
-
-        messages[chatKey].push(msgData);
-        saveDatabase();
-
-        const group = groups.find(g => g.id == groupId);
-        if (group && group.members) {
-            group.members.forEach(memberPhone => {
-                io.to(memberPhone).emit('message', msgData);
-            });
-        }
-    });
-
-    socket.on('community_message', ({ communityId, message }) => {
-        if (!currentPhone) return;
-        const chatKey = `community_${communityId}`;
-        if (!messages[chatKey]) messages[chatKey] = [];
-
-        const msgData = {
-            fromPhone: currentPhone,
-            fromName: registeredUsers[currentPhone]?.name || currentPhone,
-            text: message,
-            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            type: 'community',
-            communityId
-        };
-
-        messages[chatKey].push(msgData);
-        saveDatabase();
-
-        const com = communities.find(c => c.id == communityId);
-        if (com && com.subscribers) {
-            com.subscribers.forEach(subPhone => {
-                io.to(subPhone).emit('message', subPhone); // исправление рассылки
-            });
-            // Правильная рассылка всем подписчикам
-            com.subscribers.forEach(subPhone => {
-                io.to(subPhone).emit('message', msgData);
-            });
-        }
-    });
-
-    socket.on('create_group', ({ name, members, creator }) => {
-        const newGroup = {
-            id: Date.now(),
-            name,
-            members,
-            creator,
-            avatar: ''
-        };
-        groups.push(newGroup);
-        saveDatabase();
-
-        io.emit('groups_list', groups);
-    });
-
-    socket.on('create_community', ({ name, creator }) => {
-        const newCommunity = {
-            id: Date.now(),
-            name,
-            subscribers: [creator],
-            creator,
-            avatar: ''
-        };
-        communities.push(newCommunity);
-        saveDatabase();
-
-        io.emit('communities_list', communities);
-    });
-
-    socket.on('toggle_mute_chat', ({ chatId }) => {
-        if (!currentPhone) return;
-        if (!mutedChats[currentPhone]) mutedChats[currentPhone] = [];
-
-        const index = mutedChats[currentPhone].indexOf(chatId);
-        let isMuted = false;
-        if (index > -1) {
-            mutedChats[currentPhone].splice(index, 1);
-            isMuted = false;
-        } else {
-            mutedChats[currentPhone].push(chatId);
-            isMuted = true;
-        }
-        saveDatabase();
-        socket.emit('chat_mute_status', { chatId, isMuted });
-    });
-});
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public'))); // если фронтенд в папке public, либо уберите, если всё в корне
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
+
+// Настройки GitHub
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN || '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';
+const REPO_OWNER = 'shihaDD';
+const REPO_NAME = 'Chat-Database';
+const FILE_PATH = 'database.json';
+
+// Функция чтения базы данных (сначала пробуем локально, если нет — качаем с GitHub)
+async function loadDatabase() {
+    try {
+        if (fs.existsSync(FILE_PATH)) {
+            const data = fs.readFileSync(FILE_PATH, 'utf8');
+            return JSON.parse(data);
+        }
+    } catch (e) {
+        console.log('Локального файла нет, пробуем загрузить с GitHub...');
+    }
+
+    try {
+        const response = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${FILE_PATH}`, {
+            headers: {
+                'Authorization': `token ${GITHUB_TOKEN}`,
+                'User-Agent': 'NodeJS-Server'
+            }
+        });
+        if (response.ok) {
+            const json = await response.json();
+            const content = Buffer.from(json.content, 'base64').toString('utf8');
+            fs.writeFileSync(FILE_PATH, content, 'utf8'); // сохраняем локально для кэша
+            return JSON.parse(content);
+        }
+    } catch (e) {
+        console.error('Ошибка загрузки с GitHub:', e);
+    }
+
+    // Дефолтная структура, если вообще ничего нет
+    return {
+        "users": [],
+        "userContacts": {},
+        "messagesStore": {}
+    };
+}
+
+// Функция сохранения базы данных (и локально, и на GitHub)
+async function saveDatabase(dbData) {
+    const jsonString = JSON.stringify(dbData, null, 2);
+    
+    // 1. Сохраняем локально на сервере
+    fs.writeFileSync(FILE_PATH, jsonString, 'utf8');
+
+    // 2. Отправляем изменения на GitHub
+    try {
+        // Сначала нужно получить текущий sha файла на GitHub (требование API GitHub для обновления)
+        const getRes = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${FILE_PATH}`, {
+            headers: {
+                'Authorization': `token ${GITHUB_TOKEN}`,
+                'User-Agent': 'NodeJS-Server'
+            }
+        });
+        
+        let fileSha = '';
+        if (getRes.ok) {
+            const fileData = await getRes.json();
+            fileSha = fileData.sha;
+        }
+
+        // Кодируем в Base64
+        const contentEncoded = Buffer.from(jsonString, 'utf8').toString('base64');
+
+        // Отправляем PUT запрос на обновление файла
+        const updateRes = await fetch(`https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/contents/${FILE_PATH}`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `token ${GITHUB_TOKEN}`,
+                'User-Agent': 'NodeJS-Server',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                message: 'Auto-update database.json from server',
+                content: contentEncoded,
+                sha: fileSha
+            })
+        });
+
+        if (updateRes.ok) {
+            console.log('База данных успешно обновлена на GitHub!');
+        } else {
+            const errText = await updateRes.text();
+            console.error('Ошибка при коммите на GitHub:', errText);
+        }
+    } catch (e) {
+        console.error('Не удалось отправить данные на GitHub:', e);
+    }
+}
+
+// Пример маршрута для получения данных
+app.get('/api/data', async (req, res) => {
+    const db = await loadDatabase();
+    res.json(db);
+});
+
+// Пример маршрута для обновления данных (например, добавление пользователя/сообщения)
+app.post('/api/update', async (req, res) => {
+    let db = await loadDatabase();
+    
+    // Здесь вы обновляете нужные поля в объекте db на основе req.body
+    // Например: db.users.push(req.body.user);
+    
+    // Сохраняем (функция сама отправит на GitHub)
+    await saveDatabase(db);
+    
+    res.json({ success: true, db });
+});
+
+app.listen(PORT, () => {
+    console.log(`Сервер запущен на порту ${PORT}`);
 });
