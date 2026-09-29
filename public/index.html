@@ -260,7 +260,7 @@
       cursor: pointer;
     }
 
-    /* Лента TikTok и мемов (Изолированный бесконечный скролл) */
+    /* Лента TikTok и мемов */
     .feed-wrapper {
       flex: 1;
       overflow-y: auto;
@@ -296,7 +296,7 @@
       align-items: center;
     }
 
-    /* Правая панель (Профиль друга + Настройки + Рация) */
+    /* Правая панель (Профиль друга) */
     .right-sidebar {
       background: var(--bg-panel);
       border-left: 1px solid var(--border);
@@ -343,23 +343,29 @@
       cursor: pointer;
     }
 
-    .ptt-btn {
-      width: 100%;
-      padding: 15px;
-      background: #ff3366;
-      color: #fff;
-      border: none;
-      border-radius: 6px;
-      font-weight: bold;
-      cursor: pointer;
-      margin-top: 10px;
-      text-transform: uppercase;
+    /* Модальное окно настроек */
+    #settings-modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0,0,0,0.7);
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
     }
 
-    .ptt-btn.active {
-      background: var(--accent);
-      color: var(--bg-main);
+    .settings-content {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      padding: 30px;
+      border-radius: 12px;
+      width: 420px;
       box-shadow: var(--neon);
+    }
+
+    .settings-content h3 {
+      color: var(--accent);
+      margin-bottom: 15px;
     }
   </style>
 </head>
@@ -373,6 +379,25 @@
       <input type="password" id="password-input" placeholder="Пароль">
       <button id="auth-btn" onclick="performAuth()">Войти</button>
       <div class="auth-switch" onclick="switchAuthMode()">Нет аккаунта? Зарегистрироваться</div>
+    </div>
+  </div>
+
+  <!-- Модальное окно настроек (Аудио, Рация и бинды) -->
+  <div id="settings-modal">
+    <div class="settings-content">
+      <h3>Настройки</h3>
+      <label style="font-size:12px; color:var(--text-muted);">Микрофон:</label>
+      <select id="mic-select"><option>Основной микрофон</option></select>
+      
+      <label style="font-size:12px; color:var(--text-muted); margin-top:10px; display:block;">Динамики:</label>
+      <select id="speaker-select"><option>Основные динамики</option></select>
+
+      <h3 style="margin-top:20px; font-size:15px;">Рация (Push-to-Talk)</h3>
+      <p style="font-size:12px; color:var(--text-muted); margin-bottom:5px;">Текущая привязка:</p>
+      <input type="text" id="ptt-key-display" readonly value="Левая кнопка мыши (ЛКМ)" style="background:var(--bg-main); color:var(--accent); text-align:center; font-weight:bold;">
+      <button onclick="startKeyBinding()" style="background:var(--bg-main); border:1px solid var(--border); color:var(--text); margin-top:5px;">Изменить клавишу / кнопку мыши</button>
+
+      <button onclick="toggleSettingsModal()" style="margin-top:20px; background:var(--accent);">Закрыть</button>
     </div>
   </div>
 
@@ -409,26 +434,11 @@
       </div>
     </div>
 
-    <!-- Правая панель: Профиль друга и Рация с привязкой мыши -->
+    <!-- Правая панель: Профиль друга -->
     <div class="right-sidebar">
       <div class="panel-box" id="right-profile-box">
         <h3>Профиль</h3>
         <p style="color: var(--text-muted); font-size: 13px;">Выберите пользователя во вкладке «Друзья», чтобы управлять им здесь.</p>
-      </div>
-
-      <div class="panel-box">
-        <h3>Рация (Push-to-Talk)</h3>
-        <p id="ptt-hint-text" style="font-size: 12px; color: var(--accent); margin-bottom: 5px;">Активная кнопка: Левая кнопка мыши (ЛКМ)</p>
-        <button class="ptt-btn" id="ptt-action-btn" onmousedown="startPTT()" onmouseup="stopPTT()">Удерживайте для речи</button>
-        <button style="background:var(--border); color:var(--text); margin-top:8px;" onclick="bindCustomMouseKey()">Привязать кнопку мыши</button>
-      </div>
-
-      <div class="panel-box" id="settings-panel-box" style="display:none;">
-        <h3>Настройки аудио</h3>
-        <label style="font-size:12px; color:var(--text-muted);">Микрофон:</label>
-        <select id="mic-select"><option>Основной микрофон</option></select>
-        <label style="font-size:12px; color:var(--text-muted); margin-top:8px; display:block;">Динамики:</label>
-        <select id="speaker-select"><option>Основные динамики</option></select>
       </div>
     </div>
   </div>
@@ -439,9 +449,10 @@
     let myUser = null;
     let activeTab = 'chats';
     let feedDataCache = [];
-    let activeKeyName = 'Левая кнопка мыши (ЛКМ)';
-    let waitingForKeyBind = false;
     let typingTimeout = null;
+
+    let boundKeyConfig = { type: 'mouse', code: 0, name: 'Левая кнопка мыши (ЛКМ)' };
+    let isBindingActive = false;
 
     function switchAuthMode() {
       isReg = !isReg;
@@ -480,6 +491,7 @@
       socket = io();
       socket.emit('auth', { username: myUser });
 
+      socket.initGlobalListeners = true;
       socket.on('init_data', (data) => {
         renderChatMessages(data.messages);
         feedDataCache = data.feed;
@@ -496,10 +508,12 @@
 
       socket.on('user_typing', (data) => {
         const statusElem = document.getElementById('typing-status-bar');
-        if (data.active) {
-          statusElem.innerText = data.type === 'photo' ? `${data.username} отправляет фото...` : `${data.username} печатает...`;
-        } else {
-          statusElem.innerText = '';
+        if (statusElem) {
+          if (data.active) {
+            statusElem.innerText = data.type === 'photo' ? `${data.username} отправляет фото...` : `${data.username} печатает...`;
+          } else {
+            statusElem.innerText = '';
+          }
         }
       });
 
@@ -542,6 +556,7 @@
 
     function renderLeftTab(usersList) {
       const container = document.getElementById('left-tab-content');
+      if (!container) return;
       container.innerHTML = '';
 
       if (activeTab === 'chats') {
@@ -564,7 +579,7 @@
       }
     }
 
-    // 2. Открытие профиля в правой панели
+    // Профиль друга в правой панели
     function openUserProfile(username, customName) {
       const rightBox = document.getElementById('right-profile-box');
       rightBox.innerHTML = `
@@ -592,13 +607,13 @@
       switchAppTab('chats');
     }
 
-    // Настройки аудиоустройств
+    // Настройки
     function toggleSettingsModal() {
-      const panel = document.getElementById('settings-panel-box');
-      panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+      const modal = document.getElementById('settings-modal');
+      modal.style.display = modal.style.display === 'flex' ? 'none' : 'flex';
     }
 
-    // 1. Индикатор печати и отправки фото
+    // Индикаторы печати и отправки фото
     function emitTypingEvent() {
       socket.emit('typing_status', { type: 'typing', active: true });
       clearTimeout(typingTimeout);
@@ -652,7 +667,7 @@
       messages.forEach(m => appendChatMessage(m));
     }
 
-    // 3 & 4. Совместный и бесконечный скролл ленты
+    // Бесконечный скролл ленты
     function renderFeedStream() {
       const container = document.getElementById('feed-scroll-box');
       if (!container) return;
@@ -687,37 +702,38 @@
       socket.emit('like_feed_item', { itemId });
     }
 
-    // 5. Привязка мыши к рации с подсказкой
-    function bindCustomMouseKey() {
-      waitingForKeyBind = true;
-      const hint = document.getElementById('ptt-hint-text');
-      hint.innerText = 'Нажмите нужную кнопку мыши...';
+    // Настройка привязки клавиатуры и мыши (включая боковые кнопки) для рации
+    function startKeyBinding() {
+      isBindingActive = true;
+      const display = document.getElementById('ptt-key-display');
+      display.value = 'Нажмите клавишу или кнопку мыши...';
 
-      window.addEventListener('mousedown', function listener(e) {
-        if (!waitingForKeyBind) return;
-        waitingForKeyBind = false;
+      window.addEventListener('keydown', function keyListener(e) {
+        if (!isBindingActive) return;
+        isBindingActive = false;
+        e.preventDefault();
+
+        boundKeyConfig = { type: 'keyboard', code: e.code, name: `Клавиша [${e.key.toUpperCase()}]` };
+        display.value = boundKeyConfig.name;
+        window.removeEventListener('keydown', keyListener);
+      }, { once: true });
+
+      window.addEventListener('mousedown', function mouseListener(e) {
+        if (!isBindingActive) return;
+        isBindingActive = false;
+        e.preventDefault();
 
         let name = 'Левая кнопка мыши (ЛКМ)';
         if (e.button === 1) name = 'Средняя кнопка мыши (СКМ)';
         if (e.button === 2) name = 'Правая кнопка мыши (ПКМ)';
-        if (e.button > 2) name = `Кнопка мыши #${e.button + 1}`;
+        if (e.button === 3) name = 'Боковая кнопка мыши (Назад)';
+        if (e.button === 4) name = 'Боковая кнопка мыши (Вперед)';
+        if (e.button > 4) name = `Кнопка мыши #${e.button + 1}`;
 
-        activeKeyName = name;
-        hint.innerText = `Активная кнопка: ${activeKeyName}`;
-        window.removeEventListener('mousedown', listener);
+        boundKeyConfig = { type: 'mouse', code: e.button, name };
+        display.value = boundKeyConfig.name;
+        window.removeEventListener('mousedown', mouseListener);
       }, { once: true });
-    }
-
-    function startPTT() {
-      const btn = document.getElementById('ptt-action-btn');
-      btn.classList.add('active');
-      btn.innerText = 'Передача речи...';
-    }
-
-    function stopPTT() {
-      const btn = document.getElementById('ptt-action-btn');
-      btn.classList.remove('active');
-      btn.innerText = 'Удерживайте для речи';
     }
   </script>
 </body>
