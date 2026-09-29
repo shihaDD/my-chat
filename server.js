@@ -12,7 +12,7 @@ app.use(express.static('public'));
 // ==========================================
 // НАСТРОЙКИ GITHUB
 // ==========================================
-const GITHUB_TOKEN = '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'; 
+const GITHUB_TOKEN = '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'; 
 const REPO_OWNER = 'shihaDD';
 const REPO_NAME = 'Chat-Database';
 const FILE_PATH = 'database.json';
@@ -43,7 +43,7 @@ async function loadDataFromGitHub() {
 
         console.log('📦 Данные успешно загружены с GitHub! Пользователей:', db.users.length, ' Чатов:', Object.keys(db.messagesStore).length);
     } catch (e) {
-        console.log('⚠️ Файл на GitHub не найден или ошибка загрузки, создаем новый:', e.message);
+        console.log('⚠️️ Файл на GitHub не найден или ошибка загрузки, создаем новый:', e.message);
         await saveDataToGitHub();
     }
 }
