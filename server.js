@@ -1,63 +1,69 @@
-const axios = require('axios'); // Добавьте в начале файла, если нет
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
 
-// Временное хранилище кодов (в реальных проектах лучше использовать базу данных или Redis)
-const verificationCodes = {}; 
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
 
-socket.on('request_code', async (data, callback) => {
-    const { phone, name } = data;
-    const cleanPhone = phone.replace(/\D/g, ''); // Очищаем номер от плюсов и скобок (например, 79679074999)
+// Раздаем статические файлы из папки public
+app.use(express.static('public'));
 
-    // Генерируем случайный 4-значный код
-    const code = Math.floor(1000 + Math.random() * 9000).toString();
-    verificationCodes[cleanPhone] = code;
+// Список подключенных пользователей
+const users = {};
 
-    console.log(`[SMS] Код для ${phone} (${name}): ${code}`); // Дублируем в консоль на всякий случай
+io.on('connection', (socket) => {
+    console.log('Пользователь подключился:', socket.id);
 
-    try {
-        // Пример отправки через бесплатный/тестовый или реальный API сервиса SMS.ru
-        const apiId = 'ВАШ_API_ID_ОТ_SMS_RU'; // Получите на сайте sms.ru
-        
-        // Если вы пока тестируете без реального шлюза, можете закомментировать строчку с axios, 
-        // тогда код будет просто писаться в консоль (как раньше), но логика будет готова к подключению.
-        
-        await axios.get(`https://sms.ru/sms/send`, {
-            params: {
-                api_id: apiId,
-                to: cleanPhone,
-                msg: `Ваш код авторизации WhatsApp: ${code}`,
-                json: 1
-            }
-        });
+    // Обработка входа / подтверждения (клиент теперь генерирует код сам, 
+    // поэтому сервер просто регистрирует пользователя по телефону и имени)
+    socket.on('verify_code', (data) => {
+        const { phone, name } = data;
+        if (!phone || !name) return;
 
-        callback({ success: true });
-    } catch (error) {
-        console.error('Ошибка отправки СМС:', error.message);
-        
-        // Если шлюз недоступен, но вам нужно, чтобы приложение работало локально:
-        // Возвращаем success: true, чтобы код можно было посмотреть в консоли сервера.
-        callback({ 
-            success: true, 
-            message: 'СМС-шлюз не настроен, посмотрите код в консоли сервера' 
-        });
-    }
+        // Сохраняем пользователя в общем списке по его номеру телефона
+        users[phone] = { socketId: socket.id, phone, name };
+        socket.userPhone = phone;
+
+        console.log(`Пользователь вошел: ${name} (${phone})`);
+
+        // Рассылаем обновленный список всех пользователей всем клиентам
+        io.emit('users_list', Object.values(users));
+    });
+
+    // Пересылка личных сообщений между пользователями
+    socket.on('private_message', (data) => {
+        const { toPhone, message } = data;
+        const recipient = users[toPhone];
+
+        if (recipient && socket.userPhone) {
+            const sender = users[socket.userPhone];
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            // Отправляем сообщение получателю
+            io.to(recipient.socketId).emit('message', {
+                fromPhone: socket.userPhone,
+                fromName: sender ? sender.name : 'Неизвестный',
+                text: message,
+                time: time
+            });
+        }
+    });
+
+    // Обработка отключения пользователя
+    socket.on('disconnect', () => {
+        if (socket.userPhone && users[socket.userPhone]) {
+            console.log(`Пользователь отключился: ${users[socket.userPhone].name} (${socket.userPhone})`);
+            delete users[socket.userPhone];
+            // Обновляем список пользователей у остальных
+            io.emit('users_list', Object.values(users));
+        } else {
+            console.log('Пользователь отключился:', socket.id);
+        }
+    });
 });
 
-// Проверка кода остаётся прежней:
-socket.on('verify_code', (data, callback) => {
-    const { phone, name, code } = data;
-    const cleanPhone = phone.replace(/\D/g, '');
-
-    // Обход для быстрого входа, если сессия уже сохранена
-    if (code === 'bypass') {
-        let user = { phone, name };
-        return callback({ success: true, user });
-    }
-
-    if (verificationCodes[cleanPhone] === code) {
-        delete verificationCodes[cleanPhone]; // Код использован
-        let user = { phone, name };
-        callback({ success: true, user });
-    } else {
-        callback({ success: false, message: 'Неверный код из СМС' });
-    }
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`Сервер запущен на порту ${PORT}`);
 });
