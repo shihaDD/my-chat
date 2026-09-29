@@ -8,7 +8,8 @@ const io = new Server(server);
 
 app.use(express.static('public'));
 
-let users = [];
+let users = []; // Все зарегистрированные пользователи системы
+let userContacts = {}; // Сохраненные контакты пользователей { userPhone: [ {phone, name, avatar, isOnline, lastSeen} ] }
 
 io.on('connection', (socket) => {
     console.log('Пользователь подключился:', socket.id);
@@ -17,17 +18,14 @@ io.on('connection', (socket) => {
     socket.on('verify_code', (userData) => {
         socket.userPhone = userData.phone;
         
-        // Ищем существующего пользователя по номеру телефона
         let existingUser = users.find(u => u.phone === userData.phone);
 
         if (existingUser) {
-            // Обновляем данные и ставим статус "онлайн"
             existingUser.id = socket.id;
             existingUser.name = userData.name;
             if (userData.avatar) existingUser.avatar = userData.avatar;
             existingUser.isOnline = true;
         } else {
-            // Добавляем нового пользователя
             users.push({
                 phone: userData.phone,
                 name: userData.name,
@@ -36,10 +34,13 @@ io.on('connection', (socket) => {
                 isOnline: true,
                 lastSeen: null
             });
+            if (!userContacts[userData.phone]) {
+                userContacts[userData.phone] = [];
+            }
         }
 
-        // Рассылаем актуальный список всем клиентам
-        io.emit('users_list', users);
+        // Отправляем пользователю его актуальный список контактов с учетом текущего статуса
+        sendUpdatedContacts(userData.phone);
     });
 
     // Обновление профиля
@@ -50,8 +51,60 @@ io.on('connection', (socket) => {
             user.phone = data.phone;
             user.avatar = data.avatar;
             socket.userPhone = data.phone;
-            io.emit('users_list', users);
+
+            // Обновляем данные этого пользователя во всех чужих контактных книгах
+            for (let ownerPhone in userContacts) {
+                let contact = userContacts[ownerPhone].find(c => c.phone === data.oldPhone || c.phone === data.phone);
+                if (contact) {
+                    contact.name = data.name;
+                    contact.phone = data.phone;
+                    contact.avatar = data.avatar;
+                    sendUpdatedContacts(ownerPhone);
+                }
+            }
+            sendUpdatedContacts(data.phone);
         }
+    });
+
+    // Добавление контакта по номеру
+    socket.on('add_contact', (data) => {
+        // data.myPhone — кто добавляет, data.targetPhone — чей номер ищут
+        const ownerPhone = data.myPhone;
+        const targetPhone = data.targetPhone.trim();
+
+        if (ownerPhone === targetPhone) {
+            socket.emit('add_contact_response', { success: false, message: 'Нельзя добавить свой собственный номер!' });
+            return;
+        }
+
+        const targetUser = users.find(u => u.phone === targetPhone);
+        if (!targetUser) {
+            socket.emit('add_contact_response', { success: false, message: 'Пользователь с таким номером не зарегистрирован!' });
+            return;
+        }
+
+        if (!userContacts[ownerPhone]) {
+            userContacts[ownerPhone] = [];
+        }
+
+        // Проверяем, есть ли уже этот контакт
+        const alreadyExists = userContacts[ownerPhone].some(c => c.phone === targetPhone);
+        if (alreadyExists) {
+            socket.emit('add_contact_response', { success: false, message: 'Этот контакт уже есть в вашем списке!' });
+            return;
+        }
+
+        // Добавляем контакт
+        userContacts[ownerPhone].push({
+            phone: targetUser.phone,
+            name: targetUser.name,
+            avatar: targetUser.avatar,
+            isOnline: targetUser.isOnline,
+            lastSeen: targetUser.lastSeen
+        });
+
+        socket.emit('add_contact_response', { success: true, message: 'Контакт успешно добавлен!' });
+        sendUpdatedContacts(ownerPhone);
     });
 
     // Отправка личного сообщения
@@ -88,18 +141,51 @@ io.on('connection', (socket) => {
         }
     });
 
-    // При отключении не удаляем пользователя, а переводим в офлайн и сохраняем время
+    // Отключение
     socket.on('disconnect', () => {
         console.log('Пользователь отключился:', socket.id);
         const user = users.find(u => u.id === socket.id);
         if (user) {
             user.isOnline = false;
             user.lastSeen = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            user.id = null; // сбрасываем сокет-id
+            user.id = null;
+
+            // Обновляем статусы онлайн/офлайн для всех, у кого он в контактах
+            for (let ownerPhone in userContacts) {
+                let contact = userContacts[ownerPhone].find(c => c.phone === user.phone);
+                if (contact) {
+                    contact.isOnline = false;
+                    contact.lastSeen = user.lastSeen;
+                    sendUpdatedContacts(ownerPhone);
+                }
+            }
         }
-        io.emit('users_list', users);
     });
 });
+
+// Вспомогательная функция для отправки актуального списка контактов конкретному пользователю
+function sendUpdatedContacts(phone) {
+    const userObj = users.find(u => u.phone === phone);
+    if (userObj && userObj.id) {
+        // Подтягиваем актуальные данные статусов для каждого контакта из общего пула users
+        if (userContacts[phone]) {
+            userContacts[phone] = userContacts[phone].map(c => {
+                const freshUser = users.find(u => u.phone === c.phone);
+                if (freshUser) {
+                    return {
+                        ...c,
+                        name: freshUser.name,
+                        avatar: freshUser.avatar,
+                        isOnline: freshUser.isOnline,
+                        lastSeen: freshUser.lastSeen
+                    };
+                }
+                return c;
+            });
+        }
+        io.to(userObj.id).emit('contacts_list', userContacts[phone] || []);
+    }
+}
 
 server.listen(3000, () => {
     console.log('Сервер запущен на http://localhost:3000');
