@@ -15,19 +15,32 @@ const users = {};
 io.on('connection', (socket) => {
     console.log('Пользователь подключился:', socket.id);
 
-    // Обработка входа / подтверждения (клиент теперь генерирует код сам, 
-    // поэтому сервер просто регистрирует пользователя по телефону и имени)
+    // Регистрация или верификация пользователя
     socket.on('verify_code', (data) => {
         const { phone, name } = data;
         if (!phone || !name) return;
 
-        // Сохраняем пользователя в общем списке по его номеру телефона
         users[phone] = { socketId: socket.id, phone, name };
         socket.userPhone = phone;
 
         console.log(`Пользователь вошел: ${name} (${phone})`);
+        io.emit('users_list', Object.values(users));
+    });
 
-        // Рассылаем обновленный список всех пользователей всем клиентам
+    // Обновление профиля пользователя
+    socket.on('update_profile', (data) => {
+        const { oldPhone, phone, name } = data;
+        if (!phone || !name) return;
+
+        // Если номер телефона изменился, удаляем старый ключ
+        if (oldPhone && oldPhone !== phone && users[oldPhone]) {
+            delete users[oldPhone];
+        }
+
+        users[phone] = { socketId: socket.id, phone, name };
+        socket.userPhone = phone;
+
+        console.log(`Профиль обновлен: ${name} (${phone})`);
         io.emit('users_list', Object.values(users));
     });
 
@@ -40,7 +53,6 @@ io.on('connection', (socket) => {
             const sender = users[socket.userPhone];
             const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-            // Отправляем сообщение получателю
             io.to(recipient.socketId).emit('message', {
                 fromPhone: socket.userPhone,
                 fromName: sender ? sender.name : 'Неизвестный',
@@ -50,12 +62,11 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Обработка отключения пользователя
+    // Отключение пользователя
     socket.on('disconnect', () => {
         if (socket.userPhone && users[socket.userPhone]) {
             console.log(`Пользователь отключился: ${users[socket.userPhone].name} (${socket.userPhone})`);
             delete users[socket.userPhone];
-            // Обновляем список пользователей у остальных
             io.emit('users_list', Object.values(users));
         } else {
             console.log('Пользователь отключился:', socket.id);
