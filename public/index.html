@@ -22,14 +22,13 @@
         #auth-screen input {
             width: 100%;
             padding: 12px 16px;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             border: 1px solid #e1e2e5;
             border-radius: 8px;
             font-size: 15px;
             outline: none;
             background: #fff;
             text-align: center;
-            letter-spacing: 1px;
         }
         #auth-screen button {
             width: 100%;
@@ -41,6 +40,7 @@
             font-size: 16px;
             cursor: pointer;
             font-weight: 600;
+            margin-top: 10px;
         }
         #auth-screen button:hover { background: #008f72; }
 
@@ -255,19 +255,20 @@
 
     <div class="whatsapp-bg-top"></div>
 
-    <!-- Экран авторизации по номеру -->
+    <!-- Экран авторизации (Телефон + Имя) -->
     <div id="auth-screen">
         <h2>WhatsApp Web</h2>
-        <p>Введите номер телефона для входа</p>
+        <p>Введите номер телефона и ваше имя</p>
         <input type="text" id="phone-input" placeholder="+7 (___) ___-__-__" autocomplete="off">
-        <button id="login-btn">Войти</button>
+        <input type="text" id="name-input" placeholder="Ваше имя..." autocomplete="off">
+        <button id="login-btn">Войти в чат</button>
     </div>
 
     <!-- Основной интерфейс -->
     <div id="chat-screen">
         <div class="sidebar">
             <div class="sidebar-header">
-                <div class="user-avatar-placeholder" id="my-avatar-label">📞</div>
+                <div class="user-avatar-placeholder" id="my-avatar-label">Я</div>
             </div>
             <div class="search-container">
                 <input type="text" class="search-box" placeholder="Поиск или новый чат">
@@ -277,8 +278,11 @@
         
         <div class="chat-area">
             <div class="chat-header">
-                <div class="user-avatar-placeholder" id="active-avatar-label">📱</div>
-                <div style="font-weight: 500; color: #111b21; font-size: 16px;" id="active-chat-title">Выберите чат</div>
+                <div class="user-avatar-placeholder" id="active-avatar-label">💬</div>
+                <div>
+                    <div style="font-weight: 500; color: #111b21; font-size: 16px;" id="active-chat-title">Выберите чат</div>
+                    <div style="font-size: 12px; color: #667781;" id="active-chat-phone"></div>
+                </div>
             </div>
             
             <div class="messages-container" id="messages"></div>
@@ -295,16 +299,18 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        let myPhone = '';
-        let activeRecipient = null;
+        let myData = null;
+        let activeRecipientPhone = null;
         const messagesStore = {};
 
         const authScreen = document.getElementById('auth-screen');
         const chatScreen = document.getElementById('chat-screen');
         const phoneInput = document.getElementById('phone-input');
+        const nameInput = document.getElementById('name-input');
         const loginBtn = document.getElementById('login-btn');
         const usersList = document.getElementById('users-list');
         const activeChatTitle = document.getElementById('active-chat-title');
+        const activeChatPhone = document.getElementById('active-chat-phone');
         const activeAvatarLabel = document.getElementById('active-avatar-label');
         const myAvatarLabel = document.getElementById('my-avatar-label');
         const messagesContainer = document.getElementById('messages');
@@ -312,7 +318,7 @@
         const messageInput = document.getElementById('message-input');
         const sendBtn = document.getElementById('send-btn');
 
-        // Простая маска ввода номера телефона
+        // Маска ввода номера телефона
         phoneInput.oninput = (e) => {
             let val = e.target.value.replace(/\D/g, '');
             if (val.startsWith('7') || val.startsWith('8')) {
@@ -328,15 +334,20 @@
 
         loginBtn.onclick = () => {
             const phone = phoneInput.value.trim();
+            const name = nameInput.value.trim();
             const cleanDigits = phone.replace(/\D/g, '');
+
             if (cleanDigits.length < 11) {
                 return alert('Введите полный номер телефона!');
             }
+            if (!name) {
+                return alert('Введите ваше имя!');
+            }
             
-            socket.emit('register', phone, (response) => {
+            socket.emit('register', { phone, name }, (response) => {
                 if (response.success) {
-                    myPhone = response.phone;
-                    myAvatarLabel.textContent = '📞';
+                    myData = response.user;
+                    myAvatarLabel.textContent = myData.name.charAt(0).toUpperCase();
                     authScreen.style.display = 'none';
                     chatScreen.style.display = 'grid';
                 } else {
@@ -347,23 +358,24 @@
 
         socket.on('users_list', (users) => {
             usersList.innerHTML = '';
-            users.forEach(userPhone => {
-                if (userPhone === myPhone) return;
+            users.forEach(user => {
+                if (user.phone === myData.phone) return;
                 const li = document.createElement('li');
-                if (userPhone === activeRecipient) li.classList.add('active');
+                if (user.phone === activeRecipientPhone) li.classList.add('active');
                 
                 li.innerHTML = `
-                    <div class="user-avatar-placeholder">📱</div>
+                    <div class="user-avatar-placeholder">${user.name.charAt(0).toUpperCase()}</div>
                     <div class="contact-info">
-                        <span class="contact-name">${userPhone}</span>
-                        <span class="contact-status">В сети</span>
+                        <span class="contact-name">${user.name}</span>
+                        <span class="contact-status">${user.phone}</span>
                     </div>
                 `;
                 
                 li.onclick = () => {
-                    activeRecipient = userPhone;
-                    activeChatTitle.textContent = userPhone;
-                    activeAvatarLabel.textContent = '📱';
+                    activeRecipientPhone = user.phone;
+                    activeChatTitle.textContent = user.name;
+                    activeChatPhone.textContent = user.phone;
+                    activeAvatarLabel.textContent = user.name.charAt(0).toUpperCase();
                     inputArea.style.display = 'flex';
                     document.querySelectorAll('#users-list li').forEach(el => el.classList.remove('active'));
                     li.classList.add('active');
@@ -374,9 +386,9 @@
         });
 
         socket.on('message', (data) => {
-            if (!messagesStore[data.from]) messagesStore[data.from] = [];
-            messagesStore[data.from].push({ text: data.text, time: data.time, incoming: true });
-            if (activeRecipient === data.from) renderMessages();
+            if (!messagesStore[data.fromPhone]) messagesStore[data.fromPhone] = [];
+            messagesStore[data.fromPhone].push({ text: data.text, time: data.time, incoming: true });
+            if (activeRecipientPhone === data.fromPhone) renderMessages();
         });
 
         sendBtn.onclick = sendMessage;
@@ -384,20 +396,20 @@
 
         function sendMessage() {
             const text = messageInput.value.trim();
-            if (!text || !activeRecipient) return;
+            if (!text || !activeRecipientPhone) return;
 
-            if (!messagesStore[activeRecipient]) messagesStore[activeRecipient] = [];
+            if (!messagesStore[activeRecipientPhone]) messagesStore[activeRecipientPhone] = [];
             const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            messagesStore[activeRecipient].push({ text, time, incoming: false });
+            messagesStore[activeRecipientPhone].push({ text, time, incoming: false });
 
-            socket.emit('private_message', { to: activeRecipient, message: text });
+            socket.emit('private_message', { toPhone: activeRecipientPhone, message: text });
             messageInput.value = '';
             renderMessages();
         }
 
         function renderMessages() {
             messagesContainer.innerHTML = '';
-            const msgs = messagesStore[activeRecipient] || [];
+            const msgs = messagesStore[activeRecipientPhone] || [];
             msgs.forEach(m => {
                 const div = document.createElement('div');
                 div.className = `message ${m.incoming ? 'incoming' : 'outgoing'}`;
