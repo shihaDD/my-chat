@@ -892,7 +892,7 @@
                     <button class="emoji-item">😎</button>
                     <button class="emoji-item">🤔</button>
                     <button class="emoji-item">😢</button>
-                    <button class="emoji-item">❤️</button>
+                    <button class="emoji-item">❤️️</button>
                     <button class="emoji-item">⚡</button>
                     <button class="emoji-item">🚀</button>
                     <button class="emoji-item">💀</button>
@@ -1551,6 +1551,11 @@
             localStorage.setItem('chat_sound', notificationSoundType);
             
             document.getElementById('settingsModal').style.display = 'none';
+            
+            // Моментально обновляем отображение профиля на экране
+            document.getElementById('myNameDisplay').innerText = myName;
+            applyAvatar(document.getElementById('myAvatar'), myAvatarData, myName);
+            
             loginUser(myName, myPhone, myAvatarData);
         });
 
