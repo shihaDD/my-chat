@@ -12,15 +12,14 @@ const io = new Server(server, {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Хранилище данных в памяти
+// База данных в памяти
 const users = new Map(); // username -> { password, nickname }
 const friendships = new Map(); // username -> Set of friend usernames
 const customNames = new Map(); // "user1:user2" -> customNickname
-const messages = []; // Массив сообщений чата
-const directMessages = []; // Массив личных сообщений
-const feedItems = []; // Элементы ленты TikTok/мемов
+const messages = []; // Сообщения общего чата
+const feedItems = []; // Лента TikTok / мемов
 
-// Инициализация стартовых элементов ленты для бесконечного скролла
+// Инициализация стартовых элементов ленты
 for (let i = 1; i <= 10; i++) {
   feedItems.push({
     id: i,
@@ -58,7 +57,6 @@ app.post('/api/login', (req, res) => {
 io.on('connection', (socket) => {
   console.log('Пользователь подключился:', socket.id);
 
-  // Авторизация по сокету
   socket.on('auth', ({ username }) => {
     socket.data.username = username;
     socket.join('main-room');
@@ -70,7 +68,7 @@ io.on('connection', (socket) => {
     broadcastUsers(socket);
   });
 
-  // Общий чат
+  // Сообщения чата
   socket.on('chat_message', (data) => {
     const msg = {
       id: Date.now(),
@@ -85,14 +83,13 @@ io.on('connection', (socket) => {
 
   // Индикаторы печати / отправки фото
   socket.on('typing_status', (statusData) => {
-    // statusData: { type: 'typing' | 'photo', active: true/false }
     socket.broadcast.to('main-room').emit('user_typing', {
       username: socket.data.username,
       ...statusData
     });
   });
 
-  // Управление друзьями
+  // Друзья
   socket.on('add_friend', ({ targetUser }) => {
     const user = socket.data.username;
     if (users.has(targetUser) && user !== targetUser) {
@@ -102,7 +99,7 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Изменение псевдонима друга
+  // Кастомное имя / псевдоним друга
   socket.on('set_custom_name', ({ targetUser, customName }) => {
     const user = socket.data.username;
     const key = `${user}:${targetUser}`;
@@ -114,29 +111,20 @@ io.on('connection', (socket) => {
     socket.emit('custom_name_updated', { targetUser, customName });
   });
 
-  // WebRTC Сигнализация для звонков
+  // WebRTC Сигнализация
   socket.on('webrtc_offer', (data) => {
-    socket.to(data.target).emit('webrtc_offer', {
-      offer: data.offer,
-      sender: socket.data.username
-    });
+    socket.to(data.target).emit('webrtc_offer', { offer: data.offer, sender: socket.data.username });
   });
 
   socket.on('webrtc_answer', (data) => {
-    socket.to(data.target).emit('webrtc_answer', {
-      answer: data.answer,
-      sender: socket.data.username
-    });
+    socket.to(data.target).emit('webrtc_answer', { answer: data.answer, sender: socket.data.username });
   });
 
   socket.on('webrtc_ice_candidate', (data) => {
-    socket.to(data.target).emit('webrtc_ice_candidate', {
-      candidate: data.candidate,
-      sender: socket.data.username
-    });
+    socket.to(data.target).emit('webrtc_ice_candidate', { candidate: data.candidate, sender: socket.data.username });
   });
 
-  // Лента Мемов и TikTok (Бесконечный скролл и синхронизация)
+  // Бесконечный скролл ленты
   socket.on('load_more_feed', () => {
     const lastId = feedItems.length > 0 ? feedItems[feedItems.length - 1].id : 0;
     const newItems = [];
@@ -146,14 +134,13 @@ io.on('connection', (socket) => {
         id,
         type: id % 3 === 0 ? 'video' : 'image',
         url: id % 3 === 0 ? 'https://www.w3schools.com/html/mov_bbb.mp4' : `https://picsum.photos/seed/memeNew${id}/400/600`,
-        caption: `Мем / Видео #${id} из бесконечной ленты`,
+        caption: `Мем / Видео #${id} из ленты`,
         author: 'Автоподборка',
         likes: Math.floor(Math.random() * 50),
         comments: []
       });
     }
     feedItems.push(...newItems);
-    // Отправляем всем совместное обновление ленты для синхронизированного скролла
     io.emit('feed_updated', feedItems);
   });
 
