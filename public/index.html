@@ -120,20 +120,22 @@
 
     .nav-tabs {
       display: flex;
+      flex-wrap: wrap;
       border-bottom: 1px solid var(--border);
       background: var(--bg-main);
     }
 
     .tab-btn {
-      flex: 1;
-      padding: 12px 8px;
+      flex: 1 1 50%;
+      padding: 10px 4px;
       background: none;
       border: none;
       color: var(--text-muted);
       cursor: pointer;
-      font-size: 13px;
+      font-size: 11px;
       font-weight: 600;
       transition: 0.2s;
+      text-align: center;
     }
 
     .tab-btn.active {
@@ -260,7 +262,7 @@
       cursor: pointer;
     }
 
-    /* Лента TikTok и мемов */
+    /* Лента */
     .feed-wrapper {
       flex: 1;
       overflow-y: auto;
@@ -382,15 +384,17 @@
     </div>
   </div>
 
-  <!-- Модальное окно настроек (Аудио, Рация и бинды) -->
+  <!-- Модальное окно настроек (Аудио, Рация и выбор устройств с разрешением микрофона) -->
   <div id="settings-modal">
     <div class="settings-content">
-      <h3>Настройки</h3>
-      <label style="font-size:12px; color:var(--text-muted);">Микрофон:</label>
-      <select id="mic-select"><option>Основной микрофон</option></select>
+      <h3>Настройки аудио и рации</h3>
+      <button onclick="requestMicrophonePermission()" style="background:#ff3366; color:#fff; margin-bottom:15px;">🔒 Разрешить доступ к микрофону</button>
       
-      <label style="font-size:12px; color:var(--text-muted); margin-top:10px; display:block;">Динамики:</label>
-      <select id="speaker-select"><option>Основные динамики</option></select>
+      <label style="font-size:12px; color:var(--text-muted);">Микрофон:</label>
+      <select id="mic-select"><option value="">Запросите доступ к микрофону...</option></select>
+      
+      <label style="font-size:12px; color:var(--text-muted); margin-top:10px; display:block;">Наушники / Динамики:</label>
+      <select id="speaker-select"><option value="">Вывод звука (Динамики)</option></select>
 
       <h3 style="margin-top:20px; font-size:15px;">Рация (Push-to-Talk)</h3>
       <p style="font-size:12px; color:var(--text-muted); margin-bottom:5px;">Текущая привязка:</p>
@@ -403,16 +407,16 @@
 
   <!-- Основное приложение -->
   <div id="app-container">
-    <!-- Левая панель: Навигация и списки -->
+    <!-- Левая панель: Навигация и списки (Чаты, Друзья, Сообщества, Лента) -->
     <div class="left-sidebar">
       <div class="app-logo">
         <span id="current-username-view">Профиль</span>
-        <button onclick="toggleSettingsModal()" style="background:none; border:none; color:var(--accent); cursor:pointer; font-size:18px;" title="Настройки">⚙️</button>
+        <button onclick="toggleSettingsModal()" style="background:none; border:none; color:var(--accent); cursor:pointer; font-size:18px;" title="Настройки">⚙️️</button>
       </div>
       <div class="nav-tabs">
         <button class="tab-btn active" onclick="switchAppTab('chats')">Чаты</button>
         <button class="tab-btn" onclick="switchAppTab('friends')">Друзья</button>
-        <button class="tab-btn" onclick="switchAppTab('communities')">Группы</button>
+        <button class="tab-btn" onclick="switchAppTab('communities')">Сообщества</button>
         <button class="tab-btn" onclick="switchAppTab('feed')">Лента</button>
       </div>
       <div class="tab-body" id="left-tab-content">
@@ -449,10 +453,15 @@
     let myUser = null;
     let activeTab = 'chats';
     let feedDataCache = [];
+    let usersCache = [];
     let typingTimeout = null;
 
     let boundKeyConfig = { type: 'mouse', code: 0, name: 'Левая кнопка мыши (ЛКМ)' };
     let isBindingActive = false;
+    let localStream = null;
+    let peerConnection = null;
+
+    const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
     function switchAuthMode() {
       isReg = !isReg;
@@ -491,15 +500,14 @@
       socket = io();
       socket.emit('auth', { username: myUser });
 
-      socket.initGlobalListeners = true;
       socket.on('init_data', (data) => {
         renderChatMessages(data.messages);
         feedDataCache = data.feed;
-        renderLeftTab(data.users);
       });
 
       socket.on('users_list', (users) => {
-        renderLeftTab(users);
+        usersCache = users;
+        renderLeftTab();
       });
 
       socket.on('chat_message', (msg) => {
@@ -522,8 +530,72 @@
         if (activeTab === 'feed') renderFeedStream();
       });
 
-      socket.on('custom_name_updated', (data) => {
-        alert(`Псевдоним для ${data.targetUser} сохранен!`);
+      // WebRTC Сигнализация для звонков
+      socket.on('webrtc_offer', async ({ offer, sender }) => {
+        if (!confirm(
+          `Входящий звонок от пользователя ${sender}. Принять?`
+        )) return;
+
+        await requestMicrophonePermission();
+        peerConnection = new RTCPeerConnection(rtcConfig);
+        if (localStream) {
+          localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+        }
+
+        peerConnection.onicecandidate = e => {
+          if (e.candidate) socket.emit('webrtc_ice_candidate', { candidate: e.candidate, target: sender });
+        };
+        peerConnection.ontrack = e => {
+          const audioElem = new Audio();
+          audioElem.srcObject = e.streams[0];
+          audioElem.autoplay = true;
+          const speakerId = document.getElementById('speaker-select').value;
+          if (speakerId && audioElem.setSinkId) audioElem.setSinkId(speakerId);
+        };
+
+        await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+        socket.emit('webrtc_answer', { answer, target: sender });
+      });
+
+      socket.on('webrtc_answer', async ({ answer }) => {
+        if (peerConnection) {
+          await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+        }
+      });
+
+      socket.on('webrtc_ice_candidate', async ({ candidate }) => {
+        if (peerConnection) {
+          await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+        }
+      });
+    }
+
+    async function requestMicrophonePermission() {
+      try {
+        localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        alert('Доступ к микрофону успешно разрешен!');
+        await loadAudioDevices();
+      } catch (err) {
+        alert('Не удалось получить доступ к микрофону: ' + err.message);
+      }
+    }
+
+    async function loadAudioDevices() {
+      if (!navigator.mediaDevices?.enumerateDevices) return;
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const micSelect = document.getElementById('mic-select');
+      const speakerSelect = document.getElementById('speaker-select');
+      micSelect.innerHTML = '';
+      speakerSelect.innerHTML = '';
+
+      devices.forEach(device => {
+        const option = document.createElement('option');
+        option.value = device.deviceId;
+        option.text = device.label || `${device.kind} (${device.deviceId.slice(0, 5)}...)`;
+        if (device.kind === 'audioinput') micSelect.appendChild(option);
+        if (device.kind === 'audiooutput') speakerSelect.appendChild(option);
       });
     }
 
@@ -552,9 +624,10 @@
           </div>
         `;
       }
+      renderLeftTab();
     }
 
-    function renderLeftTab(usersList) {
+    function renderLeftTab() {
       const container = document.getElementById('left-tab-content');
       if (!container) return;
       container.innerHTML = '';
@@ -562,8 +635,8 @@
       if (activeTab === 'chats') {
         container.innerHTML = '<p style="color:var(--text-muted); font-size:13px;">Общий чат активен в центре.</p>';
       } else if (activeTab === 'friends') {
-        usersList.forEach(u => {
-          if (u.username === myUser) return;
+        container.innerHTML = '<h4 style="font-size:12px; color:var(--accent); margin-bottom:8px;">Ваши друзья</h4>';
+        usersCache.filter(u => u.isFriend && u.username !== myUser).forEach(u => {
           const div = document.createElement('div');
           div.className = 'user-card';
           div.innerHTML = `
@@ -572,14 +645,44 @@
           `;
           container.appendChild(div);
         });
+
+        container.innerHTML += '<h4 style="font-size:12px; color:var(--accent); margin:15px 0 8px 0;">Входящие заявки</h4>';
+        usersCache.filter(u => u.hasIncoming).forEach(u => {
+          const div = document.createElement('div');
+          div.className = 'user-card';
+          div.innerHTML = `
+            <span>${u.username}</span>
+            <button style="padding:4px 8px; background:var(--accent); border:none; border-radius:4px; cursor:pointer;" onclick="acceptRequest('${u.username}')">Принять</button>
+          `;
+          container.appendChild(div);
+        });
+
+        container.innerHTML += '<h4 style="font-size:12px; color:var(--accent); margin:15px 0 8px 0;">Найти пользователей</h4>';
+        usersCache.filter(u => u.username !== myUser && !u.isFriend && !u.hasIncoming && !u.hasOutgoing).forEach(u => {
+          const div = document.createElement('div');
+          div.className = 'user-card';
+          div.innerHTML = `
+            <span>${u.username}</span>
+            <button style="padding:4px 8px; background:var(--border); color:var(--text); border:none; border-radius:4px; cursor:pointer;" onclick="sendFriendRequest('${u.username}')">Добавить</button>
+          `;
+          container.appendChild(div);
+        });
       } else if (activeTab === 'communities') {
-        container.innerHTML = '<p style="color:var(--text-muted); font-size:13px;">Группы и сообщества.</p>';
+        container.innerHTML = '<p style="color:var(--text-muted); font-size:13px;">Здесь отображаются ваши сообщества и группы.</p>';
       } else if (activeTab === 'feed') {
         container.innerHTML = '<p style="color:var(--text-muted); font-size:13px;">Совместный просмотр ленты.</p>';
       }
     }
 
-    // Профиль друга в правой панели
+    function sendFriendRequest(targetUser) {
+      socket.emit('send_friend_request', { targetUser });
+    }
+
+    function acceptRequest(targetUser) {
+      socket.emit('accept_friend_request', { targetUser });
+    }
+
+    // Профиль друга в правой панели с функциями отправки сообщений и звонков
     function openUserProfile(username, customName) {
       const rightBox = document.getElementById('right-profile-box');
       rightBox.innerHTML = `
@@ -588,8 +691,8 @@
         <label style="font-size:12px; color:var(--text-muted);">Изменить псевдоним:</label>
         <input type="text" id="edit-custom-name" value="${customName}">
         <button onclick="saveUserAlias('${username}')">Сохранить</button>
-        <button style="background:var(--accent); color:var(--bg-main);" onclick="callUser('${username}')">Позвонить</button>
-        <button style="background:#3366ff; color:#fff;" onclick="messageUser('${username}')">Написать</button>
+        <button style="background:var(--accent); color:var(--bg-main);" onclick="callUser('${username}')">📞 Позвонить</button>
+        <button style="background:#3366ff; color:#fff;" onclick="messageUser('${username}')">💬 Написать</button>
       `;
     }
 
@@ -598,13 +701,33 @@
       socket.emit('set_custom_name', { targetUser, customName: val });
     }
 
-    function callUser(username) {
-      alert(`Звонок пользователю ${username}...`);
+    async function callUser(username) {
+      if (!localStream) await requestMicrophonePermission();
+      if (!localStream) return alert('Для звонка нужен микрофон!');
+
+      peerConnection = new RTCPeerConnection(rtcConfig);
+      localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+      peerConnection.onicecandidate = e => {
+        if (e.candidate) socket.emit('webrtc_ice_candidate', { candidate: e.candidate, target: username });
+      };
+      peerConnection.ontrack = e => {
+        const audioElem = new Audio();
+        audioElem.srcObject = e.streams[0];
+        audioElem.autoplay = true;
+        const speakerId = document.getElementById('speaker-select').value;
+        if (speakerId && audioElem.setSinkId) audioElem.setSinkId(speakerId);
+      };
+
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+      socket.emit('webrtc_offer', { offer, target: username });
+      alert(`Звонок пользователю ${username} отправлен...`);
     }
 
     function messageUser(username) {
-      alert(`Открыт чат с ${username}`);
       switchAppTab('chats');
+      alert(`Открыт чат с пользователем ${username}`);
     }
 
     // Настройки
@@ -613,7 +736,7 @@
       modal.style.display = modal.style.display === 'flex' ? 'none' : 'flex';
     }
 
-    // Индикаторы печати и отправки фото
+    // Чат и индикаторы
     function emitTypingEvent() {
       socket.emit('typing_status', { type: 'typing', active: true });
       clearTimeout(typingTimeout);
@@ -667,7 +790,7 @@
       messages.forEach(m => appendChatMessage(m));
     }
 
-    // Бесконечный скролл ленты
+    // Лента
     function renderFeedStream() {
       const container = document.getElementById('feed-scroll-box');
       if (!container) return;
@@ -702,7 +825,7 @@
       socket.emit('like_feed_item', { itemId });
     }
 
-    // Настройка привязки клавиатуры и мыши (включая боковые кнопки) для рации
+    // Настройка привязки клавиш
     function startKeyBinding() {
       isBindingActive = true;
       const display = document.getElementById('ptt-key-display');
