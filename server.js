@@ -329,6 +329,7 @@ app.post('/api/create-group', async (req, res) => {
         name: name.trim(),
         creator,
         members: [creator],
+        roles: { [creator]: 'Создатель' },
         messages: []
     };
 
@@ -343,6 +344,8 @@ app.post('/api/join-group', async (req, res) => {
 
     if (!db.groups[groupId].members.includes(login)) {
         db.groups[groupId].members.push(login);
+        if (!db.groups[groupId].roles) db.groups[groupId].roles = {};
+        if (!db.groups[groupId].roles[login]) db.groups[groupId].roles[login] = 'Участник';
         await saveDatabase(db);
     }
     res.json({ success: true, db });
@@ -365,15 +368,51 @@ app.post('/api/send-group-message', async (req, res) => {
     res.json({ success: true, db });
 });
 
+app.post('/api/update-group', async (req, res) => {
+    let { groupId, login, name, avatar } = req.body;
+    let db = await loadDatabase();
+    if (!db.groups || !db.groups[groupId]) return res.status(400).json({ success: false, error: 'Сообщество не найдено' });
+
+    const g = db.groups[groupId];
+    const myRole = g.roles?.[login] || (g.creator === login ? 'Создатель' : 'Участник');
+
+    if (g.creator !== login && myRole !== 'Администратор') {
+        return res.status(400).json({ success: false, error: 'Недостаточно прав' });
+    }
+
+    if (name) g.name = name.trim();
+    if (avatar) g.avatar = avatar;
+
+    await saveDatabase(db);
+    res.json({ success: true, db });
+});
+
+app.post('/api/set-group-role', async (req, res) => {
+    let { groupId, login, targetLogin, newRole } = req.body;
+    let db = await loadDatabase();
+    if (!db.groups || !db.groups[groupId]) return res.status(400).json({ success: false });
+
+    const g = db.groups[groupId];
+    if (g.creator !== login) {
+        return res.status(400).json({ success: false, error: 'Только создатель может изменять роли участников' });
+    }
+
+    if (!g.roles) g.roles = {};
+    g.roles[targetLogin] = newRole;
+
+    await saveDatabase(db);
+    res.json({ success: true, db });
+});
+
 app.get('/api/news', async (req, res) => {
     try {
-        const response = await fetch('https://meme-api.com/gimme/20');
+        const response = await fetch('https://meme-api.com/gimme/pikabu/20');
         const data = await response.json();
         const memes = (data.memes || []).map(m => ({
             title: m.title,
-            image: m.url,
-            author: m.author,
-            link: m.postLink
+            url: m.url,
+            isVideos: m.url.endsWith('.mp4') || m.url.endsWith('.webm'),
+            author: m.author || 'Сеть'
         }));
         res.json({ success: true, memes });
     } catch (e) {
