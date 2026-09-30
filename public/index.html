@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Мессенджер</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
@@ -15,6 +15,69 @@
         .snap-start { scroll-snap-align: start; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .mobile-back-btn { display: none; }
+
+        /* МОБИЛЬНАЯ АДАПТАЦИЯ (RESPONSIVE STYLES) */
+        @media (max-width: 768px) {
+            body {
+                overflow: hidden;
+                height: 100dvh;
+            }
+            #main-app {
+                flex-direction: column-reverse !important;
+                height: 100dvh !important;
+            }
+            /* Нижняя панель навигации на смартфонах */
+            .nav-sidebar {
+                width: 100% !important;
+                height: 60px !important;
+                flex-direction: row !important;
+                position: fixed !important;
+                bottom: 0 !important;
+                left: 0 !important;
+                z-index: 100;
+                background: #090d16 !important;
+                border-top: 1px solid #1f2937 !important;
+                border-right: none !important;
+                padding: 0 5px !important;
+                justify-content: space-around !important;
+            }
+            .nav-sidebar button {
+                width: auto !important;
+                height: auto !important;
+                margin: 0 !important;
+                padding: 4px 8px !important;
+            }
+            .nav-sidebar button span:last-child {
+                display: none; /* Скрываем подписи на узких экранах для экономии места */
+            }
+            .content-wrapper {
+                height: calc(100dvh - 60px) !important;
+                margin-bottom: 60px !important;
+            }
+            /* Списки чатов и активный чат на весь экран */
+            .chat-list-panel {
+                width: 100% !important;
+                position: absolute !important;
+                height: 100% !important;
+                z-index: 10;
+                transition: transform 0.3s ease;
+                background: #090d16 !important;
+            }
+            .chat-list-panel.mobile-hidden {
+                transform: translateX(-100%);
+            }
+            .active-chat-panel {
+                width: 100% !important;
+                position: absolute !important;
+                height: 100% !important;
+                z-index: 5;
+            }
+            .mobile-back-btn {
+                display: inline-block !important;
+            }
+        }
     </style>
 </head>
 <body class="bg-gray-950 text-gray-100 h-screen overflow-hidden font-sans select-none">
@@ -95,39 +158,39 @@
     <div id="main-app" class="flex h-screen w-screen hidden">
         
         <!-- Сайдбар Навигации -->
-        <div class="w-24 bg-gray-900 border-r border-gray-800 flex flex-col items-center py-4 justify-between flex-shrink-0 z-20">
-            <div class="space-y-3 flex flex-col items-center w-full">
-                <button onclick="switchTab('profile')" id="nav-profile" title="Профиль" class="w-12 h-12 rounded-2xl p-0.5 bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center shadow-[0_0_15px_rgba(168,85,247,0.5)] mb-2 hover:scale-105 transition group">
+        <div id="nav-sidebar" class="w-24 bg-gray-900 border-r border-gray-800 flex flex-col items-center py-4 justify-between flex-shrink-0 z-20 nav-sidebar">
+            <div class="space-y-3 flex flex-col items-center w-full md:space-y-3 flex-row md:flex-col justify-around md:justify-start">
+                <button onclick="switchTab('profile')" id="nav-profile" title="Профиль" class="w-10 h-10 md:w-12 md:h-12 rounded-2xl p-0.5 bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center shadow-[0_0_15px_rgba(168,85,247,0.5)] mb-0 md:mb-2 hover:scale-105 transition group">
                     <img id="my-avatar-icon" src="" class="w-full h-full rounded-[14px] object-cover">
                 </button>
 
-                <button onclick="switchTab('chats')" id="nav-chats" title="Чаты" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
+                <button onclick="switchTab('chats')" id="nav-chats" title="Чаты" class="flex flex-col items-center py-2 hover:bg-gray-800/80 text-gray-400 transition">
                     <span class="text-lg mb-0.5">💬</span>
                     <span class="text-[10px] font-medium tracking-tight">Чаты</span>
                 </button>
-                <button onclick="switchTab('friends')" id="nav-friends" title="Друзья" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
+                <button onclick="switchTab('friends')" id="nav-friends" title="Друзья" class="flex flex-col items-center py-2 hover:bg-gray-800/80 text-gray-400 transition">
                     <span class="text-lg mb-0.5">👥</span>
                     <span class="text-[10px] font-medium tracking-tight">Друзья</span>
                 </button>
-                <button onclick="switchTab('groups')" id="nav-groups" title="Сообщества" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
+                <button onclick="switchTab('groups')" id="nav-groups" title="Сообщества" class="flex flex-col items-center py-2 hover:bg-gray-800/80 text-gray-400 transition">
                     <span class="text-lg mb-0.5">🏢</span>
                     <span class="text-[10px] font-medium tracking-tight">Группы</span>
                 </button>
-                <button onclick="switchTab('news')" id="nav-news" title="Лента Новостей" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
+                <button onclick="switchTab('news')" id="nav-news" title="Лента Новостей" class="flex flex-col items-center py-2 hover:bg-gray-800/80 text-gray-400 transition">
                     <span class="text-lg mb-0.5">📰</span>
                     <span class="text-[10px] font-medium tracking-tight">Новости</span>
                 </button>
-                <button onclick="switchTab('tiktok')" id="nav-tiktok" title="Видео-Приколы" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
+                <button onclick="switchTab('tiktok')" id="nav-tiktok" title="Видео-Приколы" class="flex flex-col items-center py-2 hover:bg-gray-800/80 text-gray-400 transition">
                     <span class="text-lg mb-0.5">🎬</span>
                     <span class="text-[10px] font-medium tracking-tight">Приколы</span>
                 </button>
-                <button onclick="switchTab('music')" id="nav-music" title="Онлайн Радио" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
+                <button onclick="switchTab('music')" id="nav-music" title="Онлайн Радио" class="flex flex-col items-center py-2 hover:bg-gray-800/80 text-gray-400 transition">
                     <span class="text-lg mb-0.5">📻</span>
                     <span class="text-[10px] font-medium tracking-tight">Радио</span>
                 </button>
             </div>
 
-            <div class="flex flex-col items-center w-full">
+            <div class="hidden md:flex flex-col items-center w-full">
                 <button onclick="openSettingsModal()" id="nav-settings" title="Настройки" class="flex flex-col items-center w-full py-3 hover:bg-gray-800/80 text-gray-400 transition">
                     <span class="text-lg mb-0.5">⚙</span>
                     <span class="text-[10px] font-medium tracking-tight">Настройки</span>
@@ -136,11 +199,11 @@
         </div>
 
         <!-- Центральная Панель Контента -->
-        <div class="flex-1 flex overflow-hidden">
+        <div class="flex-1 flex overflow-hidden content-wrapper relative">
             
             <!-- Вкладка: ЧАТЫ -->
-            <div id="tab-content-chats" class="flex-1 flex w-full">
-                <div class="w-80 bg-gray-900/60 border-r border-gray-800 flex flex-col flex-shrink-0">
+            <div id="tab-content-chats" class="flex-1 flex w-full relative overflow-hidden">
+                <div id="chat-list-panel" class="w-80 bg-gray-900/60 border-r border-gray-800 flex flex-col flex-shrink-0 chat-list-panel">
                     <div class="p-4 border-b border-gray-800 space-y-2">
                         <input type="text" id="chat-search" oninput="filterChats()" placeholder="Поиск по чатам..." class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500 transition">
                         <input type="text" id="message-history-search" oninput="searchMessagesInActiveChat()" placeholder="Поиск в истории сообщений..." class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 transition hidden">
@@ -172,8 +235,8 @@
                     </div>
                 </div>
 
-                <div id="active-chat-area" class="flex-1 flex flex-col bg-gray-950 relative">
-                    <div id="no-chat-selected" class="flex-1 flex flex-col items-center justify-center text-gray-500">
+                <div id="active-chat-area" class="flex-1 flex flex-col bg-gray-950 relative active-chat-panel">
+                    <div id="no-chat-selected" class="flex-1 flex flex-col items-center justify-center text-gray-500 p-4 text-center">
                         <div class="text-6xl mb-4 opacity-40">💬</div>
                         <div class="text-lg">Выберите чат или друга для начала общения</div>
                     </div>
@@ -181,6 +244,7 @@
                     <div id="chat-window" class="flex-1 flex flex-col hidden h-full">
                         <div class="p-4 bg-gray-900/80 backdrop-blur border-b border-gray-800 flex items-center justify-between z-10">
                             <div class="flex items-center space-x-3">
+                                <button onclick="backToChatList()" class="mobile-back-btn bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition">← Назад</button>
                                 <img id="active-chat-avatar" src="" class="w-10 h-10 rounded-full object-cover border border-purple-500/50">
                                 <div>
                                     <div id="active-chat-name" class="font-bold text-white flex items-center space-x-2"></div>
@@ -189,7 +253,7 @@
                             </div>
                             <div id="chat-actions" class="flex items-center space-x-2">
                                 <button id="btn-call-user" onclick="startDirectCall()" class="p-2 px-3 bg-green-600 hover:bg-green-500 rounded-xl text-white font-bold text-xs flex items-center space-x-1 transition shadow-[0_0_15px_rgba(34,197,94,0.3)]">
-                                    <span>📞 Аудиозвонок</span>
+                                    <span>📞 Звонок</span>
                                 </button>
                             </div>
                         </div>
@@ -518,7 +582,7 @@
     <!-- МОДАЛЬНОЕ ОКНО ГОЛОСОВОГО ЗВОНКА -->
     <div id="single-call-modal" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col items-center justify-between p-8 hidden">
         <div class="text-center text-white space-y-2 pt-10">
-            <div class="w-24 h-24 rounded-full bg-purple-600/30 border-2 border-purple-500 flex items-center justify-center mx-auto text-4xl shadow-[0_0_30px_rgba(168,85,247,0.4)]">🎙️</div>
+            <div class="w-24 h-24 rounded-full bg-purple-600/30 border-2 border-purple-500 flex items-center justify-center mx-auto text-4xl shadow-[0_0_30px_rgba(168,85,247,0.4)] animate-bounce">🎙️</div>
             <h2 id="call-partner-name" class="text-3xl font-bold">Голосовой вызов...</h2>
             <p id="call-status-text" class="text-gray-400 text-sm animate-pulse">Установление аудиосоединения</p>
         </div>
@@ -565,8 +629,8 @@
     </div>
 
     <!-- ПЛАВАЮЩЕЕ МИНИ-ОКОШКО СВЕРНУТОЙ КОНФЕРЕНЦИИ -->
-    <div id="minimized-call-widget" class="fixed bottom-6 right-6 z-50 bg-gray-900 border border-purple-500/60 p-4 rounded-2xl shadow-[0_0_25px_rgba(168,85,247,0.4)] flex items-center space-x-4 hidden backdrop-blur-md">
-        <div class="w-10 h-10 rounded-full bg-purple-600/30 border border-purple-500 flex items-center justify-center text-xl animate-pulse">🎙️</div>
+    <div id="minimized-call-widget" class="fixed bottom-16 md:bottom-6 right-6 z-50 bg-gray-900 border border-purple-500/60 p-4 rounded-2xl shadow-[0_0_25px_rgba(168,85,247,0.4)] flex items-center space-x-4 hidden backdrop-blur-md">
+        <div class="w-10 h-10 rounded-full bg-purple-600/30 border border-purple-500 flex items-center justify-center text-xl animate-pulse">🎙️️</div>
         <div>
             <div class="font-bold text-white text-xs">Голосовая конференция</div>
             <div class="text-[10px] text-purple-400">Звонок активен</div>
@@ -605,6 +669,7 @@
         let editingMessageId = null;
         let conferenceParticipants = {};
         let mutedByAdmin = false;
+        let outgoingRingtoneInterval = null;
 
         let appSettings = { audioDevice: '', audioOutput: '', pttMode: 'voice', pttKey: 'Space', micVolume: 80 };
         let isPttPressed = false;
@@ -969,6 +1034,44 @@
             } catch (e) {}
         }
 
+        // Звук исходящего вызова (гудки КПВ)
+        function startOutgoingRingtone() {
+            stopOutgoingRingtone();
+            playDialTone();
+            outgoingRingtoneInterval = setInterval(() => {
+                playDialTone();
+            }, 3000);
+        }
+
+        function stopOutgoingRingtone() {
+            if (outgoingRingtoneInterval) {
+                clearInterval(outgoingRingtoneInterval);
+                outgoingRingtoneInterval = null;
+            }
+        }
+
+        function playDialTone() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc1 = ctx.createOscillator();
+                const osc2 = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc1.type = 'sine';
+                osc1.frequency.setValueAtTime(425, ctx.currentTime);
+                osc2.type = 'sine';
+                osc2.frequency.setValueAtTime(450, ctx.currentTime);
+                gain.gain.setValueAtTime(0.06, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+                osc1.connect(gain);
+                osc2.connect(gain);
+                gain.connect(ctx.destination);
+                osc1.start();
+                osc2.start();
+                osc1.stop(ctx.currentTime + 1.2);
+                osc2.stop(ctx.currentTime + 1.2);
+            } catch (e) {}
+        }
+
         function renderRadioStations() {
             const list = document.getElementById('radio-stations-list');
             list.innerHTML = '';
@@ -1165,7 +1268,7 @@
                     renderChatsList();
                     socket.emit('refresh-db');
                 }
-            }, '⚠️');
+            }, '⚠️️');
         }
 
         socket.on('update-db', (updatedDb) => {
@@ -1176,7 +1279,6 @@
             renderMessages();
             if (activeChat && activeChat.type === 'group') {
                 if (!db.groups[activeChat.id]) {
-                    // Группа была удалена
                     activeChat = null;
                     document.getElementById('chat-window').classList.add('hidden');
                     document.getElementById('no-chat-selected').classList.remove('hidden');
@@ -1448,7 +1550,7 @@
                     }
                     showCustomModal('Успех', 'Группа успешно удалена', false, null, '✨');
                 } else {
-                    showCustomModal('Ошибка', data.error, false, null, '⚠️');
+                    showCustomModal('Ошибка', data.error, false, null, '⚠️️');
                 }
             }, '⚠️');
         }
@@ -1509,6 +1611,11 @@
             document.getElementById('chat-window').classList.remove('hidden');
             document.getElementById('message-history-search').classList.remove('hidden');
 
+            // На мобильных устройствах при выборе чата скрываем список чатов
+            if (window.innerWidth <= 768) {
+                document.getElementById('chat-list-panel').classList.add('mobile-hidden');
+            }
+
             const btnCall = document.getElementById('btn-call-user');
             const sidebar = document.getElementById('group-channels-sidebar');
 
@@ -1540,6 +1647,10 @@
             }
 
             renderMessages();
+        }
+
+        function backToChatList() {
+            document.getElementById('chat-list-panel').classList.remove('mobile-hidden');
         }
 
         function renderGroupSidebar(group) {
@@ -1627,7 +1738,7 @@
                 if (isMe && activeChat.type === 'user') {
                     actionsHTML = `
                         <div class="absolute -top-2 -left-16 bg-gray-900 border border-gray-700 rounded-lg p-1 hidden group-hover:flex space-x-1 shadow">
-                            <button onclick="startEditingMessage('${m.id}', \`${m.text.replace(/`/g, '\\`')}\`)" class="text-[10px] text-purple-400 hover:text-white px-1">✏️</button>
+                            <button onclick="startEditingMessage('${m.id}', \`${m.text.replace(/`/g, '\\`')}\`)" class="text-[10px] text-purple-400 hover:text-white px-1">✏️️</button>
                             <button onclick="deleteMessage('${m.id}')" class="text-[10px] text-red-400 hover:text-white px-1">🗑️</button>
                         </div>
                     `;
@@ -1981,7 +2092,7 @@
                 textInput.value = '';
                 renderGroupsFeed();
             } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠️️');
+                showCustomModal('Ошибка', data.error, false, null, '⚠');
             }
         }
 
@@ -2229,9 +2340,13 @@
             document.getElementById('btn-accept-call').classList.add('hidden');
             document.getElementById('single-call-modal').classList.remove('hidden');
 
+            // Запускаем звук исходящего вызова (гудки КПВ)
+            startOutgoingRingtone();
+
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
             } catch (err) {
+                stopOutgoingRingtone();
                 showCustomModal('Ошибка', 'Нет доступа к микрофону!', false, null, '⚠️');
                 return;
             }
@@ -2319,6 +2434,7 @@
         }
 
         socket.on('call-answered', async ({ answer }) => {
+            stopOutgoingRingtone(); // Останавливаем гудки при ответе
             document.getElementById('call-status-text').textContent = 'Разговор';
             await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
         });
@@ -2330,10 +2446,12 @@
         });
 
         socket.on('hang-up', () => {
+            stopOutgoingRingtone();
             closeCallUI();
         });
 
         function hangUpCall() {
+            stopOutgoingRingtone();
             if (callTargetUser) {
                 socket.emit('hang-up', { to: callTargetUser });
             }
@@ -2341,6 +2459,7 @@
         }
 
         function closeCallUI() {
+            stopOutgoingRingtone();
             if (localStream) localStream.getTracks().forEach(t => t.stop());
             if (peerConnection) peerConnection.close();
             peerConnection = null;
@@ -2555,7 +2674,7 @@
                 }
 
                 sidebarItem.innerHTML = `
-                    <span class="text-white font-bold">🎙️ ${label}</span>
+                    <span class="text-white font-bold">🎙️️ ${label}</span>
                     ${modButtons}
                 `;
                 sidebar.appendChild(sidebarItem);
