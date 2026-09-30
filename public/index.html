@@ -139,8 +139,9 @@
             <!-- Вкладка: ЧАТЫ -->
             <div id="tab-content-chats" class="flex-1 flex w-full">
                 <div class="w-80 bg-gray-900/60 border-r border-gray-800 flex flex-col flex-shrink-0">
-                    <div class="p-4 border-b border-gray-800">
+                    <div class="p-4 border-b border-gray-800 space-y-2">
                         <input type="text" id="chat-search" oninput="filterChats()" placeholder="Поиск по чатам..." class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500 transition">
+                        <input type="text" id="message-history-search" oninput="searchMessagesInActiveChat()" placeholder="Поиск в истории сообщений..." class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-purple-500 transition hidden">
                     </div>
                     <div id="chats-list" class="flex-1 overflow-y-auto p-2 space-y-1"></div>
                 </div>
@@ -164,6 +165,9 @@
                                 <button id="btn-call-user" onclick="startDirectCall()" class="p-2 px-3 bg-green-600 hover:bg-green-500 rounded-xl text-white font-bold text-xs flex items-center space-x-1 transition shadow-[0_0_15px_rgba(34,197,94,0.3)]">
                                     <span>📞 Аудиозвонок</span>
                                 </button>
+                                <button id="btn-group-settings-top" onclick="openActiveGroupSettings()" class="p-2 px-3 bg-gray-800 hover:bg-gray-700 rounded-xl text-purple-400 font-bold text-xs hidden flex items-center space-x-1 transition">
+                                    <span>⚙ Настройки</span>
+                                </button>
                                 <button id="btn-group-call" onclick="openGroupCallConfigModal()" class="p-2 px-3 bg-purple-600 hover:bg-purple-500 rounded-xl text-white font-bold text-xs hidden flex items-center space-x-1 transition shadow-[0_0_15px_rgba(168,85,247,0.3)]">
                                     <span>📞 Конференция</span>
                                 </button>
@@ -175,6 +179,12 @@
 
                         <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
                         <div id="typing-indicator" class="px-4 py-1 text-xs text-purple-400 italic min-h-[22px]"></div>
+
+                        <!-- ПАНЕЛЬ РЕДАКТИРОВАНИЯ СООБЩЕНИЯ -->
+                        <div id="editing-bar" class="bg-gray-900 px-4 py-2 border-t border-gray-800 flex items-center justify-between hidden">
+                            <div class="text-xs text-purple-400 font-semibold truncate">Редактирование: <span id="editing-text-preview" class="text-white"></span></div>
+                            <button onclick="cancelEditing()" class="text-xs text-gray-400 hover:text-white font-bold">✕ Отмена</button>
+                        </div>
 
                         <div id="chat-input-wrapper" class="p-4 bg-gray-900 border-t border-gray-800 flex items-center space-x-2">
                             <label class="cursor-pointer p-2 text-gray-400 hover:text-white transition" title="Прикрепить файл">
@@ -406,21 +416,30 @@
         </div>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО НАСТРОЕК ГРУППЫ -->
+    <!-- МОДАЛЬНОЕ ОКНО НАСТРОЕК ГРУППЫ (СТОЛБИК С УЧАСТНИКАМИ И КАНАЛАМИ) -->
     <div id="group-settings-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
-        <div class="bg-gray-900 border border-purple-500/50 p-6 rounded-3xl w-full max-w-lg shadow-[0_0_35px_rgba(168,85,247,0.3)] space-y-4">
+        <div class="bg-gray-900 border border-purple-500/50 p-6 rounded-3xl w-full max-w-xl shadow-[0_0_35px_rgba(168,85,247,0.3)] space-y-4 max-h-[90vh] overflow-y-auto">
             <div class="flex justify-between items-center border-b border-gray-800 pb-3">
                 <h3 class="text-xl font-bold text-white">⚙️ Настройки группы</h3>
                 <button onclick="document.getElementById('group-settings-modal').classList.add('hidden')" class="text-gray-400 hover:text-white text-lg font-bold">✕</button>
             </div>
             <div class="space-y-4">
+                <div class="flex items-center space-x-4">
+                    <img id="edit-group-avatar-preview" src="" class="w-16 h-16 rounded-2xl object-cover border border-purple-500">
+                    <div class="flex-1">
+                        <label class="block text-xs text-gray-400 uppercase mb-1">Аватар группы</label>
+                        <input type="file" id="edit-group-avatar-file" accept="image/*" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2 text-xs text-white">
+                    </div>
+                </div>
                 <div>
                     <label class="block text-xs text-gray-400 uppercase mb-1">Название группы</label>
                     <input type="text" id="edit-group-name-input" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-purple-500">
                 </div>
+                
+                <!-- ВКЛАДКА КАНАЛОВ В СТОЛБИК -->
                 <div>
-                    <h4 class="text-xs font-bold text-purple-300 uppercase mb-2">Каналы группы</h4>
-                    <div id="group-channels-list" class="space-y-2 max-h-32 overflow-y-auto mb-2"></div>
+                    <h4 class="text-xs font-bold text-purple-300 uppercase mb-2">📢 Каналы группы (подгруппы)</h4>
+                    <div id="group-channels-list" class="space-y-2 max-h-36 overflow-y-auto mb-2"></div>
                     <div class="flex space-x-2">
                         <input type="text" id="new-channel-name" placeholder="Название канала..." class="flex-1 bg-gray-800 border border-gray-700 rounded-xl p-2 text-xs text-white">
                         <select id="new-channel-perm" class="bg-gray-800 border border-gray-700 rounded-xl p-2 text-xs text-white">
@@ -430,9 +449,15 @@
                         <button onclick="createSubgroup()" class="bg-purple-600 hover:bg-purple-500 px-3 py-2 rounded-xl text-xs font-bold text-white">Создать</button>
                     </div>
                 </div>
+
+                <!-- ВКЛАДКА УЧАСТНИКОВ В СТОЛБИК -->
+                <div>
+                    <h4 class="text-xs font-bold text-purple-300 uppercase mb-2">👥 Участники группы</h4>
+                    <div id="group-members-column-list" class="space-y-2 max-h-48 overflow-y-auto pr-1"></div>
+                </div>
             </div>
             <div class="flex justify-end pt-2">
-                <button onclick="saveGroupSettings()" class="bg-purple-600 hover:bg-purple-500 px-6 py-2.5 rounded-xl font-bold text-white text-xs shadow-[0_0_15px_rgba(168,85,247,0.3)]">Сохранить</button>
+                <button onclick="saveGroupSettings()" class="bg-purple-600 hover:bg-purple-500 px-6 py-2.5 rounded-xl font-bold text-white text-xs shadow-[0_0_15px_rgba(168,85,247,0.3)]">Сохранить изменения</button>
             </div>
         </div>
     </div>
@@ -498,7 +523,7 @@
     <!-- МОДАЛЬНОЕ ОКНО ГОЛОСОВОГО ЗВОНКА -->
     <div id="single-call-modal" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col items-center justify-between p-8 hidden">
         <div class="text-center text-white space-y-2 pt-10">
-            <div class="w-24 h-24 rounded-full bg-purple-600/30 border-2 border-purple-500 flex items-center justify-center mx-auto text-4xl shadow-[0_0_30px_rgba(168,85,247,0.4)]">🎙️️</div>
+            <div class="w-24 h-24 rounded-full bg-purple-600/30 border-2 border-purple-500 flex items-center justify-center mx-auto text-4xl shadow-[0_0_30px_rgba(168,85,247,0.4)]">🎙️</div>
             <h2 id="call-partner-name" class="text-3xl font-bold">Голосовой вызов...</h2>
             <p id="call-status-text" class="text-gray-400 text-sm animate-pulse">Установление аудиосоединения</p>
         </div>
@@ -513,10 +538,13 @@
         </div>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО ГОЛОСОВОЙ КОНФЕРЕНЦИИ -->
+    <!-- МОДАЛЬНОЕ ОКНО ГОЛОСОВОЙ КОНФЕРЕНЦИИ С МОДЕРАЦИЕЙ -->
     <div id="group-call-modal" class="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col p-6 hidden">
         <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xl font-bold text-purple-400">Голосовая Конференция</h2>
+            <div class="flex items-center space-x-3">
+                <h2 class="text-xl font-bold text-purple-400">Голосовая Конференция</h2>
+                <button onclick="toggleMyConferenceMute()" id="btn-conf-mute" class="bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition">🎙 Выключить микрофон</button>
+            </div>
             <button onclick="leaveGroupCall()" class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-xl font-bold transition shadow-[0_0_15px_rgba(239,68,68,0.4)]">
                 Покинуть звонок
             </button>
@@ -548,6 +576,7 @@
 
         let groupPeerConnections = {};
         let currentCallGroupId = null;
+        let editingMessageId = null;
 
         let appSettings = { audioDevice: '', audioOutput: '', pttMode: 'voice', pttKey: 'Space', micVolume: 80 };
         let isPttPressed = false;
@@ -730,6 +759,8 @@
 
             socket.emit('register', currentUser.login);
 
+            requestNotificationPermission();
+
             renderChatsList();
             renderFriends();
             renderGroups();
@@ -740,6 +771,18 @@
             loadAudioDevices();
             renderRadioStations();
             setupPttListeners();
+        }
+
+        function requestNotificationPermission() {
+            if ('Notification' in window && Notification.permission !== 'granted') {
+                Notification.requestPermission();
+            }
+        }
+
+        function showWebNotification(title, body) {
+            if ('Notification' in window && Notification.permission === 'granted') {
+                new Notification(title, { body, icon: currentUser.avatar });
+            }
         }
 
         function logout() {
@@ -1104,7 +1147,7 @@
                     item.className = `p-3 rounded-2xl cursor-pointer flex items-center space-x-3 hover:bg-gray-800 transition ${activeChat?.type === 'group' && activeChat?.id === group.id ? 'bg-gray-800' : ''}`;
                     item.onclick = () => selectChat({ type: 'group', id: group.id });
                     item.innerHTML = `
-                        <div class="w-10 h-10 rounded-full bg-blue-600/30 text-blue-400 flex items-center justify-center font-bold flex-shrink-0">🏢</div>
+                        <img src="${group.avatar || 'https://via.placeholder.com/150'}" class="w-10 h-10 rounded-full object-cover flex-shrink-0 border border-purple-500/30">
                         <div class="overflow-hidden">
                             <div class="font-bold text-white truncate">${group.name}</div>
                             <div class="text-xs text-gray-400 truncate">${group.members.length} уч.</div>
@@ -1130,26 +1173,61 @@
         }
 
         let editingGroupId = null;
+        function openActiveGroupSettings() {
+            if (!activeChat || activeChat.type !== 'group') return;
+            openGroupSettings(activeChat.id);
+        }
+
         function openGroupSettings(groupId) {
             editingGroupId = groupId;
             const group = db.groups[groupId];
             document.getElementById('edit-group-name-input').value = group.name;
+            document.getElementById('edit-group-avatar-preview').src = group.avatar || 'https://via.placeholder.com/150';
             
+            // Заполняем каналы в столбик
             const channelsList = document.getElementById('group-channels-list');
             channelsList.innerHTML = '';
             if (group.subgroups && group.subgroups.length > 0) {
                 group.subgroups.forEach(sub => {
                     const row = document.createElement('div');
-                    row.className = 'flex justify-between items-center bg-gray-800 p-2 rounded-xl text-xs';
+                    row.className = 'flex justify-between items-center bg-gray-800 p-2.5 rounded-xl text-xs';
                     row.innerHTML = `
-                        <span class="text-white"># ${sub.name} <span class="text-gray-400">(${sub.permission === 'admins' ? 'Только админы' : 'Все'})</span></span>
-                        <button onclick="deleteSubgroup('${groupId}', '${sub.id}')" class="text-red-400 hover:text-red-300 font-bold">✕</button>
+                        <span class="text-white font-bold"># ${sub.name} <span class="text-gray-400 font-normal">(${sub.permission === 'admins' ? 'Только админы' : 'Все'})</span></span>
+                        <button onclick="deleteSubgroup('${groupId}', '${sub.id}')" class="text-red-400 hover:text-red-300 font-bold px-2 py-1 bg-red-600/20 rounded-lg">Удалить</button>
                     `;
                     channelsList.appendChild(row);
                 });
             } else {
-                channelsList.innerHTML = '<div class="text-xs text-gray-500">Нет дополнительных каналов</div>';
+                channelsList.innerHTML = '<div class="text-xs text-gray-500 p-2">Нет дополнительных каналов</div>';
             }
+
+            // Заполняем участников в столбик с возможностью кика
+            const membersList = document.getElementById('group-members-column-list');
+            membersList.innerHTML = '';
+            const isLeader = group.creator === currentUser.login;
+            const myRole = group.roles?.[currentUser.login] || (isLeader ? 'Лидер' : 'Участник');
+            const canManage = isLeader || myRole === 'Админ';
+
+            group.members.forEach(m => {
+                const mLeader = group.creator === m;
+                const mRole = group.roles?.[m] || (mLeader ? 'Лидер' : 'Участник');
+                const row = document.createElement('div');
+                row.className = 'flex justify-between items-center bg-gray-950 p-2.5 rounded-xl text-xs border border-gray-800';
+                row.innerHTML = `
+                    <div class="flex items-center space-x-2">
+                        <span class="text-white font-bold">@${m} ${mLeader ? '⭐' : ''}</span>
+                        <span class="text-purple-400">[${mRole}]</span>
+                    </div>
+                    ${(canManage && !mLeader && m !== currentUser.login) ? `
+                        <div class="space-x-1">
+                            ${isLeader && mRole !== 'Админ' ? `<button onclick="setGroupRole('${groupId}', '${m}', 'Админ')" class="bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-[10px] font-bold text-white">Сделать админом</button>` : ''}
+                            ${isLeader && mRole === 'Админ' ? `<button onclick="setGroupRole('${groupId}', '${m}', 'Участник')" class="bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-[10px] font-bold text-white">Убрать админа</button>` : ''}
+                            <button onclick="kickGroupMember('${groupId}', '${m}')" class="bg-red-600 hover:bg-red-500 px-2 py-1 rounded text-[10px] font-bold text-white">Исключить</button>
+                        </div>
+                    ` : ''}
+                `;
+                membersList.appendChild(row);
+            });
 
             document.getElementById('group-settings-modal').classList.remove('hidden');
         }
@@ -1158,10 +1236,16 @@
             const name = document.getElementById('edit-group-name-input').value.trim();
             if (!name || !editingGroupId) return;
 
+            const fileInput = document.getElementById('edit-group-avatar-file');
+            let avatar = db.groups[editingGroupId].avatar;
+            if (fileInput.files && fileInput.files[0]) {
+                avatar = await readFileAsDataURL(fileInput.files[0]);
+            }
+
             const res = await fetch('/api/update-group', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ groupId: editingGroupId, name, login: currentUser.login })
+                body: JSON.stringify({ groupId: editingGroupId, name, avatar, login: currentUser.login })
             });
             const data = await res.json();
             if (data.success) {
@@ -1217,9 +1301,11 @@
 
             document.getElementById('no-chat-selected').classList.add('hidden');
             document.getElementById('chat-window').classList.remove('hidden');
+            document.getElementById('message-history-search').classList.remove('hidden');
 
             const btnCall = document.getElementById('btn-call-user');
             const btnGroupCall = document.getElementById('btn-group-call');
+            const btnGroupSettingsTop = document.getElementById('btn-group-settings-top');
             const subgroupsBar = document.getElementById('subgroups-bar');
 
             if (chat.type === 'saved') {
@@ -1228,8 +1314,10 @@
                 document.getElementById('active-chat-status').textContent = 'Личное хранилище';
                 btnCall.classList.add('hidden');
                 btnGroupCall.classList.add('hidden');
+                btnGroupSettingsTop.classList.add('hidden');
                 subgroupsBar.classList.add('hidden');
             } else if (chat.type === 'user') {
+                markMessagesAsRead(chat.id);
                 const friendObj = db.users[chat.id] || {};
                 const displayName = db.customNicknames[currentUser.login]?.[chat.id] || friendObj.name || chat.id;
                 document.getElementById('active-chat-name').textContent = displayName;
@@ -1237,20 +1325,31 @@
                 document.getElementById('active-chat-status').textContent = `@${chat.id}`;
                 btnCall.classList.remove('hidden');
                 btnGroupCall.classList.add('hidden');
+                btnGroupSettingsTop.classList.add('hidden');
                 subgroupsBar.classList.add('hidden');
             } else if (chat.type === 'group') {
                 const group = db.groups[chat.id];
                 document.getElementById('active-chat-name').textContent = group.name;
-                document.getElementById('active-chat-avatar').src = 'https://via.placeholder.com/150';
+                document.getElementById('active-chat-avatar').src = group.avatar || 'https://via.placeholder.com/150';
                 document.getElementById('active-chat-status').textContent = `Группа (${group.members.length} уч.)`;
                 btnCall.classList.add('hidden');
                 btnGroupCall.classList.remove('hidden');
+                btnGroupSettingsTop.classList.remove('hidden');
 
                 renderSubgroupsBar(group);
             }
 
             checkUserPermissions();
             renderMessages();
+        }
+
+        async function markMessagesAsRead(peer) {
+            await fetch('/api/mark-read', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, peer })
+            });
+            socket.emit('refresh-db');
         }
 
         function renderSubgroupsBar(group) {
@@ -1326,7 +1425,7 @@
             }
         }
 
-        function renderMessages() {
+        function renderMessages(filterText = '') {
             const container = document.getElementById('messages-container');
             container.innerHTML = '';
             if (!activeChat) return;
@@ -1346,6 +1445,10 @@
                 }
             }
 
+            if (filterText) {
+                msgs = msgs.filter(m => m.text.toLowerCase().includes(filterText.toLowerCase()));
+            }
+
             msgs.forEach((m) => {
                 const isMe = m.sender === currentUser.login;
                 const div = document.createElement('div');
@@ -1358,12 +1461,31 @@
                     if (m.media.type === 'audio') mediaHTML = `<audio src="${m.media.url}" controls class="my-1"></audio>`;
                 }
 
+                let readStatus = '';
+                if (isMe && activeChat.type === 'user') {
+                    readStatus = m.read ? '<span class="text-purple-300 font-bold ml-1" title="Прочитано">✓✓</span>' : '<span class="text-gray-400 ml-1" title="Доставлено">✓</span>';
+                }
+
+                let actionsHTML = '';
+                if (isMe && activeChat.type === 'user') {
+                    actionsHTML = `
+                        <div class="absolute -top-2 -left-16 bg-gray-900 border border-gray-700 rounded-lg p-1 hidden group-hover:flex space-x-1 shadow">
+                            <button onclick="startEditingMessage('${m.id}', \`${m.text.replace(/`/g, '\\`')}\`)" class="text-[10px] text-purple-400 hover:text-white px-1">✏️</button>
+                            <button onclick="deleteMessage('${m.id}')" class="text-[10px] text-red-400 hover:text-white px-1">🗑️</button>
+                        </div>
+                    `;
+                }
+
                 div.innerHTML = `
                     <div class="max-w-md px-4 py-2.5 rounded-2xl ${isMe ? 'bg-purple-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-200 rounded-bl-none'} border border-gray-700/50 relative group shadow">
+                        ${actionsHTML}
                         ${!isMe && activeChat.type === 'group' ? `<div class="text-xs font-bold text-purple-300 mb-1">${m.sender}</div>` : ''}
                         ${mediaHTML}
-                        <div class="break-words">${m.text}</div>
-                        <div class="text-[10px] opacity-60 text-right mt-1">${m.time}</div>
+                        <div class="break-words">${m.text} ${m.edited ? '<span class="text-[9px] opacity-70 italic">(изменено)</span>' : ''}</div>
+                        <div class="text-[10px] opacity-60 text-right mt-1 flex items-center justify-end space-x-1">
+                            <span>${m.time}</span>
+                            ${readStatus}
+                        </div>
                     </div>
                 `;
                 container.appendChild(div);
@@ -1372,10 +1494,57 @@
             container.scrollTop = container.scrollHeight;
         }
 
+        function searchMessagesInActiveChat() {
+            const query = document.getElementById('message-history-search').value;
+            renderMessages(query);
+        }
+
+        function startEditingMessage(id, text) {
+            editingMessageId = id;
+            document.getElementById('message-input').value = text;
+            document.getElementById('editing-text-preview').textContent = text;
+            document.getElementById('editing-bar').classList.remove('hidden');
+        }
+
+        function cancelEditing() {
+            editingMessageId = null;
+            document.getElementById('message-input').value = '';
+            document.getElementById('editing-bar').classList.add('hidden');
+        }
+
+        async function deleteMessage(messageId) {
+            if (!activeChat || activeChat.type !== 'user') return;
+            const res = await fetch('/api/delete-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, peer: activeChat.id, messageId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                renderMessages();
+            }
+        }
+
         async function sendMessage() {
             const input = document.getElementById('message-input');
             const text = input.value.trim();
             if (!text && !currentUploadedMedia) return;
+
+            if (editingMessageId && activeChat.type === 'user') {
+                const res = await fetch('/api/edit-message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ login: currentUser.login, peer: activeChat.id, messageId: editingMessageId, newText: text })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    db = data.db;
+                    cancelEditing();
+                    renderMessages();
+                }
+                return;
+            }
 
             let endpoint = '/api/send-message';
             let payload = { sender: currentUser.login, receiver: activeChat.id, text, media: currentUploadedMedia };
@@ -1406,6 +1575,45 @@
             db.messagesStore[currentUser.login][peer].push(msg);
 
             playNotificationSound();
+            showWebNotification(`Новое сообщение от @${sender}`, msg.text || 'Медиа файл');
+
+            if (activeChat && activeChat.type === 'user' && activeChat.id === peer) {
+                renderMessages();
+                markMessagesAsRead(peer);
+            }
+        });
+
+        socket.on('message-edited', ({ sender, receiver, messageId, newText }) => {
+            const peer = (sender === currentUser.login) ? receiver : sender;
+            if (db.messagesStore[currentUser.login]?.[peer]) {
+                db.messagesStore[currentUser.login][peer].forEach(m => {
+                    if (m.id === messageId) {
+                        m.text = newText;
+                        m.edited = true;
+                    }
+                });
+            }
+            if (activeChat && activeChat.type === 'user' && activeChat.id === peer) {
+                renderMessages();
+            }
+        });
+
+        socket.on('message-deleted', ({ sender, receiver, messageId }) => {
+            const peer = (sender === currentUser.login) ? receiver : sender;
+            if (db.messagesStore[currentUser.login]?.[peer]) {
+                db.messagesStore[currentUser.login][peer] = db.messagesStore[currentUser.login][peer].filter(m => m.id !== messageId);
+            }
+            if (activeChat && activeChat.type === 'user' && activeChat.id === peer) {
+                renderMessages();
+            }
+        });
+
+        socket.on('messages-read', ({ reader, peer }) => {
+            if (db.messagesStore[reader]?.[peer]) {
+                db.messagesStore[reader][peer].forEach(m => {
+                    if (m.sender !== reader) m.read = true;
+                });
+            }
             if (activeChat && activeChat.type === 'user' && activeChat.id === peer) {
                 renderMessages();
             }
@@ -1424,6 +1632,7 @@
                     }
                 }
                 playNotificationSound();
+                showWebNotification(`Группа: ${db.groups[groupId].name}`, `${msg.sender}: ${msg.text || 'Медиа'}`);
                 if (activeChat && activeChat.type === 'group' && activeChat.id === groupId && activeSubgroup === subgroup) {
                     renderMessages();
                 }
@@ -1523,41 +1732,24 @@
                 const card = document.createElement('div');
                 card.className = 'p-4 bg-gray-800 rounded-xl border border-gray-700/50 space-y-2';
                 
-                let membersHTML = '<div class="text-xs text-gray-400 mt-2">Участники и роли:</div><div class="space-y-1 mt-1 max-h-32 overflow-y-auto">';
-                group.members.forEach(m => {
-                    const mLeader = group.creator === m;
-                    const mRole = group.roles?.[m] || (mLeader ? 'Лидер' : 'Участник');
-                    membersHTML += `
-                        <div class="flex justify-between items-center text-xs bg-gray-900 p-2 rounded-lg">
-                            <span class="text-white">@${m} ${mLeader ? '⭐' : ''} <span class="text-purple-400 font-semibold">[${mRole}]</span></span>
-                            ${(isLeader && !mLeader) ? `
-                                <div class="space-x-1">
-                                    <button onclick="setGroupRole('${group.id}', '${m}', 'Админ')" class="bg-blue-600 hover:bg-blue-500 px-2 py-0.5 rounded text-[10px]">Админ</button>
-                                    <button onclick="setGroupRole('${group.id}', '${m}', 'Участник')" class="bg-gray-700 hover:bg-gray-600 px-2 py-0.5 rounded text-[10px]">Участник</button>
-                                    <button onclick="kickGroupMember('${group.id}', '${m}')" class="bg-red-600 hover:bg-red-500 px-2 py-0.5 rounded text-[10px]">Выгнать</button>
-                                </div>
-                            ` : ''}
-                        </div>
-                    `;
-                });
-                membersHTML += '</div>';
-
                 card.innerHTML = `
                     <div class="flex items-center justify-between">
-                        <div>
-                            <div class="font-bold text-white flex items-center space-x-2">
-                                <span>${group.name}</span>
-                                ${(isLeader || myRole === 'Админ') ? `<button onclick="openGroupSettings('${group.id}')" class="text-xs text-purple-400 hover:underline">⚙ Настройки</button>` : ''}
+                        <div class="flex items-center space-x-3">
+                            <img src="${group.avatar || 'https://via.placeholder.com/150'}" class="w-12 h-12 rounded-xl object-cover border border-purple-500/30">
+                            <div>
+                                <div class="font-bold text-white flex items-center space-x-2">
+                                    <span>${group.name}</span>
+                                    ${(isLeader || myRole === 'Админ') ? `<button onclick="openGroupSettings('${group.id}')" class="text-xs text-purple-400 hover:underline">⚙ Настройки</button>` : ''}
+                                </div>
+                                <div class="text-xs text-gray-400">Роль: <span class="text-purple-400">${myRole}</span> | Участников: ${group.members.length}</div>
                             </div>
-                            <div class="text-xs text-gray-400">Роль: <span class="text-purple-400">${myRole}</span> | Участников: ${group.members.length}</div>
                         </div>
                         ${isMember ? `
-                            <button onclick="selectChat({type:'group', id:'${group.id}'}); switchTab('chats');" class="bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded-lg text-xs font-bold text-white transition">Открыть</button>
+                            <button onclick="selectChat({type:'group', id:'${group.id}'}); switchTab('chats');" class="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white transition">Открыть</button>
                         ` : `
-                            <button onclick="joinGroup('${group.id}')" class="bg-purple-600 hover:bg-purple-500 px-3 py-1 rounded-lg text-xs font-bold text-white transition">Вступить</button>
+                            <button onclick="joinGroup('${group.id}')" class="bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white transition">Вступить</button>
                         `}
                     </div>
-                    ${isMember ? membersHTML : ''}
                 `;
                 list.appendChild(card);
                 recList.appendChild(card.cloneNode(true));
@@ -1607,6 +1799,7 @@
             const data = await res.json();
             if (data.success) {
                 db = data.db;
+                openGroupSettings(groupId);
                 renderGroups();
             } else {
                 showCustomModal('Ошибка', data.error, false, null, '⚠️️');
@@ -1614,7 +1807,7 @@
         }
 
         async function kickGroupMember(groupId, targetLogin) {
-            showCustomModal('Подтверждение', `Выгнать пользователя @${targetLogin} из группы?`, true, async (confirmed) => {
+            showCustomModal('Подтверждение', `Исключить пользователя @${targetLogin} из группы?`, true, async (confirmed) => {
                 if (!confirmed) return;
                 const res = await fetch('/api/kick-group-member', {
                     method: 'POST',
@@ -1624,6 +1817,7 @@
                 const data = await res.json();
                 if (data.success) {
                     db = data.db;
+                    openGroupSettings(groupId);
                     renderGroups();
                 } else {
                     showCustomModal('Ошибка', data.error, false, null, '⚠️');
@@ -1866,7 +2060,7 @@
             }
         }
 
-        // ТОЛЬКО ГОЛОСОВЫЕ ЗВОНКИ И КОНФЕРЕНЦИИ
+        // ЗВОНКИ И КОНФЕРЕНЦИИ
         function startDirectCallTo(targetLogin) {
             openUserChat(targetLogin);
             startDirectCall();
@@ -2001,7 +2195,7 @@
             document.getElementById('incoming-call-modal').classList.add('hidden');
         }
 
-        // ГОЛОСОВЫЕ КОНФЕРЕНЦИИ
+        // КОНФЕРЕНЦИИ С МОДЕРАЦИЕЙ (МЬЮТ И КИК УЧАСТНИКОВ)
         function openGroupCallConfigModal() {
             if (!activeChat || activeChat.type !== 'group') return;
             const group = db.groups[activeChat.id];
@@ -2050,7 +2244,7 @@
 
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-                addAudioTile('local', localStream, 'Вы');
+                addAudioTile('local', localStream, 'Вы (Вы)', null);
                 socket.emit('start-group-conference', { groupId, targets, from: currentUser.login });
             } catch (err) {
                 showCustomModal('Ошибка', 'Не удалось получить доступ к микрофону для конференции!', false, null, '⚠️');
@@ -2074,7 +2268,7 @@
             }
 
             pc.ontrack = (e) => {
-                addAudioTile(targetSocketId, e.streams[0], targetLogin);
+                addAudioTile(targetSocketId, e.streams[0], targetLogin, targetSocketId);
             };
 
             pc.onicecandidate = (e) => {
@@ -2131,6 +2325,48 @@
             if (tile) tile.remove();
         });
 
+        function toggleMyConferenceMute() {
+            if (!localStream) return;
+            const audioTrack = localStream.getAudioTracks()[0];
+            if (audioTrack) {
+                audioTrack.enabled = !audioTrack.enabled;
+                const btn = document.getElementById('btn-conf-mute');
+                if (audioTrack.enabled) {
+                    btn.textContent = '🎙 Выключить микрофон';
+                    btn.className = 'bg-gray-800 hover:bg-gray-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition';
+                } else {
+                    btn.textContent = '🔇 Включить микрофон';
+                    btn.className = 'bg-red-600/80 hover:bg-red-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition';
+                }
+            }
+        }
+
+        function muteParticipant(targetSocketId) {
+            socket.emit('mod-mute-user', { targetSocketId, muted: true });
+        }
+
+        function kickParticipant(targetSocketId) {
+            socket.emit('mod-kick-user', { targetSocketId });
+            if (groupPeerConnections[targetSocketId]) {
+                groupPeerConnections[targetSocketId].close();
+                delete groupPeerConnections[targetSocketId];
+            }
+            const tile = document.getElementById(`audio-tile-${targetSocketId}`);
+            if (tile) tile.remove();
+        }
+
+        socket.on('mod-mute-action', ({ muted }) => {
+            if (localStream) {
+                localStream.getAudioTracks()[0].enabled = !muted;
+                showCustomModal('Модерация', muted ? 'Лидер/Админ отключил ваш микрофон' : 'Ваш микрофон включен', false, null, '🔇');
+            }
+        });
+
+        socket.on('mod-kick-action', () => {
+            leaveGroupCall();
+            showCustomModal('Модерация', 'Вас отключили от конференции', false, null, '⚠️');
+        });
+
         function leaveGroupCall() {
             if (currentCallGroupId) {
                 socket.emit('leave-group-call', { groupId: currentCallGroupId, login: currentUser.login });
@@ -2143,17 +2379,34 @@
             document.getElementById('group-audio-grid').innerHTML = '';
         }
 
-        function addAudioTile(id, stream, label) {
+        function addAudioTile(id, stream, label, socketId) {
             const grid = document.getElementById('group-audio-grid');
             let tile = document.getElementById(`audio-tile-${id}`);
             if (!tile) {
                 tile = document.createElement('div');
                 tile.id = `audio-tile-${id}`;
                 tile.className = 'relative bg-gray-900 border border-purple-500/30 rounded-2xl p-6 flex flex-col items-center justify-center space-y-3 shadow-xl';
+                
+                let modButtons = '';
+                if (id !== 'local' && activeChat && activeChat.type === 'group') {
+                    const group = db.groups[activeChat.id];
+                    const isLeader = group.creator === currentUser.login;
+                    const myRole = group.roles?.[currentUser.login];
+                    if (isLeader || myRole === 'Админ') {
+                        modButtons = `
+                            <div class="flex space-x-1 pt-1">
+                                <button onclick="muteParticipant('${socketId}')" class="bg-yellow-600/30 hover:bg-yellow-600 text-yellow-300 hover:text-white px-2 py-1 rounded text-[10px] font-bold">Мьют</button>
+                                <button onclick="kickParticipant('${socketId}')" class="bg-red-600/30 hover:bg-red-600 text-red-300 hover:text-white px-2 py-1 rounded text-[10px] font-bold">Кик</button>
+                            </div>
+                        `;
+                    }
+                }
+
                 tile.innerHTML = `
                     <div class="w-16 h-16 rounded-full bg-purple-600/30 border border-purple-500 flex items-center justify-center text-2xl animate-pulse">🎙️</div>
                     <div class="text-white font-bold text-sm">${label}</div>
                     <audio autoplay playsinline ${id === 'local' ? 'muted' : ''}></audio>
+                    ${modButtons}
                 `;
                 grid.appendChild(tile);
             }
