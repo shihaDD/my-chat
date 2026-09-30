@@ -12,7 +12,6 @@ app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Строка подключения к MongoDB (можно указать MongoDB Atlas или локальную базу)
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/messenger';
 
 const dbStateSchema = new mongoose.Schema({
@@ -35,7 +34,6 @@ let db = {
     pinnedMessages: {}
 };
 
-// Подключение к MongoDB и загрузка данных
 async function initDatabase() {
     try {
         await mongoose.connect(MONGO_URI);
@@ -48,6 +46,16 @@ async function initDatabase() {
         } else {
             await DbState.create({ key: 'main', data: db });
             console.log('🆕 Создан начальный документ базы данных в MongoDB.');
+        }
+
+        // Проверка и инициализация глобальных ролей
+        for (let u in db.users) {
+            if (!db.users[u].globalRole) {
+                db.users[u].globalRole = (u === 'warren' ? 'warren' : 'user');
+            }
+        }
+        if (db.users['warren'] && db.users['warren'].globalRole !== 'warren') {
+            db.users['warren'].globalRole = 'warren';
         }
     } catch (err) {
         console.error('❌ Ошибка подключения к MongoDB:', err);
@@ -68,9 +76,7 @@ app.get('/api/internet-news', async (req, res) => {
     const internetNews = [
         { title: 'Искусственный интеллект совершил прорыв в квантовых вычислениях', url: '#', score: 1250, by: 'TechNews', time: new Date().toLocaleString() },
         { title: 'Запущен новый стандарт сверхбыстрой беспроводной связи 6G', url: '#', score: 980, by: 'FutureNet', time: new Date().toLocaleString() },
-        { title: 'Космический телескоп обнаружил экзопланету с признаками воды', url: '#', score: 850, by: 'SpaceObserver', time: new Date().toLocaleString() },
-        { title: 'Релиз революционного движка для веб-разработки и 3D графики', url: '#', score: 720, by: 'DevDaily', time: new Date().toLocaleString() },
-        { title: 'Тренды кибербезопасности и защиты данных в 2026 году', url: '#', score: 640, by: 'SecurityHub', time: new Date().toLocaleString() }
+        { title: 'Космический телескоп обнаружил экзопланету с признаками воды', url: '#', score: 850, by: 'SpaceObserver', time: new Date().toLocaleString() }
     ];
     res.json({ success: true, news: internetNews });
 });
@@ -85,7 +91,15 @@ app.post('/api/register', async (req, res) => {
         return res.json({ success: false, error: 'Пользователь с таким логином уже существует!' });
     }
 
-    db.users[cleanLogin] = { login: cleanLogin, name, password, email: email || '', avatar: avatar || '', bio: '' };
+    db.users[cleanLogin] = {
+        login: cleanLogin,
+        name,
+        password,
+        email: email || '',
+        avatar: avatar || '',
+        bio: '',
+        globalRole: cleanLogin === 'warren' ? 'warren' : 'user'
+    };
     db.friends[cleanLogin] = [];
     db.friendRequests[cleanLogin] = [];
     db.outgoingRequests[cleanLogin] = [];
@@ -110,6 +124,10 @@ app.post('/api/login', async (req, res) => {
         return res.json({ success: false, error: 'Неверный пароль!' });
     }
 
+    if (!user.globalRole) {
+        user.globalRole = (cleanLogin === 'warren' ? 'warren' : 'user');
+    }
+
     if (!db.outgoingRequests) db.outgoingRequests = {};
     if (!db.outgoingRequests[cleanLogin]) db.outgoingRequests[cleanLogin] = [];
 
@@ -122,6 +140,10 @@ app.post('/api/restore-session', async (req, res) => {
     const { login } = req.body;
     if (!login || !db.users[login]) {
         return res.json({ success: false, error: 'Сессия не найдена' });
+    }
+    const user = db.users[login];
+    if (!user.globalRole) {
+        user.globalRole = (login === 'warren' ? 'warren' : 'user');
     }
     db.lastSeen[login] = Date.now();
     await saveDb();
@@ -143,6 +165,114 @@ app.post('/api/update-profile', async (req, res) => {
     res.json({ success: true, user: db.users[cleanLogin], db });
 });
 
+// Управление глобальными ролями (Warren и Главный модератор)
+app.post('/api/set-global-role', async (req, res) => {
+    const { adminUser, targetUser, role } = req.body; // role: 'head_moderator', 'moderator', 'user'
+    const requester = db.users[adminUser?.trim().toLowerCase()];
+    const target = db.users[targetUser?.trim().toLowerCase()];
+
+    if (!requester || !target) {
+        return res.json({ success: false, error: 'Пользователь не найден' });
+    }
+
+    const isWarren = (adminUser.trim().toLowerCase() === 'warren' || requester.globalRole === 'warren');
+    const isHeadMod = (requester.globalRole === 'head_moderator');
+
+    if (isWarren) {
+        // warren может назначать и снимать главного модератора и модератора
+        target.globalRole = role;
+    } else if (isHeadMod) {
+        // главный модератор может назначать и снимать модераторов
+        if (role === 'moderator' || role === 'user') {
+            target.globalRole = role;
+        } else {
+            return res.json({ success: false, error: 'Главный модератор может назначать только модераторов или обычных пользователей' });
+        }
+    } else {
+        return res.json({ success: false, error: 'Недостаточно прав для назначения роли!' });
+    }
+
+    await saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
+// Новости
+app.post('/api/news', async (req, res) => {
+    const { author, text, media } = req.body;
+    const time = new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    db.news.unshift({ author, text: text || '', media: media || null, time, likes: 0, dislikes: 0, comments: [] });
+    await saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
+app.post('/api/delete-news', async (req, res) => {
+    const { login, newsIndex } = req.body;
+    const user = db.users[login];
+    if (!user) return res.json({ success: false, error: 'Пользователь не найден' });
+    const newsItem = db.news[newsIndex];
+    if (!newsItem) return res.json({ success: false, error: 'Новость не найдена' });
+
+    const isWarren = (login === 'warren' || user.globalRole === 'warren');
+    const isHeadMod = (user.globalRole === 'head_moderator');
+    const isMod = (user.globalRole === 'moderator');
+    const isAuthor = (newsItem.author.split(' ')[0] === login);
+
+    if (!isWarren && !isHeadMod && !isMod && !isAuthor) {
+        return res.json({ success: false, error: 'Недостаточно прав для удаления новости!' });
+    }
+
+    db.news.splice(newsIndex, 1);
+    await saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
+app.post('/api/edit-news', async (req, res) => {
+    const { login, newsIndex, newText } = req.body;
+    const user = db.users[login];
+    if (!user) return res.json({ success: false, error: 'Пользователь не найден' });
+    const newsItem = db.news[newsIndex];
+    if (!newsItem) return res.json({ success: false, error: 'Новость не найдена' });
+
+    const isWarren = (login === 'warren' || user.globalRole === 'warren');
+    const isHeadMod = (user.globalRole === 'head_moderator');
+    const isMod = (user.globalRole === 'moderator');
+    const isAuthor = (newsItem.author.split(' ')[0] === login);
+
+    if (!isWarren && !isHeadMod && !isMod && !isAuthor) {
+        return res.json({ success: false, error: 'Недостаточно прав для редактирования новости!' });
+    }
+
+    newsItem.text = newText;
+    newsItem.edited = true;
+    await saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
+app.post('/api/news-like', async (req, res) => {
+    const { index } = req.body;
+    if (db.news[index]) {
+        db.news[index].likes = (db.news[index].likes || 0) + 1;
+        await saveDb();
+        io.emit('update-db', db);
+    }
+    res.json({ success: true, db });
+});
+
+app.post('/api/news-dislike', async (req, res) => {
+    const { index } = req.body;
+    if (db.news[index]) {
+        db.news[index].dislikes = (db.news[index].dislikes || 0) + 1;
+        await saveDb();
+        io.emit('update-db', db);
+    }
+    res.json({ success: true, db });
+});
+
+// Друзья и группы
 app.post('/api/add-friend', async (req, res) => {
     const { login, targetLogin } = req.body;
     const cleanTarget = targetLogin.trim().toLowerCase();
@@ -229,6 +359,7 @@ app.post('/api/create-group', async (req, res) => {
         creator: creator,
         members: [creator],
         roles: { [creator]: 'Лидер' },
+        customRoles: [],
         messages: [],
         posts: [],
         subgroups: [],
@@ -276,6 +407,32 @@ app.post('/api/set-group-role', async (req, res) => {
     }
     if (!group.roles) group.roles = {};
     group.roles[targetLogin] = newRole;
+    await saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
+// Настройка роли в группе (включая право дублировать в новости canAnnounce)
+app.post('/api/save-group-role', async (req, res) => {
+    const { groupId, login, roleName, permissions, canAnnounce } = req.body;
+    const group = db.groups[groupId];
+    if (!group) return res.json({ success: false, error: 'Группа не найдена' });
+
+    const isLeader = group.creator === login;
+    const myRoleName = group.roles?.[login] || (isLeader ? 'Лидер' : 'Участник');
+    if (!isLeader && myRoleName !== 'Админ') {
+        return res.json({ success: false, error: 'Недостаточно прав для настройки ролей' });
+    }
+
+    if (!group.customRoles) group.customRoles = [];
+    let role = group.customRoles.find(r => r.name === roleName);
+    if (role) {
+        role.permissions = permissions || {};
+        role.canAnnounce = !!canAnnounce;
+    } else {
+        group.customRoles.push({ name: roleName, permissions: permissions || {}, canAnnounce: !!canAnnounce });
+    }
+
     await saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
@@ -329,20 +486,52 @@ app.post('/api/delete-subgroup', async (req, res) => {
     res.json({ success: true, db });
 });
 
+// Публикация поста в группе с дублированием в новости (если разрешено ролью и выставлен флаг)
 app.post('/api/create-group-post', async (req, res) => {
-    const { groupId, author, text, media } = req.body;
+    const { groupId, author, text, media, isAnnouncement } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
 
     const isLeader = group.creator === author;
-    const myRole = group.roles?.[author] || (isLeader ? 'Лидер' : 'Участник');
-    if (!isLeader && myRole !== 'Админ') {
-        return res.json({ success: false, error: 'Только лидер и админы могут публиковать посты!' });
+    const myRoleName = group.roles?.[author] || (isLeader ? 'Лидер' : 'Участник');
+    
+    let canPost = isLeader || myRoleName === 'Админ';
+    if (!canPost && group.customRoles) {
+        const customRole = group.customRoles.find(r => r.name === myRoleName);
+        if (customRole && customRole.permissions?.canPost) canPost = true;
+    }
+
+    if (!canPost) {
+        return res.json({ success: false, error: 'Только лидер, админы и лица с соответствующими правами могут публиковать посты!' });
     }
 
     if (!group.posts) group.posts = [];
     const time = new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    group.posts.unshift({ author, text: text || '', media: media || null, time, likes: 0, comments: [] });
+    group.posts.unshift({ author, text: text || '', media: media || null, time, likes: 0, comments: [], isAnnouncement: !!isAnnouncement });
+
+    // Проверка права на дублирование в новости (canAnnounce)
+    if (isAnnouncement) {
+        let canAnnounce = isLeader || myRoleName === 'Админ';
+        if (!canAnnounce && group.customRoles) {
+            const customRole = group.customRoles.find(r => r.name === myRoleName);
+            if (customRole && customRole.canAnnounce) canAnnounce = true;
+        }
+
+        if (canAnnounce) {
+            db.news.unshift({
+                author: `${author} (Группа: ${group.name} 📢)`,
+                text: text || '',
+                media: media || null,
+                time,
+                likes: 0,
+                dislikes: 0,
+                comments: [],
+                isAnnouncement: true,
+                groupId
+            });
+        }
+    }
+
     await saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
@@ -471,35 +660,6 @@ app.post('/api/pin-message', async (req, res) => {
     }
     await saveDb();
     io.emit('update-db', db);
-    res.json({ success: true, db });
-});
-
-app.post('/api/news', async (req, res) => {
-    const { author, text, media } = req.body;
-    const time = new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    db.news.unshift({ author, text: text || '', media: media || null, time, likes: 0, dislikes: 0, comments: [] });
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
-});
-
-app.post('/api/news-like', async (req, res) => {
-    const { index } = req.body;
-    if (db.news[index]) {
-        db.news[index].likes = (db.news[index].likes || 0) + 1;
-        await saveDb();
-        io.emit('update-db', db);
-    }
-    res.json({ success: true, db });
-});
-
-app.post('/api/news-dislike', async (req, res) => {
-    const { index } = req.body;
-    if (db.news[index]) {
-        db.news[index].dislikes = (db.news[index].dislikes || 0) + 1;
-        await saveDb();
-        io.emit('update-db', db);
-    }
     res.json({ success: true, db });
 });
 
