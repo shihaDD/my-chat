@@ -36,6 +36,7 @@ if (fs.existsSync(DB_FILE)) {
             if (!db.groups[gId].roles) db.groups[gId].roles = {};
             if (!db.groups[gId].posts) db.groups[gId].posts = [];
             if (!db.groups[gId].messages) db.groups[gId].messages = [];
+            if (!db.groups[gId].avatar) db.groups[gId].avatar = 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150';
         }
     } catch (e) {
         console.error('Ошибка чтения database.json:', e);
@@ -203,6 +204,7 @@ app.post('/api/create-group', (req, res) => {
         id: groupId,
         name: name.trim(),
         creator: creator,
+        avatar: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150',
         members: [creator],
         roles: { [creator]: 'Лидер' },
         messages: [],
@@ -216,16 +218,17 @@ app.post('/api/create-group', (req, res) => {
 });
 
 app.post('/api/update-group', (req, res) => {
-    const { groupId, name, login } = req.body;
+    const { groupId, name, avatar, login } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
     if (group.creator !== login && group.roles?.[login] !== 'Админ') {
         return res.json({ success: false, error: 'Недостаточно прав!' });
     }
     if (name) group.name = name.trim();
+    if (avatar) group.avatar = avatar;
     saveDb();
     io.emit('update-db', db);
-    res.json({ success: true, db });
+    res.json({ success: true, db, group });
 });
 
 app.post('/api/join-group', (req, res) => {
@@ -247,8 +250,9 @@ app.post('/api/set-group-role', (req, res) => {
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
 
-    if (group.creator !== login) {
-        return res.json({ success: false, error: 'Только лидер может назначать роли!' });
+    const isLeader = group.creator === login;
+    if (!isLeader && group.roles?.[login] !== 'Админ') {
+        return res.json({ success: false, error: 'Недостаточно прав для изменения ролей!' });
     }
     if (!group.roles) group.roles = {};
     group.roles[targetLogin] = newRole;
@@ -262,8 +266,13 @@ app.post('/api/kick-group-member', (req, res) => {
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
 
-    if (group.creator !== login) {
-        return res.json({ success: false, error: 'Только лидер может выгонять участников!' });
+    const isLeader = group.creator === login;
+    const myRole = group.roles?.[login];
+    if (!isLeader && myRole !== 'Админ') {
+        return res.json({ success: false, error: 'Только лидер и админы могут исключать участников!' });
+    }
+    if (group.creator === targetLogin) {
+        return res.json({ success: false, error: 'Нельзя исключить создателя группы!' });
     }
 
     group.members = group.members.filter(m => m !== targetLogin);
@@ -344,9 +353,9 @@ app.post('/api/delete-group-post', (req, res) => {
 });
 
 app.post('/api/send-message', (req, res) => {
-    const { sender, receiver, text, media } = req.body;
+    const { sender, receiver, text, media, messageId } = req.body;
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const msgObj = { sender, receiver, text: text || '', media: media || null, time, edited: false };
+    const msgObj = { id: messageId || 'msg_' + Date.now() + '_' + Math.random(), sender, receiver, text: text || '', media: media || null, time, edited: false, read: false };
 
     if (!db.messagesStore[sender]) db.messagesStore[sender] = {};
     if (!db.messagesStore[sender][receiver]) db.messagesStore[sender][receiver] = [];
@@ -360,7 +369,70 @@ app.post('/api/send-message', (req, res) => {
 
     saveDb();
     io.to(receiver).emit('receive-message', { sender, receiver, msg: msgObj });
+    res.json({ success: true, db, msg: msgObj });
+});
+
+app.post('/api/edit-message', (req, res) => {
+    const { login, peer, messageId, newText } = req.body;
+    if (!db.messagesStore[login]?.[peer]) return res.json({ success: false, error: 'Чат не найден' });
+
+    let found = false;
+    db.messagesStore[login][peer].forEach(m => {
+        if (m.id === messageId && m.sender === login) {
+            m.text = newText;
+            m.edited = true;
+            found = true;
+        }
+    });
+
+    if (login !== peer && db.messagesStore[peer]?.[login]) {
+        db.messagesStore[peer][login].forEach(m => {
+            if (m.id === messageId && m.sender === login) {
+                m.text = newText;
+                m.edited = true;
+            }
+        });
+    }
+
+    if (found) {
+        saveDb();
+        io.to(peer).emit('message-edited', { sender: login, receiver: peer, messageId, newText });
+        io.to(login).emit('message-edited', { sender: login, receiver: peer, messageId, newText });
+        res.json({ success: true, db });
+    } else {
+        res.json({ success: false, error: 'Не удалось отредактировать сообщение' });
+    }
+});
+
+app.post('/api/delete-message', (req, res) => {
+    const { login, peer, messageId } = req.body;
+    if (db.messagesStore[login]?.[peer]) {
+        db.messagesStore[login][peer] = db.messagesStore[login][peer].filter(m => m.id !== messageId);
+    }
+    if (login !== peer && db.messagesStore[peer]?.[login]) {
+        db.messagesStore[peer][login] = db.messagesStore[peer][login].filter(m => m.id !== messageId);
+    }
+    saveDb();
+    io.to(peer).emit('message-deleted', { sender: login, receiver: peer, messageId });
+    io.to(login).emit('message-deleted', { sender: login, receiver: peer, messageId });
     res.json({ success: true, db });
+});
+
+app.post('/api/mark-read', (req, res) => {
+    const { login, peer } = req.body;
+    if (db.messagesStore[login]?.[peer]) {
+        db.messagesStore[login][peer].forEach(m => {
+            if (m.sender === peer) m.read = true;
+        });
+    }
+    if (db.messagesStore[peer]?.[login]) {
+        db.messagesStore[peer][login].forEach(m => {
+            if (m.sender === peer) m.read = true;
+        });
+    }
+    saveDb();
+    io.to(peer).emit('messages-read', { reader: login, peer });
+    res.json({ success: true });
 });
 
 app.post('/api/send-group-message', (req, res) => {
@@ -369,7 +441,7 @@ app.post('/api/send-group-message', (req, res) => {
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
 
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const msgObj = { sender, text: text || '', media: media || null, time, edited: false };
+    const msgObj = { id: 'gmsg_' + Date.now(), sender, text: text || '', media: media || null, time, edited: false };
 
     if (!subgroup || subgroup === 'main') {
         if (!group.messages) group.messages = [];
@@ -479,6 +551,14 @@ io.on('connection', (socket) => {
     socket.on('leave-group-call', ({ groupId, login }) => {
         socket.leave(groupId);
         socket.to(groupId).emit('user-left-group-call', { socketId: socket.id });
+    });
+
+    socket.on('mod-mute-user', ({ targetSocketId, muted }) => {
+        io.to(targetSocketId).emit('mod-mute-action', { muted });
+    });
+
+    socket.on('mod-kick-user', ({ targetSocketId }) => {
+        io.to(targetSocketId).emit('mod-kick-action');
     });
 
     socket.on('disconnect', () => {});
