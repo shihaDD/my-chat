@@ -89,8 +89,11 @@ app.post('/api/login', (req, res) => {
     const cleanLogin = login.trim().toLowerCase();
     const user = db.users[cleanLogin];
 
-    if (!user || user.password !== password) {
-        return res.json({ success: false, error: 'Неверный логин или пароль!' });
+    if (!user) {
+        return res.json({ success: false, error: 'Пользователь не найден!' });
+    }
+    if (user.password !== password) {
+        return res.json({ success: false, error: 'Неверный пароль!' });
     }
 
     if (!db.outgoingRequests) db.outgoingRequests = {};
