@@ -253,7 +253,7 @@
                         </div>
                     </div>
 
-                    <!-- ПРАВАЯ КОЛОНКА: Лента постов сообществ на всё пустое пространство -->
+                    <!-- ПРАВАЯ КОЛОНКА: Лента постов сообществ -->
                     <div class="space-y-6">
                         <div class="bg-gray-900 border border-purple-500/30 p-5 rounded-2xl space-y-3 shadow-xl h-full flex flex-col">
                             <h3 class="text-sm font-bold text-purple-300 uppercase tracking-wider">📢 Лента постов сообществ</h3>
@@ -415,7 +415,7 @@
     <div id="subgroup-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
         <div class="bg-gray-900 border border-purple-500/50 p-6 rounded-3xl w-full max-w-sm shadow-[0_0_35px_rgba(168,85,247,0.3)] space-y-4">
             <h3 class="text-lg font-bold text-white">Создать подгруппу / канал</h3>
-            <input type="text" id="subgroup-name-input" placeholder="Название канала (например, флудилка)..." class="w-full bg-gray-800 border border-gray-700 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-purple-500">
+            <input type="text" id="subgroup-name-input" placeholder="Название канала..." class="w-full bg-gray-800 border border-gray-700 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-purple-500">
             <div>
                 <label class="block text-xs text-gray-400 uppercase mb-1">Права на отправку сообщений</label>
                 <select id="subgroup-permission-select" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-sm text-white">
@@ -2042,7 +2042,7 @@
                     switchTab('chats');
                 }, '🎉');
             } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠️');
+                showCustomModal('Ошибка', data.error, false, null, '⚠️️');
             }
         }
     </script>
