@@ -8,8 +8,8 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 const DB_FILE = path.join(__dirname, 'database.json');
@@ -19,8 +19,8 @@ let db = {
     messagesStore: {},
     friends: {},
     friendRequests: {},
-    friendRequestsOut: {},
-    nicknames: {},
+    outgoingRequests: {},
+    customNicknames: {},
     groups: {},
     news: [],
     lastSeen: {}
@@ -43,20 +43,28 @@ function saveDb() {
     }
 }
 
-app.get('/api/data', (req, res) => {
-    res.json(db);
-});
-
-// Интеграция поиска музыки с обложками и превью
+// Поиск музыки
 app.get('/api/music-search', async (req, res) => {
     const q = (req.query.q || 'popular').toLowerCase();
-    const mockTracks = [
-        { title: `Хит по запросу: "${q}"`, artist: 'Neon Wave', cover: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=150', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' },
-        { title: `Ремикс: ${q} (Cyber Edition)`, artist: 'DJ Cyber', cover: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=150', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3' },
-        { title: `Инструментал: ${q}`, artist: 'Lofi Chill Club', cover: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3' },
-        { title: `Сингл: ${q}`, artist: 'Future Sound', cover: 'https://images.unsplash.com/photo-1518495973542-4542c06a5843?w=150', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3' }
+    const tracks = [
+        { title: `Хит: ${q} (Remix)`, artist: 'Neon Wave', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3', artwork: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150' },
+        { title: `${q} - Cyber Edition`, artist: 'DJ Cyber', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3', artwork: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=150' },
+        { title: `Chill Lofi: ${q}`, artist: 'Lofi Club', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3', artwork: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=150' },
+        { title: `Future Bass: ${q}`, artist: 'Future Sound', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3', artwork: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150' }
     ];
-    res.json({ success: true, tracks: mockTracks });
+    res.json({ success: true, tracks });
+});
+
+// Актуальные новости из интернета
+app.get('/api/internet-news', async (req, res) => {
+    const internetNews = [
+        { title: 'Искусственный интеллект совершил прорыв в квантовых вычислениях', url: '#', score: 1250, by: 'TechNews', time: new Date().toLocaleString() },
+        { title: 'Запущен новый стандарт сверхбыстрой беспроводной связи 6G', url: '#', score: 980, by: 'FutureNet', time: new Date().toLocaleString() },
+        { title: 'Космический телескоп обнаружил экзопланету с признаками воды', url: '#', score: 850, by: 'SpaceObserver', time: new Date().toLocaleString() },
+        { title: 'Релиз революционного движка для веб-разработки и 3D графики', url: '#', score: 720, by: 'DevDaily', time: new Date().toLocaleString() },
+        { title: 'Тренды кибербезопасности и защиты данных в 2026 году', url: '#', score: 640, by: 'SecurityHub', time: new Date().toLocaleString() }
+    ];
+    res.json({ success: true, news: internetNews });
 });
 
 app.post('/api/register', (req, res) => {
@@ -72,7 +80,7 @@ app.post('/api/register', (req, res) => {
     db.users[cleanLogin] = { login: cleanLogin, name, password, email: email || '', avatar: avatar || '', bio: '' };
     db.friends[cleanLogin] = [];
     db.friendRequests[cleanLogin] = [];
-    db.friendRequestsOut[cleanLogin] = [];
+    db.outgoingRequests[cleanLogin] = [];
     db.lastSeen[cleanLogin] = Date.now();
     saveDb();
 
@@ -90,6 +98,9 @@ app.post('/api/login', (req, res) => {
     if (!user || user.password !== password) {
         return res.json({ success: false, error: 'Неверный логин или пароль!' });
     }
+
+    if (!db.outgoingRequests) db.outgoingRequests = {};
+    if (!db.outgoingRequests[cleanLogin]) db.outgoingRequests[cleanLogin] = [];
 
     db.lastSeen[cleanLogin] = Date.now();
     saveDb();
@@ -135,28 +146,38 @@ app.post('/api/add-friend', (req, res) => {
         return res.json({ success: false, error: 'Вы уже друзья!' });
     }
     if (!db.friendRequests[cleanTarget]) db.friendRequests[cleanTarget] = [];
-    if (db.friendRequests[cleanTarget].includes(login)) {
+    if (!db.outgoingRequests) db.outgoingRequests = {};
+    if (!db.outgoingRequests[login]) db.outgoingRequests[login] = [];
+
+    if (db.friendRequests[cleanTarget].includes(login) || db.outgoingRequests[login].includes(cleanTarget)) {
         return res.json({ success: false, error: 'Заявка уже отправлена!' });
     }
 
     db.friendRequests[cleanTarget].push(login);
-    if (!db.friendRequestsOut) db.friendRequestsOut = {};
-    if (!db.friendRequestsOut[login]) db.friendRequestsOut[login] = [];
-    if (!db.friendRequestsOut[login].includes(cleanTarget)) {
-        db.friendRequestsOut[login].push(cleanTarget);
-    }
+    db.outgoingRequests[login].push(cleanTarget);
+    saveDb();
+    res.json({ success: true, db });
+});
 
+app.post('/api/cancel-friend-request', (req, res) => {
+    const { login, targetLogin } = req.body;
+    if (db.outgoingRequests && db.outgoingRequests[login]) {
+        db.outgoingRequests[login] = db.outgoingRequests[login].filter(l => l !== targetLogin);
+    }
+    if (db.friendRequests && db.friendRequests[targetLogin]) {
+        db.friendRequests[targetLogin] = db.friendRequests[targetLogin].filter(l => l !== login);
+    }
     saveDb();
     res.json({ success: true, db });
 });
 
 app.post('/api/respond-friend-request', (req, res) => {
     const { login, requesterLogin, accept } = req.body;
-    if (db.friendRequests[login]) {
+    if (db.friendRequests && db.friendRequests[login]) {
         db.friendRequests[login] = db.friendRequests[login].filter(l => l !== requesterLogin);
     }
-    if (db.friendRequestsOut && db.friendRequestsOut[requesterLogin]) {
-        db.friendRequestsOut[requesterLogin] = db.friendRequestsOut[requesterLogin].filter(l => l !== login);
+    if (db.outgoingRequests && db.outgoingRequests[requesterLogin]) {
+        db.outgoingRequests[requesterLogin] = db.outgoingRequests[requesterLogin].filter(l => l !== login);
     }
 
     if (accept) {
@@ -174,14 +195,10 @@ app.post('/api/remove-friend', (req, res) => {
     const { login, targetLogin } = req.body;
     if (db.friends[login]) db.friends[login] = db.friends[login].filter(l => l !== targetLogin);
     if (db.friends[targetLogin]) db.friends[targetLogin] = db.friends[targetLogin].filter(l => l !== login);
-    if (db.friendRequestsOut && db.friendRequestsOut[login]) {
-        db.friendRequestsOut[login] = db.friendRequestsOut[login].filter(l => l !== targetLogin);
-    }
     saveDb();
     res.json({ success: true, db });
 });
 
-// Группы
 app.post('/api/create-group', (req, res) => {
     const { name, creator } = req.body;
     if (!name || !creator) return res.json({ success: false, error: 'Недостаточно данных' });
@@ -194,6 +211,7 @@ app.post('/api/create-group', (req, res) => {
         members: [creator],
         roles: { [creator]: 'Лидер' },
         messages: [],
+        posts: [],
         likes: Math.floor(Math.random() * 20)
     };
     saveDb();
@@ -238,11 +256,32 @@ app.post('/api/kick-group-member', (req, res) => {
     res.json({ success: true, db });
 });
 
-// Сообщения
+app.post('/api/create-group-post', (req, res) => {
+    const { groupId, author, text, media } = req.body;
+    const group = db.groups[groupId];
+    if (!group) return res.json({ success: false, error: 'Группа не найдена' });
+
+    if (!group.posts) group.posts = [];
+    const time = new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    group.posts.unshift({ author, text: text || '', media: media || null, time, likes: 0, comments: [] });
+    saveDb();
+    res.json({ success: true, db });
+});
+
+app.post('/api/group-post-like', (req, res) => {
+    const { groupId, postIndex } = req.body;
+    const group = db.groups[groupId];
+    if (group && group.posts && group.posts[postIndex]) {
+        group.posts[postIndex].likes = (group.posts[postIndex].likes || 0) + 1;
+        saveDb();
+    }
+    res.json({ success: true, db });
+});
+
 app.post('/api/send-message', (req, res) => {
     const { sender, receiver, text, media } = req.body;
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const msgObj = { sender, text, media, time, edited: false };
+    const msgObj = { sender, receiver, text: text || '', media: media || null, time, edited: false };
 
     if (!db.messagesStore[sender]) db.messagesStore[sender] = {};
     if (!db.messagesStore[sender][receiver]) db.messagesStore[sender][receiver] = [];
@@ -255,8 +294,8 @@ app.post('/api/send-message', (req, res) => {
     }
 
     saveDb();
-    io.to(receiver).emit('new-message', { sender, receiver, msg: msgObj });
-    res.json({ success: true, db, msg: msgObj });
+    io.to(receiver).emit('receive-message', { sender, receiver, msg: msgObj });
+    res.json({ success: true, db });
 });
 
 app.post('/api/send-group-message', (req, res) => {
@@ -265,13 +304,12 @@ app.post('/api/send-group-message', (req, res) => {
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
 
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const msgObj = { sender, text, media, time, edited: false };
-    if (!group.messages) group.messages = [];
+    const msgObj = { sender, text: text || '', media: media || null, time, edited: false };
     group.messages.push(msgObj);
 
     saveDb();
-    io.emit('group-message', { groupId, msg: msgObj });
-    res.json({ success: true, db, msg: msgObj });
+    io.to(groupId).emit('receive-group-message', { groupId, msg: msgObj });
+    res.json({ success: true, db });
 });
 
 app.post('/api/edit-message', (req, res) => {
@@ -280,7 +318,7 @@ app.post('/api/edit-message', (req, res) => {
         db.messagesStore[sender][receiver][msgIndex].text = newText;
         db.messagesStore[sender][receiver][msgIndex].edited = true;
     }
-    if (sender !== receiver && db.messagesStore[receiver]?.[sender]?.[msgIndex]) {
+    if (db.messagesStore[receiver]?.[sender]?.[msgIndex]) {
         db.messagesStore[receiver][sender][msgIndex].text = newText;
         db.messagesStore[receiver][sender][msgIndex].edited = true;
     }
@@ -288,51 +326,22 @@ app.post('/api/edit-message', (req, res) => {
     res.json({ success: true, db });
 });
 
-app.post('/api/edit-group-message', (req, res) => {
-    const { groupId, sender, msgIndex, newText } = req.body;
-    const group = db.groups[groupId];
-    if (group && group.messages?.[msgIndex]) {
-        if (group.messages[msgIndex].sender === sender || group.creator === sender || group.roles?.[sender] === 'Админ') {
-            group.messages[msgIndex].text = newText;
-            group.messages[msgIndex].edited = true;
-            saveDb();
-            return res.json({ success: true, db });
-        }
-    }
-    res.json({ success: false, error: 'Нельзя отредактировать сообщение' });
-});
-
 app.post('/api/delete-message', (req, res) => {
     const { sender, receiver, msgIndex } = req.body;
     if (db.messagesStore[sender]?.[receiver]) {
         db.messagesStore[sender][receiver].splice(msgIndex, 1);
     }
-    if (sender !== receiver && db.messagesStore[receiver]?.[sender]) {
+    if (db.messagesStore[receiver]?.[sender]) {
         db.messagesStore[receiver][sender].splice(msgIndex, 1);
     }
     saveDb();
     res.json({ success: true, db });
 });
 
-app.post('/api/delete-group-message', (req, res) => {
-    const { groupId, sender, msgIndex } = req.body;
-    const group = db.groups[groupId];
-    if (group && group.messages?.[msgIndex]) {
-        if (group.messages[msgIndex].sender === sender || group.creator === sender || group.roles?.[sender] === 'Админ') {
-            group.messages.splice(msgIndex, 1);
-            saveDb();
-            return res.json({ success: true, db });
-        }
-    }
-    res.json({ success: false, error: 'Нельзя удалить сообщение' });
-});
-
 app.post('/api/news', (req, res) => {
     const { author, text, media } = req.body;
-    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const post = { author, text, media, time, likes: 0, dislikes: 0, comments: [] };
-    if (!db.news) db.news = [];
-    db.news.unshift(post);
+    const time = new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    db.news.unshift({ author, text: text || '', media: media || null, time, likes: 0, dislikes: 0, comments: [] });
     saveDb();
     res.json({ success: true, db });
 });
@@ -367,23 +376,8 @@ app.post('/api/news-comment', (req, res) => {
 
 io.on('connection', (socket) => {
     socket.on('register', (login) => {
+        socket.login = login;
         socket.join(login);
-    });
-
-    socket.on('typing', ({ from, to, isGroup }) => {
-        if (isGroup) {
-            io.emit('user-typing', { from, to, isGroup });
-        } else {
-            io.to(to).emit('user-typing', { from, to, isGroup });
-        }
-    });
-
-    socket.on('stop-typing', ({ from, to, isGroup }) => {
-        if (isGroup) {
-            io.emit('user-stop-typing', { from, to, isGroup });
-        } else {
-            io.to(to).emit('user-stop-typing', { from, to, isGroup });
-        }
     });
 
     socket.on('call-user', ({ to, offer, from }) => {
@@ -402,18 +396,27 @@ io.on('connection', (socket) => {
         io.to(to).emit('hang-up');
     });
 
+    socket.on('typing', ({ from, to, isGroup }) => {
+        if (!isGroup) io.to(to).emit('user-typing', { from, to, isGroup });
+    });
+
+    socket.on('stop-typing', ({ from, to, isGroup }) => {
+        if (!isGroup) io.to(to).emit('user-stop-typing');
+    });
+
     socket.on('join-group-call', ({ groupId, login }) => {
         socket.join(groupId);
         const room = io.sockets.adapter.rooms.get(groupId);
-        const usersInRoom = [];
+        const clients = [];
         if (room) {
             room.forEach(socketId => {
-                if (socketId !== socket.id) {
-                    usersInRoom.push({ socketId, login });
+                const s = io.sockets.sockets.get(socketId);
+                if (s && s.id !== socket.id) {
+                    clients.push({ socketId: s.id, login: s.login });
                 }
             });
         }
-        socket.emit('group-call-users', usersInRoom);
+        socket.emit('group-call-users', clients);
         socket.to(groupId).emit('user-joined-group-call', { login, socketId: socket.id });
     });
 
@@ -429,7 +432,7 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {});
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 server.listen(PORT, () => {
-    console.log(`Сервер запущен на порту ${PORT}`);
+    console.log(`Сервер запущен на http://localhost:${PORT}`);
 });
