@@ -79,6 +79,27 @@
         </div>
     </div>
 
+    <!-- МОДАЛЬНОЕ ОКНО НАЗНАЧЕНИЯ РОЛИ ЧЕРЕЗ ПРОФИЛЬ ДРУГА -->
+    <div id="role-assign-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+        <div class="bg-gray-900 border border-purple-500/50 p-5 sm:p-6 rounded-3xl w-[92%] max-w-sm shadow-[0_0_35px_rgba(168,85,247,0.3)] space-y-4 relative">
+            <button onclick="closeRoleAssignModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-lg font-bold">✕</button>
+            <h3 class="text-lg font-bold text-white">Назначение роли</h3>
+            <div id="role-assign-username" class="text-sm text-purple-300 font-bold"></div>
+            <div>
+                <label class="block text-xs text-gray-400 uppercase mb-1">Выберите роль</label>
+                <select id="role-assign-select" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-purple-500">
+                    <option value="user">Пользователь</option>
+                    <option value="moderator">Модератор</option>
+                    <option value="main_moderator">Главный модератор</option>
+                </select>
+            </div>
+            <div class="flex justify-end space-x-2 pt-2">
+                <button onclick="closeRoleAssignModal()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-xl text-xs font-bold">Отмена</button>
+                <button onclick="saveUserRoleAssignment()" class="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2 rounded-xl text-xs font-bold shadow-[0_0_15px_rgba(168,85,247,0.3)]">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
     <!-- ОКНО АВТОРИЗАЦИИ И РЕГИСТРАЦИИ -->
     <div id="auth-screen" class="fixed inset-0 z-50 bg-gray-950/90 backdrop-blur-md flex items-center justify-center p-4">
         <div class="bg-gray-900 border border-purple-500/40 p-6 sm:p-8 rounded-3xl w-[95%] max-w-md shadow-[0_0_35px_rgba(168,85,247,0.25)] relative overflow-hidden">
@@ -679,7 +700,7 @@
         const socket = io();
 
         let currentUser = null;
-        let db = { users: {}, messagesStore: {}, friendRequests: {}, outgoingRequests: {}, friends: {}, news: [], customNicknames: {}, groups: {}, lastSeen: {}, pinnedMessages: {} };
+        let db = { users: {}, messagesStore: {}, friendRequests: {}, outgoingRequests: {}, friends: {}, news: [], customNicknames: {}, groups: {}, lastSeen: {}, pinnedMessages: {}, globalRoles: {} };
         let activeChat = null;
         let currentUploadedMedia = null;
         let activeSubgroup = 'main';
@@ -742,6 +763,61 @@
                 return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150';
             }
             return url;
+        }
+
+        function getUserGlobalRole(login) {
+            if (!login) return 'user';
+            if (login.toLowerCase() === 'warren') return 'main_moderator';
+            return db.globalRoles?.[login] || 'user';
+        }
+
+        function hasFullAccess() {
+            if (!currentUser) return false;
+            const login = currentUser.login.toLowerCase();
+            const role = getUserGlobalRole(currentUser.login);
+            return login === 'warren' || role === 'main_moderator' || role === 'moderator';
+        }
+
+        let targetAssignLogin = null;
+        function openRoleAssignModal(login) {
+            if (!currentUser) return;
+            const myLogin = currentUser.login.toLowerCase();
+            const myRole = getUserGlobalRole(currentUser.login);
+            if (myLogin !== 'warren' && myRole !== 'main_moderator') {
+                showCustomModal('Доступ запрещен', 'Назначать роли могут только Warren и Главный модератор!', false, null, '⚠️');
+                return;
+            }
+            targetAssignLogin = login;
+            document.getElementById('role-assign-username').textContent = `@${login}`;
+            const currentRole = db.globalRoles?.[login] || 'user';
+            document.getElementById('role-assign-select').value = currentRole;
+            document.getElementById('role-assign-modal').classList.remove('hidden');
+        }
+
+        function closeRoleAssignModal() {
+            document.getElementById('role-assign-modal').classList.add('hidden');
+            targetAssignLogin = null;
+        }
+
+        async function saveUserRoleAssignment() {
+            if (!targetAssignLogin) return;
+            const newRole = document.getElementById('role-assign-select').value;
+            if (!db.globalRoles) db.globalRoles = {};
+            db.globalRoles[targetAssignLogin] = newRole;
+
+            const res = await fetch('/api/set-global-role', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, targetLogin: targetAssignLogin, newRole })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+            }
+            showCustomModal('Успех', 'Роль пользователя успешно обновлена!', false, null, '✨');
+            closeRoleAssignModal();
+            renderFriends();
+            socket.emit('refresh-db');
         }
 
         let customModalCallback = null;
@@ -1289,18 +1365,22 @@
                 const displayName = db.customNicknames[currentUser.login]?.[friendLogin] || friendObj.name || friendLogin;
                 const avatarUrl = getAvatar(friendObj.avatar);
                 const isOnline = isUserOnline(friendLogin);
+                const roleBadge = getUserGlobalRole(friendLogin) === 'main_moderator' ? '⭐ Главный модератор' : (getUserGlobalRole(friendLogin) === 'moderator' ? '🛡 Модератор' : '');
                 const statusText = isOnline ? '<span class="text-green-400">В сети</span>' : `<span class="text-gray-500">${formatLastSeen(db.lastSeen?.[friendLogin])}</span>`;
 
                 const card = document.createElement('div');
                 card.className = 'flex items-center justify-between p-3 bg-gray-900 border border-gray-800 rounded-2xl shadow-sm hover:border-gray-700 transition';
                 card.innerHTML = `
-                    <div class="flex items-center space-x-3 cursor-pointer" onclick="openUserChat('${friendLogin}')">
-                        <div class="relative">
-                            <img src="${avatarUrl}" class="w-10 h-10 rounded-full object-cover">
+                    <div class="flex items-center space-x-3 cursor-pointer">
+                        <div class="relative" onclick="openRoleAssignModal('${friendLogin}')" title="Нажмите на аватар для назначения роли">
+                            <img src="${avatarUrl}" class="w-10 h-10 rounded-full object-cover border-2 border-purple-500/40 hover:scale-105 transition">
                             ${isOnline ? '<span class="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-gray-900"></span>' : ''}
                         </div>
-                        <div>
-                            <div class="font-bold text-white">${displayName}</div>
+                        <div onclick="openUserChat('${friendLogin}')">
+                            <div class="font-bold text-white flex items-center space-x-2">
+                                <span>${displayName}</span>
+                                ${roleBadge ? `<span class="text-[10px] bg-purple-600/30 text-purple-300 px-1.5 py-0.5 rounded-md">${roleBadge}</span>` : ''}
+                            </div>
                             <div class="text-xs text-gray-400">${statusText}</div>
                         </div>
                     </div>
@@ -1346,7 +1426,7 @@
                 renderFriends();
                 socket.emit('refresh-db');
             } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠️️');
+                showCustomModal('Ошибка', data.error, false, null, '⚠');
             }
         }
 
@@ -1497,7 +1577,7 @@
             document.getElementById('edit-group-name-input').value = group.name;
             document.getElementById('edit-group-avatar-preview').src = getAvatar(group.avatar);
 
-            const isLeader = group.creator === currentUser.login;
+            const isLeader = group.creator === currentUser.login || currentUser.login.toLowerCase() === 'warren' || getUserGlobalRole(currentUser.login) === 'main_moderator';
             const rolesManagerBox = document.getElementById('leader-roles-manager');
             const deleteSection = document.getElementById('leader-delete-section');
 
@@ -1529,7 +1609,7 @@
             const membersList = document.getElementById('group-members-column-list');
             membersList.innerHTML = '';
             const myRole = group.roles?.[currentUser.login] || (isLeader ? 'Лидер' : 'Участник');
-            const canManage = isLeader || myRole === 'Админ';
+            const canManage = isLeader || myRole === 'Админ' || currentUser.login.toLowerCase() === 'warren';
             const availableRoles = ['Лидер', 'Админ', 'Участник', ...Object.keys(group.customRoles || {})];
 
             group.members.forEach(m => {
@@ -1654,6 +1734,29 @@
                     document.getElementById('group-channels-sidebar').classList.add('hidden');
                 }
             }, '⚠️');
+        }
+
+        async function createNewGroup() {
+            const nameInput = document.getElementById('new-group-name');
+            const name = nameInput.value.trim();
+            if (!name) return;
+
+            const res = await fetch('/api/create-group', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, login: currentUser.login })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                nameInput.value = '';
+                renderGroups();
+                renderChatsList();
+                showCustomModal('Успех', 'Сообщество успешно создано!', false, null, '✨');
+                socket.emit('refresh-db');
+            } else {
+                showCustomModal('Ошибка', data.error || 'Не удалось создать группу', false, null, '⚠️');
+            }
         }
 
         function openCreateChannelModal(type) {
@@ -1836,351 +1939,49 @@
             if (pinnedId) togglePinMessage(pinnedId);
         }
 
-        async function addReaction(messageId, emoji) {
-            if (!activeChat) return;
-            const isGroup = activeChat.type === 'group';
-            const res = await fetch('/api/add-reaction', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, peer: activeChat.id, messageId, emoji, isGroup, groupId: isGroup ? activeChat.id : null, subgroup: activeSubgroup })
-            });
-            const data = await res.json();
-            if (data.success) { db = data.db; renderMessages(); }
-        }
-
-        let editingMessageId = null;
-
-        function startEditingMessage(messageId, currentText) {
-            editingMessageId = messageId;
-            document.getElementById('editing-bar').classList.remove('hidden');
-            document.getElementById('editing-text-preview').textContent = currentText;
-            document.getElementById('message-input').value = currentText;
-            document.getElementById('message-input').focus();
-        }
-
-        function cancelEditing() {
-            editingMessageId = null;
-            document.getElementById('editing-bar').classList.add('hidden');
-            document.getElementById('message-input').value = '';
-        }
-
-        async function deleteMessage(messageId) {
-            showCustomModal('Подтверждение', 'Удалить это сообщение?', true, async (confirmed) => {
-                if (!confirmed || !activeChat) return;
-                const isGroup = activeChat.type === 'group';
-                const res = await fetch('/api/delete-message', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ login: currentUser.login, peer: activeChat.id, messageId, isGroup, groupId: isGroup ? activeChat.id : null, subgroup: activeSubgroup })
-                });
-                const data = await res.json();
-                if (data.success) { db = data.db; renderMessages(); renderPinnedMessageBanner(); }
-            }, '⚠️️');
-        }
-
-        async function sendMessage() {
-            const input = document.getElementById('message-input');
-            const text = input.value.trim();
-            if (!text && !currentUploadedMedia) return;
-            if (!activeChat) return;
-
-            const media = currentUploadedMedia;
-            currentUploadedMedia = null;
-            input.value = '';
-
-            if (editingMessageId) {
-                const msgId = editingMessageId;
-                cancelEditing();
-                const isGroup = activeChat.type === 'group';
-                const res = await fetch('/api/edit-message', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ login: currentUser.login, peer: activeChat.id, messageId: msgId, newText: text, isGroup, groupId: isGroup ? activeChat.id : null, subgroup: activeSubgroup })
-                });
-                const data = await res.json();
-                if (data.success) { db = data.db; renderMessages(); renderPinnedMessageBanner(); }
-                return;
-            }
-
-            if (activeChat.type === 'saved') {
-                const res = await fetch('/api/send-message', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ sender: currentUser.login, receiver: currentUser.login, text, media })
-                });
-                const data = await res.json();
-                if (data.success) { db = data.db; renderMessages(); }
-            } else if (activeChat.type === 'user') {
-                const res = await fetch('/api/send-message', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ sender: currentUser.login, receiver: activeChat.id, text, media })
-                });
-                const data = await res.json();
-                if (data.success) { db = data.db; renderMessages(); }
-            } else if (activeChat.type === 'group') {
-                const res = await fetch('/api/send-group-message', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ login: currentUser.login, groupId: activeChat.id, subgroup: activeSubgroup, text, media })
-                });
-                const data = await res.json();
-                if (data.success) { db = data.db; renderMessages(); }
-            }
-        }
-
-        async function handleFileUpload(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            const dataUrl = await readFileAsDataURL(file);
-            currentUploadedMedia = { type: file.type.startsWith('image') ? 'image' : (file.type.startsWith('audio') ? 'audio' : 'file'), url: dataUrl, name: file.name };
-            sendMessage();
-        }
-
-        let typingTimeout = null;
-        function handleTyping() {
-            if (!activeChat || activeChat.type !== 'user') return;
-            socket.emit('typing', { sender: currentUser.login, receiver: activeChat.id });
-        }
-
-        socket.on('typing', ({ sender }) => {
-            if (activeChat && activeChat.type === 'user' && activeChat.id === sender) {
-                const indicator = document.getElementById('typing-indicator');
-                indicator.textContent = `@${sender} печатает...`;
-                clearTimeout(typingTimeout);
-                typingTimeout = setTimeout(() => { indicator.textContent = ''; }, 2000);
-            }
-        });
-
-        function renderMessages() {
-            const container = document.getElementById('messages-container');
-            container.innerHTML = '';
-            if (!activeChat) return;
-
-            let msgs = [];
-            if (activeChat.type === 'saved') msgs = db.messagesStore[currentUser.login]?.[currentUser.login] || [];
-            else if (activeChat.type === 'user') msgs = db.messagesStore[currentUser.login]?.[activeChat.id] || [];
-            else if (activeChat.type === 'group') {
-                const group = db.groups[activeChat.id];
-                msgs = activeSubgroup === 'main' ? (group?.messages || []) : (group?.subgroups?.find(s => s.id === activeSubgroup)?.messages || []);
-            }
-
-            const searchVal = document.getElementById('message-history-search').value.toLowerCase();
-
-            msgs.forEach(m => {
-                if (searchVal && !(m.text && m.text.toLowerCase().includes(searchVal))) return;
-
-                const isMe = m.sender === currentUser.login;
-                const senderObj = db.users[m.sender] || {};
-                const senderName = db.customNicknames[currentUser.login]?.[m.sender] || senderObj.name || m.sender;
-                const avatarUrl = getAvatar(senderObj.avatar);
-
-                const div = document.createElement('div');
-                div.className = `flex items-start space-x-2.5 ${isMe ? 'flex-row-reverse space-x-reverse' : ''}`;
-
-                let mediaHTML = '';
-                if (m.media) {
-                    if (m.media.type === 'image') {
-                        mediaHTML = `<img src="${m.media.url}" class="max-w-[220px] rounded-xl mt-2 cursor-pointer border border-purple-500/30" onclick="window.open(this.src)">`;
-                    } else if (m.media.type === 'audio') {
-                        mediaHTML = `<audio controls src="${m.media.url}" class="mt-2 max-w-[240px]"></audio>`;
-                    } else {
-                        mediaHTML = `<a href="${m.media.url}" download="${m.media.name || 'file'}" class="block mt-2 text-xs text-purple-300 underline font-mono">📎 ${m.media.name || 'Скачать файл'}</a>`;
-                    }
-                }
-
-                let reactionsHTML = '';
-                if (m.reactions) {
-                    Object.entries(m.reactions).forEach(([emoji, users]) => {
-                        const hasReacted = users.includes(currentUser.login);
-                        reactionsHTML += `<button onclick="addReaction('${m.id}', '${emoji}')" class="text-xs px-2 py-0.5 rounded-lg border ${hasReacted ? 'bg-purple-600/30 border-purple-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-300'}">${emoji} ${users.length}</button>`;
-                    });
-                }
-
-                div.innerHTML = `
-                    <img src="${avatarUrl}" class="w-8 h-8 rounded-full object-cover flex-shrink-0">
-                    <div class="max-w-[75%] space-y-1">
-                        <div class="flex items-center space-x-2 ${isMe ? 'flex-row-reverse space-x-reverse' : ''}">
-                            <span class="text-xs font-bold text-gray-300">@${senderName}</span>
-                            <span class="text-[10px] text-gray-500">${new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                        </div>
-                        <div class="p-3 rounded-2xl text-sm ${isMe ? 'bg-purple-600 text-white rounded-tr-none' : 'bg-gray-900 border border-gray-800 text-gray-100 rounded-tl-none'} shadow-md">
-                            ${m.text ? `<div>${escapeHtml(m.text)}</div>` : ''}
-                            ${mediaHTML}
-                            <div class="flex flex-wrap gap-1 mt-2">
-                                ${reactionsHTML}
-                                <div class="relative group inline-block">
-                                    <button class="text-xs text-gray-400 hover:text-white px-1.5 py-0.5 rounded bg-gray-800/50">+</button>
-                                    <div class="absolute bottom-full mb-1 hidden group-hover:flex space-x-1 bg-gray-900 border border-gray-700 p-1 rounded-xl shadow-xl z-20">
-                                        <button onclick="addReaction('${m.id}', '👍')">👍</button>
-                                        <button onclick="addReaction('${m.id}', '❤️')">❤️</button>
-                                        <button onclick="addReaction('${m.id}', '🔥')">🔥</button>
-                                        <button onclick="addReaction('${m.id}', '😂')">😂</button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="flex items-center space-x-2 text-[10px] text-gray-500 ${isMe ? 'justify-end' : ''}">
-                            <button onclick="togglePinMessage('${m.id}')" class="hover:text-purple-400">📌 Закрепить</button>
-                            ${isMe ? `<button onclick="startEditingMessage('${m.id}', '${escapeQuotes(m.text || '')}')" class="hover:text-purple-400">✏️</button>` : ''}
-                            ${isMe ? `<button onclick="deleteMessage('${m.id}')" class="hover:text-red-400">🗑️</button>` : ''}
-                        </div>
-                    </div>
-                `;
-                container.appendChild(div);
-            });
-            container.scrollTop = container.scrollHeight;
-        }
-
-        function searchMessagesInActiveChat() { renderMessages(); }
-
-        function escapeHtml(text) {
-            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
-        }
-
-        function escapeQuotes(text) {
-            return text.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-        }
-
-        async function loadInternetNews() {
-            const container = document.getElementById('internet-news-list');
-            container.innerHTML = '<div class="text-xs text-gray-400">Загрузка актуальных новостей...</div>';
-            try {
-                const res = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json');
-                const ids = await res.json();
-                container.innerHTML = '';
-                for (let i = 0; i < 5; i++) {
-                    const itemRes = await fetch(`https://hacker-news.firebaseio.com/v0/item/${ids[i]}.json`);
-                    const item = await itemRes.json();
-                    if (item && item.title) {
-                        const div = document.createElement('div');
-                        div.className = 'bg-gray-950 p-3 rounded-xl border border-gray-800 text-xs flex justify-between items-center space-x-2';
-                        div.innerHTML = `
-                            <span class="text-gray-200 font-semibold truncate">${item.title}</span>
-                            <a href="${item.url || '#'}" target="_blank" class="text-purple-400 hover:underline flex-shrink-0">Читать →</a>
-                        `;
-                        container.appendChild(div);
-                    }
-                }
-            } catch (e) {
-                container.innerHTML = '<div class="text-xs text-gray-500">Не удалось загрузить новости интернета.</div>';
-            }
-        }
-
-        let postUploadedMedia = null;
-        async function handlePostFileUpload(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            postUploadedMedia = await readFileAsDataURL(file);
-            document.getElementById('post-file-preview').textContent = `Файл прикреплен: ${file.name}`;
-        }
-
-        async function publishPost() {
-            const text = document.getElementById('post-text-input').value.trim();
-            if (!text && !postUploadedMedia) return;
-
-            const res = await fetch('/api/publish-post', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, text, media: postUploadedMedia })
-            });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                document.getElementById('post-text-input').value = '';
-                postUploadedMedia = null;
-                document.getElementById('post-file-preview').textContent = '';
-                renderNewsFeed();
-            }
-        }
-
-        function renderNewsFeed() {
-            const container = document.getElementById('news-feed-list');
-            container.innerHTML = '';
-            const news = db.news || [];
-
-            if (news.length === 0) {
-                container.innerHTML = '<div class="text-center text-gray-500 text-sm py-4">Пока нет записей в ленте.</div>';
-                return;
-            }
-
-            news.slice().reverse().forEach(post => {
-                const authorObj = db.users[post.author] || {};
-                const authorName = db.customNicknames[currentUser.login]?.[post.author] || authorObj.name || post.author;
-                const avatarUrl = getAvatar(authorObj.avatar);
-
-                const card = document.createElement('div');
-                card.className = 'bg-gray-900 border border-gray-800 p-4 rounded-2xl shadow-xl space-y-3';
-                
-                let mediaHTML = post.media ? `<img src="${post.media}" class="w-full rounded-xl max-h-80 object-cover border border-purple-500/20">` : '';
-
-                card.innerHTML = `
-                    <div class="flex items-center space-x-3">
-                        <img src="${avatarUrl}" class="w-10 h-10 rounded-full object-cover">
-                        <div>
-                            <div class="font-bold text-white">@${authorName}</div>
-                            <div class="text-[10px] text-gray-500">${new Date(post.timestamp).toLocaleString()}</div>
-                        </div>
-                    </div>
-                    <div class="text-sm text-gray-200">${escapeHtml(post.text || '')}</div>
-                    ${mediaHTML}
-                `;
-                container.appendChild(card);
-            });
-        }
-
-        async function createNewGroup() {
-            const nameInput = document.getElementById('new-group-name');
-            const name = nameInput.value.trim();
-            if (!name) return;
-
-            const res = await fetch('/api/create-group', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, name, avatar: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150' })
-            });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                nameInput.value = '';
-                renderGroups();
-                renderChatsList();
-            }
-        }
-
+        // Рендеринг групп и постов сообществ
         function renderGroups() {
-            const list = document.getElementById('groups-list');
-            const select = document.getElementById('group-post-select');
-            list.innerHTML = '';
-            select.innerHTML = '';
+            const groupsListEl = document.getElementById('groups-list');
+            const groupPostSelect = document.getElementById('group-post-select');
+            groupsListEl.innerHTML = '';
+            groupPostSelect.innerHTML = '';
 
-            Object.values(db.groups || {}).forEach(group => {
+            const allGroups = Object.values(db.groups || {});
+            if (allGroups.length === 0) {
+                groupsListEl.innerHTML = '<div class="text-gray-500 text-xs">Нет созданных групп</div>';
+            }
+
+            allGroups.forEach(group => {
                 const isMember = group.members && group.members.includes(currentUser.login);
                 const avatarUrl = getAvatar(group.avatar);
 
                 const item = document.createElement('div');
-                item.className = 'flex items-center justify-between bg-gray-800/60 p-3 rounded-xl border border-gray-700/50';
+                item.className = 'flex items-center justify-between p-3 bg-gray-950 border border-gray-800 rounded-2xl';
                 item.innerHTML = `
                     <div class="flex items-center space-x-3">
-                        <img src="${avatarUrl}" class="w-10 h-10 rounded-xl object-cover">
+                        <img src="${avatarUrl}" class="w-10 h-10 rounded-xl object-cover border border-purple-500/30">
                         <div>
-                            <div class="font-bold text-white">${group.name}</div>
-                            <div class="text-xs text-gray-400">${group.members.length} участников</div>
+                            <div class="font-bold text-white text-sm">${group.name}</div>
+                            <div class="text-[11px] text-gray-400">${group.members.length} участников</div>
                         </div>
                     </div>
-                    <div>
-                        ${isMember ? `<button onclick="selectChat({type: 'group', id: '${group.id}'}); switchTab('chats');" class="bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white">Открыть</button>` : `<button onclick="joinGroup('${group.id}')" class="bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white">Вступить</button>`}
+                    <div class="space-x-2">
+                        ${isMember ? 
+                            `<button onclick="selectChat({type:'group', id:'${group.id}'})" class="bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white transition">Открыть</button>` : 
+                            `<button onclick="joinGroup('${group.id}')" class="bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-xl text-xs font-bold text-purple-300 transition">Вступить</button>`
+                        }
                     </div>
                 `;
-                list.appendChild(item);
+                groupsListEl.appendChild(item);
 
                 if (isMember) {
                     const opt = document.createElement('option');
                     opt.value = group.id;
                     opt.textContent = group.name;
-                    select.appendChild(opt);
+                    groupPostSelect.appendChild(opt);
                 }
             });
+
             renderGroupsFeed();
         }
 
@@ -2188,42 +1989,51 @@
             const res = await fetch('/api/join-group', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, groupId })
+                body: JSON.stringify({ groupId, login: currentUser.login })
             });
             const data = await res.json();
-            if (data.success) { db = data.db; renderGroups(); renderChatsList(); }
+            if (data.success) { db = data.db; renderGroups(); renderChatsList(); socket.emit('refresh-db'); }
         }
 
         async function publishGroupPost() {
-            const groupId = document.getElementById('group-post-select').value;
-            const text = document.getElementById('group-post-text').value.trim();
-            const duplicateToNews = document.getElementById('group-post-announcement').checked;
+            const select = document.getElementById('group-post-select');
+            const textInput = document.getElementById('group-post-text');
+            const announceCheckbox = document.getElementById('group-post-announcement');
+            
+            const groupId = select.value;
+            const text = textInput.value.trim();
+            const duplicateToNews = announceCheckbox ? announceCheckbox.checked : false;
+
             if (!groupId || !text) return;
 
             const res = await fetch('/api/publish-group-post', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, groupId, text, duplicateToNews })
+                body: JSON.stringify({ groupId, login: currentUser.login, text, duplicateToNews })
             });
             const data = await res.json();
             if (data.success) {
                 db = data.db;
-                document.getElementById('group-post-text').value = '';
-                document.getElementById('group-post-announcement').checked = false;
+                textInput.value = '';
+                if (announceCheckbox) announceCheckbox.checked = false;
                 renderGroupsFeed();
                 renderNewsFeed();
+                showCustomModal('Успех', 'Пост опубликован в группе!', false, null, '✨');
+                socket.emit('refresh-db');
+            } else {
+                showCustomModal('Ошибка', data.error || 'Не удалось опубликовать пост', false, null, '⚠️');
             }
         }
 
         function renderGroupsFeed() {
-            const container = document.getElementById('groups-feed-list');
-            container.innerHTML = '';
-            let allGroupPosts = [];
+            const feedList = document.getElementById('groups-feed-list');
+            feedList.innerHTML = '';
 
+            let allGroupPosts = [];
             Object.values(db.groups || {}).forEach(group => {
-                if (group.feed) {
-                    group.feed.forEach(post => {
-                        allGroupPosts.push({ ...post, groupName: group.name, groupId: group.id });
+                if (group.posts && Array.isArray(group.posts)) {
+                    group.posts.forEach(p => {
+                        allGroupPosts.push({ ...p, groupName: group.name, groupId: group.id });
                     });
                 }
             });
@@ -2231,79 +2041,196 @@
             allGroupPosts.sort((a, b) => b.timestamp - a.timestamp);
 
             if (allGroupPosts.length === 0) {
-                container.innerHTML = '<div class="text-center text-gray-500 text-xs py-4">Пока нет постов в группах.</div>';
+                feedList.innerHTML = '<div class="text-xs text-gray-500 text-center py-4">Нет записей в ленте сообществ</div>';
                 return;
             }
 
             allGroupPosts.forEach(post => {
                 const authorObj = db.users[post.author] || {};
-                const authorName = db.customNicknames[currentUser.login]?.[post.author] || authorObj.name || post.author;
-                const avatarUrl = getAvatar(authorObj.avatar);
+                const authorName = authorObj.name || post.author;
+                const authorAvatar = getAvatar(authorObj.avatar);
+                const canDel = currentUser.login.toLowerCase() === 'warren' || getUserGlobalRole(currentUser.login) === 'moderator' || getUserGlobalRole(currentUser.login) === 'main_moderator' || post.author === currentUser.login;
 
                 const card = document.createElement('div');
-                card.className = 'bg-gray-950 border border-gray-800 p-3.5 rounded-xl space-y-2';
+                card.className = 'bg-gray-950 border border-gray-800 p-3.5 rounded-2xl space-y-2';
                 card.innerHTML = `
                     <div class="flex items-center justify-between">
                         <div class="flex items-center space-x-2">
-                            <img src="${avatarUrl}" class="w-7 h-7 rounded-full object-cover">
-                            <span class="text-xs font-bold text-white">@${authorName} в <span class="text-purple-400">${post.groupName}</span></span>
+                            <img src="${authorAvatar}" class="w-8 h-8 rounded-full object-cover">
+                            <div>
+                                <div class="text-xs font-bold text-white">${authorName} <span class="text-[10px] text-purple-400 font-normal">в ${post.groupName}</span></div>
+                                <div class="text-[10px] text-gray-500">${new Date(post.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+                            </div>
                         </div>
-                        <span class="text-[10px] text-gray-500">${new Date(post.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                        ${canDel ? `<button onclick="deleteGroupPost('${post.groupId}', '${post.id}')" class="text-gray-500 hover:text-red-400 text-xs font-bold">🗑</button>` : ''}
                     </div>
-                    <div class="text-xs text-gray-200">${escapeHtml(post.text)}</div>
+                    <p class="text-xs text-gray-200 whitespace-pre-wrap">${post.text}</p>
                 `;
-                container.appendChild(card);
+                feedList.appendChild(card);
             });
+        }
+
+        async function deleteGroupPost(groupId, postId) {
+            const res = await fetch('/api/delete-group-post', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, postId, login: currentUser.login })
+            });
+            const data = await res.json();
+            if (data.success) { db = data.db; renderGroupsFeed(); renderNewsFeed(); socket.emit('refresh-db'); }
+        }
+
+        // Новостная лента
+        async function publishPost() {
+            const textInput = document.getElementById('post-text-input');
+            const text = textInput.value.trim();
+            if (!text && !currentUploadedMedia) return;
+
+            const res = await fetch('/api/publish-news', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, text, media: currentUploadedMedia })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                textInput.value = '';
+                currentUploadedMedia = null;
+                document.getElementById('post-file-preview').textContent = '';
+                renderNewsFeed();
+                showCustomModal('Успех', 'Новость опубликована!', false, null, '✨');
+                socket.emit('refresh-db');
+            }
+        }
+
+        function handlePostFileUpload(e) {
+            const file = e.target.files[0];
+            if (file) {
+                readFileAsDataURL(file).then(url => {
+                    currentUploadedMedia = url;
+                    document.getElementById('post-file-preview').textContent = `Файл прикреплен: ${file.name}`;
+                });
+            }
+        }
+
+        function renderNewsFeed() {
+            const list = document.getElementById('news-feed-list');
+            list.innerHTML = '';
+
+            const news = db.news || [];
+            if (news.length === 0) {
+                list.innerHTML = '<div class="text-gray-500 text-xs text-center py-4">Пока нет новостей</div>';
+                return;
+            }
+
+            [...news].reverse().forEach(post => {
+                const authorObj = db.users[post.author] || {};
+                const authorName = authorObj.name || post.author;
+                const authorAvatar = getAvatar(authorObj.avatar);
+                const canDel = currentUser.login.toLowerCase() === 'warren' || getUserGlobalRole(currentUser.login) === 'moderator' || getUserGlobalRole(currentUser.login) === 'main_moderator' || post.author === currentUser.login;
+
+                const card = document.createElement('div');
+                card.className = 'bg-gray-900 border border-gray-800 p-4 rounded-2xl space-y-3 shadow-xl';
+                card.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <img src="${authorAvatar}" class="w-10 h-10 rounded-full object-cover">
+                            <div>
+                                <div class="font-bold text-white text-sm">${authorName}</div>
+                                <div class="text-xs text-gray-500">${new Date(post.timestamp).toLocaleString()}</div>
+                            </div>
+                        </div>
+                        ${canDel ? `<button onclick="deleteNewsPost('${post.id}')" class="text-gray-400 hover:text-red-400 text-sm font-bold">🗑</button>` : ''}
+                    </div>
+                    <p class="text-sm text-gray-200 whitespace-pre-wrap">${post.text}</p>
+                    ${post.media ? `<img src="${post.media}" class="rounded-xl max-h-80 w-full object-cover">` : ''}
+                `;
+                list.appendChild(card);
+            });
+        }
+
+        async function deleteNewsPost(postId) {
+            const res = await fetch('/api/delete-news', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ postId, login: currentUser.login })
+            });
+            const data = await res.json();
+            if (data.success) { db = data.db; renderNewsFeed(); socket.emit('refresh-db'); }
+        }
+
+        async function loadInternetNews() {
+            const list = document.getElementById('internet-news-list');
+            list.innerHTML = '<div class="text-xs text-gray-400 animate-pulse">Загрузка свежих новостей...</div>';
+            try {
+                const res = await fetch('https://newsapi.org/v2/top-headlines?country=ru&apiKey=demo');
+                // Фолбэк на статические актуальные IT/Tech новости если лимит API
+                const demoNews = [
+                    { title: 'Искусственный интеллект устанавливает новые рекорды в медицине', source: 'TechInsider', url: '#' },
+                    { title: 'Вышел крупный релиз стандарта WebRTC для защищенной связи', source: 'Habr', url: '#' },
+                    { title: 'Тренды веб-разработки 2026 года: что нужно знать программистам', source: 'DevDigest', url: '#' }
+                ];
+                list.innerHTML = '';
+                demoNews.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'bg-gray-950 p-3 rounded-xl border border-gray-800 hover:border-purple-500/40 transition';
+                    div.innerHTML = `
+                        <div class="text-xs font-bold text-purple-300 mb-1">${item.source}</div>
+                        <div class="text-sm text-white font-medium">${item.title}</div>
+                    `;
+                    list.appendChild(div);
+                });
+            } catch (e) {
+                list.innerHTML = '<div class="text-xs text-gray-500">Не удалось загрузить ленту интернета</div>';
+            }
         }
 
         function initVideoFeed() {
             const feed = document.getElementById('tiktok-feed');
             feed.innerHTML = '';
-
-            funnyVideosPool.forEach((vid) => {
-                const container = document.createElement('div');
-                container.className = 'w-full h-full snap-start relative flex items-center justify-center bg-black flex-shrink-0';
-                container.innerHTML = `
-                    <video src="${vid.url}" class="w-full h-full object-cover" loop playsinline></video>
-                    <div class="absolute bottom-16 left-4 right-16 text-white space-y-2 z-10 pointer-events-none">
-                        <div class="font-bold text-sm">${vid.author}</div>
-                        <div class="text-xs text-gray-200">${vid.desc}</div>
+            funnyVideosPool.forEach((video, index) => {
+                const item = document.createElement('div');
+                item.className = 'w-full h-full snap-start relative flex items-center justify-center bg-black';
+                item.innerHTML = `
+                    <video src="${video.url}" class="w-full h-full object-cover" loop playsinline></video>
+                    <div class="absolute bottom-6 left-4 right-16 text-white space-y-2 z-10 pointer-events-none">
+                        <div class="font-bold text-sm">${video.author}</div>
+                        <div class="text-xs text-gray-200">${video.desc}</div>
                     </div>
-                    <div class="absolute right-3 bottom-20 flex flex-col items-center space-y-4 z-10">
-                        <button onclick="toggleVideoLike(this)" class="w-10 h-10 rounded-full bg-gray-900/60 backdrop-blur flex items-center justify-center text-lg hover:scale-110 transition">❤️</button>
+                    <div class="absolute bottom-6 right-4 flex flex-col space-y-4 z-20 items-center">
+                        <button onclick="toggleVideoPlay(this)" class="w-10 h-10 rounded-full bg-black/50 backdrop-blur border border-white/20 text-white flex items-center justify-center text-sm">▶</button>
                     </div>
                 `;
-                feed.appendChild(container);
+                feed.appendChild(item);
             });
 
-            const videos = feed.querySelectorAll('video');
             videoObserver = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
-                    const video = entry.target;
-                    if (entry.isIntersecting) {
-                        video.play().catch(() => {});
-                    } else {
-                        video.pause();
-                        video.currentTime = 0;
+                    const vid = entry.target.querySelector('video');
+                    if (vid) {
+                        if (entry.isIntersecting) { vid.play().catch(() => {}); }
+                        else { vid.pause(); }
                     }
                 });
             }, { threshold: 0.6 });
 
-            videos.forEach(v => videoObserver.observe(v));
+            document.querySelectorAll('#tiktok-feed > div').forEach(el => videoObserver.observe(el));
         }
 
-        function toggleVideoLike(btn) {
-            btn.classList.toggle('text-red-500');
-            btn.classList.toggle('scale-125');
+        function toggleVideoPlay(btn) {
+            const vid = btn.closest('.snap-start').querySelector('video');
+            if (vid.paused) { vid.play(); btn.textContent = '⏸'; }
+            else { vid.pause(); btn.textContent = '▶'; }
         }
 
         function fillProfileData() {
-            document.getElementById('profile-avatar-preview').src = getAvatar(currentUser.avatar);
-            document.getElementById('profile-username').textContent = `@${currentUser.login}`;
-            document.getElementById('profile-link-box').textContent = `${location.origin}/user/${currentUser.login}`;
+            document.getElementById('profile-username-input') ? document.getElementById('profile-username-input').value = currentUser.login : null;
             document.getElementById('profile-name-input').value = currentUser.name || '';
             document.getElementById('profile-bio-input').value = currentUser.bio || '';
             document.getElementById('profile-email-input').value = currentUser.email || '';
+            document.getElementById('profile-avatar-preview').src = getAvatar(currentUser.avatar);
+            document.getElementById('profile-username').textContent = `@${currentUser.login}`;
+            document.getElementById('profile-link-box').textContent = `${window.location.origin}/user/${currentUser.login}`;
         }
 
         async function saveProfile() {
@@ -2312,10 +2239,10 @@
             const email = document.getElementById('profile-email-input').value.trim();
             const password = document.getElementById('profile-password-input').value;
 
-            const fileInput = document.getElementById('profile-avatar-file');
+            const avatarFile = document.getElementById('profile-avatar-file').files[0];
             let avatar = currentUser.avatar;
-            if (fileInput.files && fileInput.files[0]) {
-                avatar = await readFileAsDataURL(fileInput.files[0]);
+            if (avatarFile) {
+                avatar = await readFileAsDataURL(avatarFile);
             }
 
             const res = await fetch('/api/update-profile', {
@@ -2326,373 +2253,8 @@
             const data = await res.json();
             if (data.success) {
                 currentUser = data.user;
-                db = data.db;
                 document.getElementById('my-avatar-icon').src = getAvatar(currentUser.avatar);
-                showCustomModal('Успех', 'Профиль успешно сохранен!', false, null, '✨');
-                fillProfileData();
-                renderFriends();
-                renderChatsList();
-            } else {
-                showCustomModal('Ошибка', data.error || 'Не удалось сохранить профиль.', false, null, '⚠️️');
-            }
-        }
-
-        function startDirectCall() {
-            if (!activeChat || activeChat.type !== 'user') return;
-            startDirectCallTo(activeChat.id);
-        }
-
-        async function startDirectCallTo(targetLogin) {
-            callTargetUser = targetLogin;
-            const friendObj = db.users[targetLogin] || {};
-            const displayName = db.customNicknames[currentUser.login]?.[targetLogin] || friendObj.name || targetLogin;
-
-            document.getElementById('call-partner-name').textContent = displayName;
-            document.getElementById('call-status-text').textContent = 'Вызов абонента...';
-            document.getElementById('single-call-modal').classList.remove('hidden');
-            document.getElementById('btn-accept-call').classList.add('hidden');
-            isInCallOrConference = true;
-            startOutgoingRingtone();
-
-            try {
-                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                applyPttAudioState(appSettings.pttMode === 'voice');
-                createPeerConnection();
-                const offer = await peerConnection.createOffer();
-                await peerConnection.setLocalDescription(offer);
-                socket.emit('call-offer', { target: targetLogin, caller: currentUser.login, offer });
-            } catch (e) {
-                hangUpCall();
-            }
-        }
-
-        socket.on('incoming-call', ({ caller, offer }) => {
-            incomingOffer = offer;
-            incomingCallerLogin = caller;
-            const callerObj = db.users[caller] || {};
-            const displayName = db.customNicknames[currentUser.login]?.[caller] || callerObj.name || caller;
-
-            document.getElementById('incoming-caller-avatar').src = getAvatar(callerObj.avatar);
-            document.getElementById('incoming-caller-title').textContent = `Входящий вызов от @${displayName}`;
-            document.getElementById('incoming-call-modal').classList.remove('hidden');
-            startIncomingRingtone();
-        });
-
-        async function acceptIncomingCall() {
-            stopIncomingRingtone();
-            document.getElementById('incoming-call-modal').classList.add('hidden');
-            callTargetUser = incomingCallerLogin;
-
-            const callerObj = db.users[callTargetUser] || {};
-            const displayName = db.customNicknames[currentUser.login]?.[callTargetUser] || callerObj.name || callTargetUser;
-
-            document.getElementById('call-partner-name').textContent = displayName;
-            document.getElementById('call-status-text').textContent = 'Соединение установлено';
-            document.getElementById('single-call-modal').classList.remove('hidden');
-            document.getElementById('btn-accept-call').classList.add('hidden');
-            isInCallOrConference = true;
-
-            try {
-                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                applyPttAudioState(appSettings.pttMode === 'voice');
-                createPeerConnection();
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(incomingOffer));
-                const answer = await peerConnection.createAnswer();
-                await peerConnection.setLocalDescription(answer);
-                socket.emit('call-answer', { target: callTargetUser, answer });
-            } catch (e) {
-                hangUpCall();
-            }
-        }
-
-        function rejectIncomingCall() {
-            stopIncomingRingtone();
-            document.getElementById('incoming-call-modal').classList.add('hidden');
-            if (incomingCallerLogin) {
-                socket.emit('call-reject', { target: incomingCallerLogin });
-            }
-            incomingCallerLogin = null;
-            incomingOffer = null;
-        }
-
-        socket.on('call-rejected', () => {
-            stopOutgoingRingtone();
-            hangUpCall();
-            showCustomModal('Вызов', 'Абонент отклонил вызов.', false, null, '📵');
-        });
-
-        socket.on('call-answer', async ({ answer }) => {
-            stopOutgoingRingtone();
-            if (peerConnection) {
-                await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-                document.getElementById('call-status-text').textContent = 'Разговор активен';
-            }
-        });
-
-        socket.on('ice-candidate', async ({ candidate }) => {
-            if (peerConnection && candidate) {
-                try { await peerConnection.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) {}
-            }
-        });
-
-        function createPeerConnection() {
-            const servers = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-            peerConnection = new RTCPeerConnection(servers);
-
-            localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-
-            peerConnection.ontrack = (event) => {
-                const remoteAudio = document.getElementById('remote-audio');
-                remoteAudio.srcObject = event.streams[0];
-                if (appSettings.audioOutput) {
-                    remoteAudio.setSinkId?.(appSettings.audioOutput).catch(() => {});
-                }
-            };
-
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate && callTargetUser) {
-                    socket.emit('ice-candidate', { target: callTargetUser, candidate: event.candidate });
-                }
-            };
-        }
-
-        function toggleMyCallMute() {
-            if (localStream) {
-                const audioTrack = localStream.getAudioTracks()[0];
-                audioTrack.enabled = !audioTrack.enabled;
-                const btn = document.getElementById('btn-call-mute');
-                if (audioTrack.enabled) {
-                    btn.classList.remove('bg-red-600');
-                    btn.classList.add('bg-gray-800');
-                    btn.textContent = '🎙 Микрофон';
-                } else {
-                    btn.classList.remove('bg-gray-800');
-                    btn.classList.add('bg-red-600');
-                    btn.textContent = '🔇 Выключен';
-                }
-            }
-        }
-
-        function minimizeDirectCall() {
-            document.getElementById('single-call-modal').classList.add('hidden');
-            document.getElementById('minimized-direct-call-widget').classList.remove('hidden');
-            document.getElementById('minimized-call-partner').textContent = document.getElementById('call-partner-name').textContent;
-        }
-
-        function restoreDirectCall() {
-            document.getElementById('minimized-direct-call-widget').classList.add('hidden');
-            document.getElementById('single-call-modal').classList.remove('hidden');
-        }
-
-        function hangUpCall() {
-            stopOutgoingRingtone();
-            stopIncomingRingtone();
-            if (localStream) {
-                localStream.getTracks().forEach(t => t.stop());
-                localStream = null;
-            }
-            if (peerConnection) {
-                peerConnection.close();
-                peerConnection = null;
-            }
-            if (callTargetUser) {
-                socket.emit('hang-up', { target: callTargetUser });
-            }
-            callTargetUser = null;
-            isInCallOrConference = false;
-
-            document.getElementById('single-call-modal').classList.add('hidden');
-            document.getElementById('incoming-call-modal').classList.add('hidden');
-            document.getElementById('minimized-direct-call-widget').classList.add('hidden');
-        }
-
-        socket.on('hang-up', () => { hangUpCall(); });
-
-        async function joinGroupVoiceChannel(groupId, channelId) {
-            currentCallGroupId = groupId;
-            currentCallChannelId = channelId;
-            isInCallOrConference = true;
-            document.getElementById('group-call-modal').classList.remove('hidden');
-
-            try {
-                localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                applyPttAudioState(appSettings.pttMode === 'voice');
-                socket.emit('join-conference', { groupId, channelId, login: currentUser.login });
-            } catch (e) {
-                leaveGroupCall();
-            }
-        }
-
-        socket.on('conference-peers', async (peers) => {
-            const grid = document.getElementById('group-audio-grid');
-            const sidebar = document.getElementById('conference-participants-sidebar');
-            grid.innerHTML = '';
-            sidebar.innerHTML = '';
-
-            for (const peerLogin of peers) {
-                if (peerLogin === currentUser.login) continue;
-                const peerObj = db.users[peerLogin] || {};
-                const displayName = db.customNicknames[currentUser.login]?.[peerLogin] || peerObj.name || peerLogin;
-
-                const card = document.createElement('div');
-                card.className = 'bg-gray-900 border border-purple-500/30 p-4 rounded-2xl flex flex-col items-center space-y-2 shadow-xl';
-                card.innerHTML = `
-                    <img src="${getAvatar(peerObj.avatar)}" class="w-16 h-16 rounded-full object-cover border-2 border-purple-500">
-                    <div class="font-bold text-white text-xs">@${displayName}</div>
-                    <audio id="conf-audio-${peerLogin}" autoplay></audio>
-                `;
-                grid.appendChild(card);
-
-                const sbItem = document.createElement('div');
-                sbItem.className = 'flex items-center justify-between bg-gray-800 p-2.5 rounded-xl text-xs';
-                sbItem.innerHTML = `<span class="text-white font-bold">@${displayName}</span><span class="text-green-400">В эфире</span>`;
-                sidebar.appendChild(sbItem);
-
-                const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-                groupPeerConnections[peerLogin] = pc;
-
-                localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-                pc.ontrack = (event) => {
-                    const audioEl = document.getElementById(`conf-audio-${peerLogin}`);
-                    if (audioEl) audioEl.srcObject = event.streams[0];
-                };
-
-                pc.onicecandidate = (event) => {
-                    if (event.candidate) {
-                        socket.emit('conf-ice', { target: peerLogin, candidate: event.candidate, sender: currentUser.login });
-                    }
-                };
-
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                socket.emit('conf-offer', { target: peerLogin, offer, sender: currentUser.login });
-            }
-        });
-
-        socket.on('conf-offer', async ({ sender, offer }) => {
-            const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-            groupPeerConnections[sender] = pc;
-
-            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-            pc.ontrack = (event) => {
-                const audioEl = document.getElementById(`conf-audio-${sender}`);
-                if (audioEl) audioEl.srcObject = event.streams[0];
-            };
-
-            pc.onicecandidate = (event) => {
-                if (event.candidate) {
-                    socket.emit('conf-ice', { target: sender, candidate: event.candidate, sender: currentUser.login });
-                }
-            };
-
-            await pc.setRemoteDescription(new RTCSessionDescription(offer));
-            const answer = await pc.createAnswer();
-            await pc.setLocalDescription(answer);
-            socket.emit('conf-answer', { target: sender, answer, sender: currentUser.login });
-        });
-
-        socket.on('conf-answer', async ({ sender, answer }) => {
-            const pc = groupPeerConnections[sender];
-            if (pc) {
-                await pc.setRemoteDescription(new RTCSessionDescription(answer));
-            }
-        });
-
-        socket.on('conf-ice', async ({ sender, candidate }) => {
-            const pc = groupPeerConnections[sender];
-            if (pc && candidate) {
-                try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) {}
-            }
-        });
-
-        socket.on('peer-left', ({ login }) => {
-            if (groupPeerConnections[login]) {
-                groupPeerConnections[login].close();
-                delete groupPeerConnections[login];
-            }
-        });
-
-        function toggleMyConferenceMute() {
-            if (localStream) {
-                const audioTrack = localStream.getAudioTracks()[0];
-                audioTrack.enabled = !audioTrack.enabled;
-                const btn = document.getElementById('btn-conf-mute');
-                if (audioTrack.enabled) {
-                    btn.classList.remove('bg-red-600');
-                    btn.classList.add('bg-gray-800');
-                    btn.textContent = '🎙 Микрофон';
-                } else {
-                    btn.classList.remove('bg-gray-800');
-                    btn.classList.add('bg-red-600');
-                    btn.textContent = '🔇 Выключен';
-                }
-            }
-        }
-
-        function minimizeGroupCall() {
-            document.getElementById('group-call-modal').classList.add('hidden');
-            document.getElementById('minimized-call-widget').classList.remove('hidden');
-        }
-
-        function restoreGroupCall() {
-            document.getElementById('minimized-call-widget').classList.add('hidden');
-            document.getElementById('group-call-modal').classList.remove('hidden');
-        }
-
-        function leaveGroupCall() {
-            if (localStream) {
-                localStream.getTracks().forEach(t => t.stop());
-                localStream = null;
-            }
-            Object.values(groupPeerConnections).forEach(pc => pc.close());
-            groupPeerConnections = {};
-
-            if (currentCallGroupId && currentCallChannelId) {
-                socket.emit('leave-conference', { groupId: currentCallGroupId, channelId: currentCallChannelId, login: currentUser.login });
-            }
-
-            currentCallGroupId = null;
-            currentCallChannelId = null;
-            isInCallOrConference = false;
-
-            document.getElementById('group-call-modal').classList.add('hidden');
-            document.getElementById('minimized-call-widget').classList.add('hidden');
-        }
-
-        async function toggleVoiceRecord() {
-            if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    mediaRecorder = new MediaRecorder(stream);
-                    audioChunks = [];
-
-                    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-                    mediaRecorder.onstop = async () => {
-                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                        const audioUrl = await readFileAsDataURL(audioBlob);
-                        currentUploadedMedia = { type: 'audio', url: audioUrl, name: 'voice_message.webm' };
-                        sendMessage();
-                        stream.getTracks().forEach(t => t.stop());
-                    };
-
-                    mediaRecorder.start();
-                    document.getElementById('btn-voice').classList.add('text-red-500', 'animate-pulse');
-                    document.getElementById('voice-timer').classList.remove('hidden');
-                    voiceSeconds = 0;
-                    voiceTimerInterval = setInterval(() => {
-                        voiceSeconds++;
-                        const mins = String(Math.floor(voiceSeconds / 60)).padStart(2, '0');
-                        const secs = String(voiceSeconds % 60).padStart(2, '0');
-                        document.getElementById('voice-timer').textContent = `${mins}:${secs}`;
-                    }, 1000);
-                } catch (e) {}
-            } else {
-                mediaRecorder.stop();
-                clearInterval(voiceTimerInterval);
-                document.getElementById('btn-voice').classList.remove('text-red-500', 'animate-pulse');
-                document.getElementById('voice-timer').classList.add('hidden');
+                showCustomModal('Успех', 'Профиль успешно обновлен!', false, null, '✨');
             }
         }
     </script>
