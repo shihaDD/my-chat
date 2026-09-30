@@ -709,7 +709,7 @@
             });
             const data = await res.json();
             if (data.success) {
-                showCustomModal('Успех', 'Регистрация успешна! Войдите под своим логином.', false, () => switchAuthTab('login'), '🎉');
+                showCustomModal('Успех', 'Регистрация успешна! Перейдите во вкладку входа и войдите.', false, () => switchAuthTab('login'), '🎉');
             } else {
                 showCustomModal('Ошибка регистрации', data.error, false, null, '⚠️');
             }
@@ -880,7 +880,6 @@
         }
 
         function toggleRadio(idx) {
-            // Остановить остальные
             radioStations.forEach((_, i) => {
                 const a = document.getElementById(`radio-audio-${i}`);
                 const b = document.getElementById(`radio-btn-${i}`);
@@ -1194,7 +1193,7 @@
                 nameInput.value = '';
                 openGroupSettings(editingGroupId);
             } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠️');
+                showCustomModal('Ошибка', data.error, false, null, '⚠️️');
             }
         }
 
@@ -1667,7 +1666,7 @@
                     db = data.db;
                     renderGroupsFeed();
                 } else {
-                    showCustomModal('Ошибка', data.error, false, null, '⚠️');
+                    showCustomModal('Ошибка', data.error, false, null, '⚠️️');
                 }
             }, '⚠️');
         }
@@ -2002,7 +2001,7 @@
             document.getElementById('incoming-call-modal').classList.add('hidden');
         }
 
-        // ГОЛОСОВЫЕ КОНФЕРЕНЦИИ С ИСПРАВЛЕННЫМ МИКРОФОНОМ
+        // ГОЛОСОВЫЕ КОНФЕРЕНЦИИ
         function openGroupCallConfigModal() {
             if (!activeChat || activeChat.type !== 'group') return;
             const group = db.groups[activeChat.id];
