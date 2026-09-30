@@ -14,7 +14,6 @@ app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Подключение к MongoDB
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/messenger_db';
 
 const AppStateSchema = new mongoose.Schema({
@@ -156,8 +155,6 @@ function containsMat(text) {
     const matRegex = /(ху[йяёеию]|пизд|бля[дт]|ебат|ебал|ебну|сук[аиу]|mraz|мраз[ью]|уёб|выёб|заёб|поёб|наёб|отёб|гандон|гондон|мудак|пидор|педик|пидар|чмо|шлюх|бляд|сук[аи]|мандавош|манда|епт|епрст)/i;
     return matRegex.test(text);
 }
-
-// REST API эндпоинты
 
 app.get('/api/internet-news', async (req, res) => {
     const internetNews = [
@@ -683,7 +680,7 @@ app.post('/api/delete-subgroup', async (req, res) => {
     res.json({ success: true, db });
 });
 
-// Независимые глобальные каналы отдела модерации (для Warren и Модераторов)
+// Независимые глобальные каналы отдела модерации (Warren / Модераторы)
 app.post('/api/create-global-channel', async (req, res) => {
     const { login, name, type } = req.body;
     if (!hasFullAccess(login)) {
@@ -730,19 +727,8 @@ app.post('/api/send-message', async (req, res) => {
         }
     }
 
-    if (containsMat(text)) {
-        if (!db.violations) db.violations = [];
-        db.violations.push({
-            id: 'viol_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-            author: sender,
-            text,
-            timestamp: Date.now(),
-            source: chatType === 'group' ? 'group' : 'chat',
-            groupName: chatType === 'group' ? db.groups[chatId]?.name : ''
-        });
-    }
-
     let storeKey = '';
+    let violationMeta = {};
     if (chatType === 'group') {
         storeKey = `group_${chatId}_${subgroup || 'main'}`;
     } else if (chatType === 'global') {
@@ -753,9 +739,25 @@ app.post('/api/send-message', async (req, res) => {
         storeKey = `saved_${sender}`;
     }
 
+    const msgId = 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5);
+
+    if (containsMat(text)) {
+        if (!db.violations) db.violations = [];
+        db.violations.push({
+            id: 'viol_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+            author: sender,
+            text,
+            timestamp: Date.now(),
+            source: chatType === 'group' ? 'group' : (chatType === 'global' ? 'global' : 'chat'),
+            groupName: chatType === 'group' ? db.groups[chatId]?.name : '',
+            messageId: msgId,
+            storeKey
+        });
+    }
+
     if (!db.messagesStore[storeKey]) db.messagesStore[storeKey] = [];
     const msg = {
-        id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+        id: msgId,
         sender,
         text: text || '',
         media: media || null,
@@ -856,14 +858,28 @@ app.post('/api/publish-news', async (req, res) => {
         return res.json({ success: false, error: 'Только модераторы могут публиковать в ленту новостей!' });
     }
     if (!db.news) db.news = [];
+    const postId = 'news_' + Date.now();
     const post = {
-        id: 'news_' + Date.now(),
+        id: postId,
         author: login,
         text: text || '',
         media: media || null,
         timestamp: Date.now()
     };
     db.news.unshift(post);
+
+    if (containsMat(text)) {
+        if (!db.violations) db.violations = [];
+        db.violations.push({
+            id: 'viol_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+            author: login,
+            text,
+            timestamp: Date.now(),
+            source: 'news',
+            postId
+        });
+    }
+
     await saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
@@ -913,8 +929,9 @@ app.post('/api/publish-group-post', async (req, res) => {
         return res.json({ success: false, error: 'Сообщество не верифицировано! Дублирование в новости запрещено.' });
     }
 
+    const postId = 'gpost_' + Date.now();
     const post = {
-        id: 'gpost_' + Date.now(),
+        id: postId,
         author: login,
         text: text || '',
         timestamp: Date.now()
@@ -940,7 +957,9 @@ app.post('/api/publish-group-post', async (req, res) => {
             text,
             timestamp: Date.now(),
             source: 'group_post',
-            groupName: group.name
+            groupName: group.name,
+            groupId,
+            groupPostId: postId
         });
     }
 
@@ -1005,6 +1024,20 @@ app.post('/api/resolve-violation-action', async (req, res) => {
             expires: Date.now() + (clampedMins * 60 * 1000),
             reason: reason || 'Нарушение правил'
         };
+    } else if (action === 'delete') {
+        // Удаляем оригинал сообщения/поста повсеместно
+        if (viol.messageId && viol.storeKey && db.messagesStore[viol.storeKey]) {
+            db.messagesStore[viol.storeKey] = db.messagesStore[viol.storeKey].filter(m => m.id !== viol.messageId);
+        }
+        if (viol.postId) {
+            db.news = db.news.filter(n => n.id !== viol.postId);
+        }
+        if (viol.groupId && viol.groupPostId && db.groups[viol.groupId]) {
+            const grp = db.groups[viol.groupId];
+            if (grp.posts) {
+                grp.posts = grp.posts.filter(p => p.id !== viol.groupPostId);
+            }
+        }
     }
 
     db.violations = db.violations.filter(v => v.id !== violId);
@@ -1035,7 +1068,6 @@ io.on('connection', (socket) => {
         socket.join(`global_${channelId}`);
     });
 
-    // Прямые аудиозвонки WebRTC
     socket.on('call-user', ({ targetLogin, offer, callerLogin }) => {
         io.to(targetLogin.toLowerCase()).emit('incoming-call', { callerLogin, offer });
     });
@@ -1056,7 +1088,6 @@ io.on('connection', (socket) => {
         io.to(targetLogin.toLowerCase()).emit('webrtc-candidate', { candidate });
     });
 
-    // Конференции и голосовые каналы (групповые и глобальные)
     socket.on('join-voice-channel', ({ roomKey, login }) => {
         socket.join(roomKey);
         socket.to(roomKey).emit('user-joined-voice', { socketId: socket.id, login });
