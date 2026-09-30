@@ -46,15 +46,14 @@ app.get('/api/data', (req, res) => {
     res.json(db);
 });
 
-// Яндекс.Музыка и поиск треков
+// Поиск музыки с фильтрацией по запросу
 app.get('/api/music-search', async (req, res) => {
-    const q = req.query.q || 'popular';
-    // Имитация интеграции каталога треков с превью для Яндекс.Музыки
+    const q = (req.query.q || 'popular').toLowerCase();
     const mockTracks = [
-        { title: `Трек по запросу: ${q} (Remix)`, artist: 'Яндекс.Артист 1', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' },
-        { title: `Новинка: ${q} (Cyberpunk Mix)`, artist: 'Neon Sound', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3' },
-        { title: `Хит недели: ${q}`, artist: 'Точка сбора Wave', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3' },
-        { title: `Инструментал: ${q}`, artist: 'Lofi Chill', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3' }
+        { title: `Хит по запросу: "${q}"`, artist: 'Neon Wave', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3' },
+        { title: `Ремикс: ${q} (Cyber Edition)`, artist: 'DJ Cyber', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3' },
+        { title: `Инструментал: ${q}`, artist: 'Lofi Chill Club', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3' },
+        { title: `Сингл: ${q}`, artist: 'Future Sound', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3' }
     ];
     res.json({ success: true, tracks: mockTracks });
 });
@@ -108,12 +107,13 @@ app.post('/api/update-profile', (req, res) => {
 });
 
 app.post('/api/set-nickname', (req, res) => {
-    const { login, target, nickname } = req.body;
-    if (!db.nicknames[login]) db.nicknames[login] = {};
+    const { owner, target, nickname } = req.body;
+    if (!db.customNicknames) db.customNicknames = {};
+    if (!db.customNicknames[owner]) db.customNicknames[owner] = {};
     if (!nickname.trim()) {
-        delete db.nicknames[login][target];
+        delete db.customNicknames[owner][target];
     } else {
-        db.nicknames[login][target] = nickname.trim();
+        db.customNicknames[owner][target] = nickname.trim();
     }
     saveDb();
     res.json({ success: true, db });
@@ -167,7 +167,7 @@ app.post('/api/remove-friend', (req, res) => {
     res.json({ success: true, db });
 });
 
-// Группы и роли
+// Группы
 app.post('/api/create-group', (req, res) => {
     const { name, creator } = req.body;
     if (!name || !creator) return res.json({ success: false, error: 'Недостаточно данных' });
@@ -180,7 +180,7 @@ app.post('/api/create-group', (req, res) => {
         members: [creator],
         roles: { [creator]: 'Лидер' },
         messages: [],
-        likes: Math.floor(Math.random() * 15)
+        likes: Math.floor(Math.random() * 20)
     };
     saveDb();
     res.json({ success: true, db });
@@ -207,10 +207,6 @@ app.post('/api/set-group-role', (req, res) => {
     if (group.creator !== login) {
         return res.json({ success: false, error: 'Только лидер может назначать роли!' });
     }
-    if (targetLogin === group.creator) {
-        return res.json({ success: false, error: 'Нельзя изменить роль лидера' });
-    }
-
     if (!group.roles) group.roles = {};
     group.roles[targetLogin] = newRole;
     saveDb();
@@ -222,16 +218,8 @@ app.post('/api/kick-group-member', (req, res) => {
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
 
-    const callerRole = group.roles?.[login] || (group.creator === login ? 'Лидер' : 'Участник');
-    if (group.creator !== login && callerRole !== 'Админ') {
-        return res.json({ success: false, error: 'Недостаточно прав для изгнания участников' });
-    }
-    if (targetLogin === group.creator || group.roles?.[targetLogin] === 'Админ') {
-        return res.json({ success: false, error: 'Нельзя выгнать Лидера или Админа' });
-    }
-
     group.members = group.members.filter(m => m !== targetLogin);
-    delete group.roles[targetLogin];
+    if (group.roles) delete group.roles[targetLogin];
     saveDb();
     res.json({ success: true, db });
 });
@@ -256,15 +244,24 @@ app.post('/api/send-message', (req, res) => {
     res.json({ success: true, db });
 });
 
+app.post('/api/send-group-message', (req, res) => {
+    const { groupId, sender, text, media } = req.body;
+    const group = db.groups[groupId];
+    if (!group) return res.json({ success: false, error: 'Группа не найдена' });
+
+    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const msgObj = { sender, text: text || '', media: media || null, time, edited: false };
+    group.messages.push(msgObj);
+
+    saveDb();
+    res.json({ success: true, db });
+});
+
 app.post('/api/edit-message', (req, res) => {
     const { sender, receiver, msgIndex, newText } = req.body;
     if (db.messagesStore[sender]?.[receiver]?.[msgIndex]) {
         db.messagesStore[sender][receiver][msgIndex].text = newText;
         db.messagesStore[sender][receiver][msgIndex].edited = true;
-    }
-    if (sender !== receiver && db.messagesStore[receiver]?.[sender]?.[msgIndex]) {
-        db.messagesStore[receiver][sender][msgIndex].text = newText;
-        db.messagesStore[receiver][sender][msgIndex].edited = true;
     }
     saveDb();
     res.json({ success: true, db });
@@ -275,66 +272,14 @@ app.post('/api/delete-message', (req, res) => {
     if (db.messagesStore[sender]?.[receiver]) {
         db.messagesStore[sender][receiver].splice(msgIndex, 1);
     }
-    if (sender !== receiver && db.messagesStore[receiver]?.[sender]) {
-        db.messagesStore[receiver][sender].splice(msgIndex, 1);
-    }
     saveDb();
     res.json({ success: true, db });
 });
 
-app.post('/api/send-group-message', (req, res) => {
-    const { groupId, sender, text, media } = req.body;
-    const group = db.groups[groupId];
-    if (!group) return res.json({ success: false, error: 'Группа не найдена' });
-
-    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const msgObj = { sender, text: text || '', media: media || null, time, edited: false };
-
-    if (!group.messages) group.messages = [];
-    group.messages.push(msgObj);
-
-    saveDb();
-    res.json({ success: true, db });
-});
-
-app.post('/api/edit-group-message', (req, res) => {
-    const { groupId, sender, msgIndex, newText } = req.body;
-    const group = db.groups[groupId];
-    if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
-    const msg = group.messages[msgIndex];
-    if (!msg) return res.json({ success: false, error: 'Сообщение не найдено' });
-    
-    const role = group.roles?.[sender] || (group.creator === sender ? 'Лидер' : 'Участник');
-    if (msg.sender !== sender && group.creator !== sender && role !== 'Админ') {
-        return res.json({ success: false, error: 'Нет прав на редактирование' });
-    }
-    msg.text = newText;
-    msg.edited = true;
-    saveDb();
-    res.json({ success: true, db });
-});
-
-app.post('/api/delete-group-message', (req, res) => {
-    const { groupId, sender, msgIndex } = req.body;
-    const group = db.groups[groupId];
-    if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
-    const msg = group.messages[msgIndex];
-    if (!msg) return res.json({ success: false, error: 'Сообщение не найдено' });
-
-    const role = group.roles?.[sender] || (group.creator === sender ? 'Лидер' : 'Участник');
-    if (msg.sender !== sender && group.creator !== sender && role !== 'Админ') {
-        return res.json({ success: false, error: 'Нет прав на удаление' });
-    }
-    group.messages.splice(msgIndex, 1);
-    saveDb();
-    res.json({ success: true, db });
-});
-
-// Новости, лайки, дизлайки, комментарии
+// Новости
 app.post('/api/news', (req, res) => {
     const { author, text, media } = req.body;
-    if (!db.news) db.news = [];
-    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const time = new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     db.news.unshift({ author, text: text || '', media: media || null, time, likes: 0, dislikes: 0, comments: [] });
     saveDb();
     res.json({ success: true, db });
@@ -368,77 +313,50 @@ app.post('/api/news-comment', (req, res) => {
     res.json({ success: true, db });
 });
 
-// Socket.io для звонков и WebRTC
-const activeSockets = {};
-const socketUsers = {};
-const callRooms = {};
-
+// WebRTC Сигнализация через Socket.io
 io.on('connection', (socket) => {
     socket.on('register', (login) => {
-        if (login) {
-            activeSockets[login] = socket.id;
-            socketUsers[socket.id] = login;
-            db.lastSeen[login] = Date.now();
-        }
-    });
-
-    socket.on('typing', ({ from, to, isGroup }) => {
-        if (isGroup) {
-            socket.broadcast.emit('user-typing', { from, to, isGroup: true });
-        } else {
-            const targetSocketId = activeSockets[to];
-            if (targetSocketId) {
-                io.to(targetSocketId).emit('user-typing', { from, to, isGroup: false });
-            }
-        }
-    });
-
-    socket.on('stop-typing', ({ from, to, isGroup }) => {
-        if (isGroup) {
-            socket.broadcast.emit('user-stop-typing', { from, to, isGroup: true });
-        } else {
-            const targetSocketId = activeSockets[to];
-            if (targetSocketId) {
-                io.to(targetSocketId).emit('user-stop-typing', { from, to, isGroup: false });
-            }
-        }
+        socket.login = login;
+        socket.join(login);
     });
 
     socket.on('call-user', ({ to, offer, from }) => {
-        const targetSocketId = activeSockets[to];
-        if (targetSocketId) {
-            io.to(targetSocketId).emit('incoming-call', { from, offer });
-        }
+        io.to(to).emit('incoming-call', { from, offer });
     });
 
     socket.on('call-accepted', ({ to, answer }) => {
-        const targetSocketId = activeSockets[to];
-        if (targetSocketId) {
-            io.to(targetSocketId).emit('call-answered', { answer });
-        }
+        io.to(to).emit('call-answered', { answer });
     });
 
     socket.on('ice-candidate', ({ to, candidate }) => {
-        const targetSocketId = activeSockets[to];
-        if (targetSocketId) {
-            io.to(targetSocketId).emit('ice-candidate', { candidate });
-        }
+        io.to(to).emit('ice-candidate', { candidate });
     });
 
     socket.on('hang-up', ({ to }) => {
-        const targetSocketId = activeSockets[to];
-        if (targetSocketId) {
-            io.to(targetSocketId).emit('hang-up');
-        }
+        io.to(to).emit('hang-up');
+    });
+
+    socket.on('typing', ({ from, to, isGroup }) => {
+        if (!isGroup) io.to(to).emit('user-typing', { from, to, isGroup });
+    });
+
+    socket.on('stop-typing', ({ from, to, isGroup }) => {
+        if (!isGroup) io.to(to).emit('user-stop-typing');
     });
 
     socket.on('join-group-call', ({ groupId, login }) => {
         socket.join(groupId);
-        if (!callRooms[groupId]) callRooms[groupId] = new Set();
-        const existingMembers = Array.from(callRooms[groupId]).map(l => ({ login: l, socketId: activeSockets[l] }));
-        callRooms[groupId].add(login);
-
-        socket.emit('group-call-users', existingMembers);
+        const room = io.sockets.adapter.rooms.get(groupId);
+        const clients = [];
+        if (room) {
+            room.forEach(socketId => {
+                const s = io.sockets.sockets.get(socketId);
+                if (s && s.id !== socket.id) {
+                    clients.push({ socketId: s.id, login: s.login });
+                }
+            });
+        }
+        socket.emit('group-call-users', clients);
         socket.to(groupId).emit('user-joined-group-call', { login, socketId: socket.id });
     });
 
@@ -448,33 +366,15 @@ io.on('connection', (socket) => {
 
     socket.on('leave-group-call', ({ groupId, login }) => {
         socket.leave(groupId);
-        if (callRooms[groupId]) {
-            callRooms[groupId].delete(login);
-            if (callRooms[groupId].size === 0) delete callRooms[groupId];
-        }
         socket.to(groupId).emit('user-left-group-call', { socketId: socket.id });
     });
 
     socket.on('disconnect', () => {
-        const login = socketUsers[socket.id];
-        if (login) {
-            db.lastSeen[login] = Date.now();
-            delete activeSockets[login];
-            delete socketUsers[socket.id];
-
-            for (const [groupId, members] of Object.entries(callRooms)) {
-                if (members.has(login)) {
-                    members.delete(login);
-                    socket.to(groupId).emit('user-left-group-call', { socketId: socket.id });
-                    if (members.size === 0) delete callRooms[groupId];
-                }
-            }
-        }
-        saveDb();
+        // Очистка при отключении
     });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = 3000;
 server.listen(PORT, () => {
-    console.log(`Сервер «Точка сбора» запущен на порту ${PORT}`);
+    console.log(`Сервер запущен на http://localhost:${PORT}`);
 });
