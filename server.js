@@ -283,19 +283,19 @@ app.post('/api/kick-group-member', (req, res) => {
 });
 
 app.post('/api/create-subgroup', (req, res) => {
-    const { groupId, name, permission, login } = req.body;
+    const { groupId, name, type, permission, login } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
 
     const isLeader = group.creator === login;
     const myRole = group.roles?.[login] || (isLeader ? 'Лидер' : 'Участник');
     if (!isLeader && myRole !== 'Админ') {
-        return res.json({ success: false, error: 'Недостаточно прав для создания подгруппы!' });
+        return res.json({ success: false, error: 'Недостаточно прав для создания канала!' });
     }
 
     if (!group.subgroups) group.subgroups = [];
     const subId = 'sub_' + Date.now();
-    group.subgroups.push({ id: subId, name: name.trim(), permission, messages: [] });
+    group.subgroups.push({ id: subId, name: name.trim(), type: type || 'text', permission: permission || 'all', messages: [] });
     saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
@@ -502,9 +502,9 @@ io.on('connection', (socket) => {
         io.to(to).emit('incoming-call', { from, offer, isGroup: false });
     });
 
-    socket.on('start-group-conference', ({ groupId, targets, from }) => {
+    socket.on('start-group-conference', ({ groupId, channelId, targets, from }) => {
         targets.forEach(targetLogin => {
-            io.to(targetLogin).emit('incoming-call', { from, offer: null, isGroup: true, groupId });
+            io.to(targetLogin).emit('incoming-call', { from, offer: null, isGroup: true, groupId, channelId });
         });
     });
 
@@ -528,9 +528,10 @@ io.on('connection', (socket) => {
         if (!isGroup) io.to(to).emit('user-stop-typing');
     });
 
-    socket.on('join-group-call', ({ groupId, login }) => {
-        socket.join(groupId);
-        const room = io.sockets.adapter.rooms.get(groupId);
+    socket.on('join-group-call', ({ groupId, channelId, login }) => {
+        const roomName = `${groupId}_${channelId || 'main'}`;
+        socket.join(roomName);
+        const room = io.sockets.adapter.rooms.get(roomName);
         const clients = [];
         if (room) {
             room.forEach(socketId => {
@@ -541,20 +542,26 @@ io.on('connection', (socket) => {
             });
         }
         socket.emit('group-call-users', clients);
-        socket.to(groupId).emit('user-joined-group-call', { login, socketId: socket.id });
+        socket.to(roomName).emit('user-joined-group-call', { login, socketId: socket.id, roomName });
     });
 
     socket.on('group-signal', ({ toSocketId, signal, fromLogin }) => {
         io.to(toSocketId).emit('group-signal', { fromSocketId: socket.id, signal, fromLogin });
     });
 
-    socket.on('leave-group-call', ({ groupId, login }) => {
-        socket.leave(groupId);
-        socket.to(groupId).emit('user-left-group-call', { socketId: socket.id });
+    socket.on('leave-group-call', ({ groupId, channelId, login }) => {
+        const roomName = `${groupId}_${channelId || 'main'}`;
+        socket.leave(roomName);
+        socket.to(roomName).emit('user-left-group-call', { socketId: socket.id });
     });
 
     socket.on('mod-mute-user', ({ targetSocketId, muted }) => {
         io.to(targetSocketId).emit('mod-mute-action', { muted });
+    });
+
+    socket.on('mod-mute-all', ({ roomName, muted }) => {
+        socket.to(roomName).emit('mod-mute-action', { muted });
+        socket.emit('mod-mute-action', { muted });
     });
 
     socket.on('mod-kick-user', ({ targetSocketId }) => {
