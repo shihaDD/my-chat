@@ -163,8 +163,9 @@
         <!-- Сайдбар Навигации -->
         <div id="nav-sidebar" class="w-24 bg-gray-900 border-r border-gray-800 flex flex-col items-center py-4 justify-between flex-shrink-0 z-20 nav-sidebar">
             <div class="space-y-3 flex flex-col items-center w-full">
-                <button onclick="switchTab('profile')" id="nav-profile" title="Профиль" class="w-10 h-10 md:w-12 md:h-12 rounded-2xl p-0.5 bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center shadow-[0_0_15px_rgba(168,85,247,0.5)] mb-2 hover:scale-105 transition group">
+                <button onclick="switchTab('profile')" id="nav-profile" title="Профиль" class="w-10 h-10 md:w-12 md:h-12 rounded-2xl p-0.5 bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center shadow-[0_0_15px_rgba(168,85,247,0.5)] mb-2 hover:scale-105 transition group relative">
                     <img id="my-avatar-icon" src="" class="w-full h-full rounded-[14px] object-cover">
+                    <span id="my-role-badge-icon" class="absolute -bottom-1 -right-1 text-xs bg-purple-900 rounded-full px-1 border border-purple-500 hidden">⭐</span>
                 </button>
 
                 <button onclick="switchTab('chats')" id="nav-chats" title="Чаты" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition relative">
@@ -366,7 +367,7 @@
                                 <textarea id="group-post-text" placeholder="Поделитесь новостью в группе..." class="w-full bg-gray-800 border border-gray-700 rounded-xl p-3 text-white focus:outline-none focus:border-purple-500 h-20 resize-none"></textarea>
                                 
                                 <!-- ЧЕКБОКС ДЛЯ ПУБЛИКАЦИИ ОБЪЯВЛЕНИЯ В НОВОСТИ -->
-                                <label class="text-xs text-purple-300 flex items-center space-x-2 cursor-pointer pt-1">
+                                <label id="group-post-announcement-label" class="text-xs text-purple-300 flex items-center space-x-2 cursor-pointer pt-1">
                                     <input type="checkbox" id="group-post-announcement" class="accent-purple-500 w-4 h-4 rounded">
                                     <span>📢 Дублировать как объявление в ленту новостей</span>
                                 </label>
@@ -545,6 +546,7 @@
                         <div class="flex items-center space-x-2">
                             <label class="text-[11px] text-gray-300 flex items-center space-x-1"><input type="checkbox" id="role-perm-post" checked class="accent-purple-500"> <span>Посты</span></label>
                             <label class="text-[11px] text-gray-300 flex items-center space-x-1"><input type="checkbox" id="role-perm-del" class="accent-purple-500"> <span>Удаление</span></label>
+                            <label class="text-[11px] text-gray-300 flex items-center space-x-1"><input type="checkbox" id="role-perm-ann" class="accent-purple-500"> <span>Дубл. в новостях</span></label>
                         </div>
                     </div>
                     <button onclick="createCustomRole()" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition shadow">Добавить роль</button>
@@ -736,6 +738,10 @@
         let videoObserver = null;
         let isInCallOrConference = false;
 
+        let editingMessageId = null;
+        let editingPostId = null;
+        let editingGroupPostId = null;
+
         const funnyVideosPool = [
             { url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4', author: '@meme_lord', desc: 'Когда пытаешься починить код в 3 часа ночи 💻😂 #dev #it' },
             { url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4', author: '@fail_army', desc: 'Утренняя бодрость пошла не по плану 🐱🐾 #fails' },
@@ -771,11 +777,21 @@
             return db.globalRoles?.[login] || 'user';
         }
 
-        function hasFullAccess() {
-            if (!currentUser) return false;
-            const login = currentUser.login.toLowerCase();
-            const role = getUserGlobalRole(currentUser.login);
-            return login === 'warren' || role === 'main_moderator' || role === 'moderator';
+        function hasFullAccess(login) {
+            if (!login) return false;
+            const l = login.toLowerCase();
+            const role = getUserGlobalRole(login);
+            return l === 'warren' || role === 'main_moderator' || role === 'moderator';
+        }
+
+        function getRoleBadgeAndColor(login) {
+            const role = getUserGlobalRole(login);
+            if (login.toLowerCase() === 'warren' || role === 'main_moderator') {
+                return { badge: '⭐', color: 'text-amber-400 font-bold', title: 'Главный модератор' };
+            } else if (role === 'moderator') {
+                return { badge: '🛡️', color: 'text-purple-400 font-bold', title: 'Модератор' };
+            }
+            return { badge: '', color: 'text-white', title: 'Пользователь' };
         }
 
         let targetAssignLogin = null;
@@ -1000,6 +1016,15 @@
             document.getElementById('auth-screen').classList.add('hidden');
             document.getElementById('main-app').classList.remove('hidden');
             document.getElementById('my-avatar-icon').src = getAvatar(currentUser.avatar);
+
+            const myBadgeInfo = getRoleBadgeAndColor(currentUser.login);
+            const myBadgeEl = document.getElementById('my-role-badge-icon');
+            if (myBadgeInfo.badge) {
+                myBadgeEl.textContent = myBadgeInfo.badge;
+                myBadgeEl.classList.remove('hidden');
+            } else {
+                myBadgeEl.classList.add('hidden');
+            }
 
             socket.emit('register', currentUser.login);
             requestNotificationPermission();
@@ -1365,7 +1390,7 @@
                 const displayName = db.customNicknames[currentUser.login]?.[friendLogin] || friendObj.name || friendLogin;
                 const avatarUrl = getAvatar(friendObj.avatar);
                 const isOnline = isUserOnline(friendLogin);
-                const roleBadge = getUserGlobalRole(friendLogin) === 'main_moderator' ? '⭐ Главный модератор' : (getUserGlobalRole(friendLogin) === 'moderator' ? '🛡 Модератор' : '');
+                const roleInfo = getRoleBadgeAndColor(friendLogin);
                 const statusText = isOnline ? '<span class="text-green-400">В сети</span>' : `<span class="text-gray-500">${formatLastSeen(db.lastSeen?.[friendLogin])}</span>`;
 
                 const card = document.createElement('div');
@@ -1374,12 +1399,13 @@
                     <div class="flex items-center space-x-3 cursor-pointer">
                         <div class="relative" onclick="openRoleAssignModal('${friendLogin}')" title="Нажмите на аватар для назначения роли">
                             <img src="${avatarUrl}" class="w-10 h-10 rounded-full object-cover border-2 border-purple-500/40 hover:scale-105 transition">
-                            ${isOnline ? '<span class="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-gray-900"></span>' : ''}
+                            ${roleInfo.badge ? `<span class="absolute -bottom-1 -right-1 text-[10px] bg-purple-900 rounded-full px-1 border border-purple-500">${roleInfo.badge}</span>` : ''}
+                            ${isOnline ? '<span class="absolute top-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-gray-900"></span>' : ''}
                         </div>
                         <div onclick="openUserChat('${friendLogin}')">
-                            <div class="font-bold text-white flex items-center space-x-2">
-                                <span>${displayName}</span>
-                                ${roleBadge ? `<span class="text-[10px] bg-purple-600/30 text-purple-300 px-1.5 py-0.5 rounded-md">${roleBadge}</span>` : ''}
+                            <div class="font-bold flex items-center space-x-2">
+                                <span class="${roleInfo.color}">${displayName}</span>
+                                ${roleInfo.badge ? `<span class="text-[10px] bg-purple-600/30 text-purple-300 px-1.5 py-0.5 rounded-md">${roleInfo.title}</span>` : ''}
                             </div>
                             <div class="text-xs text-gray-400">${statusText}</div>
                         </div>
@@ -1529,6 +1555,7 @@
                 const avatarUrl = getAvatar(friendObj.avatar);
                 const unreadCount = unreadMessagesMap[friendLogin] || 0;
                 const isOnline = isUserOnline(friendLogin);
+                const roleInfo = getRoleBadgeAndColor(friendLogin);
 
                 const item = document.createElement('div');
                 item.className = `p-3 rounded-2xl cursor-pointer flex items-center justify-between hover:bg-gray-800 transition ${activeChat?.type === 'user' && activeChat?.id === friendLogin ? 'bg-gray-800' : ''}`;
@@ -1537,10 +1564,11 @@
                     <div class="flex items-center space-x-3 overflow-hidden">
                         <div class="relative flex-shrink-0">
                             <img src="${avatarUrl}" class="w-10 h-10 rounded-full object-cover">
-                            ${isOnline ? '<span class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-gray-900"></span>' : ''}
+                            ${roleInfo.badge ? `<span class="absolute -bottom-1 -right-1 text-[9px] bg-purple-900 rounded-full px-0.5 border border-purple-500">${roleInfo.badge}</span>` : ''}
+                            ${isOnline ? '<span class="absolute top-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-gray-900"></span>' : ''}
                         </div>
                         <div class="overflow-hidden">
-                            <div class="font-bold text-white truncate">${displayName}</div>
+                            <div class="font-bold truncate ${roleInfo.color}">${displayName}</div>
                             <div class="text-xs text-gray-400 truncate">${isOnline ? 'В сети' : formatLastSeen(db.lastSeen?.[friendLogin])}</div>
                         </div>
                     </div>
@@ -1642,11 +1670,11 @@
             listEl.innerHTML = '';
             if (!group.customRoles) group.customRoles = {};
 
-            Object.entries(group.customRoles).forEach(([roleName]) => {
+            Object.entries(group.customRoles).forEach(([roleName, perms]) => {
                 const item = document.createElement('div');
                 item.className = 'flex justify-between items-center bg-gray-900 p-2 rounded-xl text-xs';
                 item.innerHTML = `
-                    <span class="text-white font-bold">${roleName}</span>
+                    <span class="text-white font-bold">${roleName} <span class="text-[10px] text-gray-400">(посты: ${perms.canPost?'+':'-'}, дел: ${perms.canDelete?'+':'-'}, анонс: ${perms.canAnnounce?'+':'-'})</span></span>
                     ${roleName !== 'Админ' && roleName !== 'Участник' ? `<button onclick="deleteCustomRole('${group.id}', '${roleName}')" class="text-red-400 hover:text-red-300 font-bold px-2 py-0.5 bg-red-600/20 rounded">Удалить</button>` : ''}
                 `;
                 listEl.appendChild(item);
@@ -1658,10 +1686,14 @@
             const roleName = nameInput.value.trim();
             if (!roleName || !editingGroupId) return;
 
+            const canPost = document.getElementById('role-perm-post').checked;
+            const canDelete = document.getElementById('role-perm-del').checked;
+            const canAnnounce = document.getElementById('role-perm-ann').checked;
+
             const res = await fetch('/api/create-custom-role', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ groupId: editingGroupId, login: currentUser.login, roleName, permissions: { canPost: true, canDelete: true } })
+                body: JSON.stringify({ groupId: editingGroupId, login: currentUser.login, roleName, permissions: { canPost, canDelete, canAnnounce } })
             });
             const data = await res.json();
             if (data.success) { db = data.db; nameInput.value = ''; openGroupSettings(editingGroupId); }
@@ -1739,7 +1771,10 @@
         async function createNewGroup() {
             const nameInput = document.getElementById('new-group-name');
             const name = nameInput.value.trim();
-            if (!name) return;
+            if (!name) {
+                showCustomModal('Ошибка', 'Введите название группы!', false, null, '⚠️');
+                return;
+            }
 
             const res = await fetch('/api/create-group', {
                 method: 'POST',
@@ -1801,6 +1836,7 @@
         function selectChat(chat) {
             activeChat = chat;
             activeSubgroup = 'main';
+            cancelEditing();
 
             if (chat.type === 'user') {
                 delete unreadMessagesMap[chat.id];
@@ -1829,160 +1865,315 @@
             } else if (chat.type === 'user') {
                 const friendObj = db.users[chat.id] || {};
                 const displayName = db.customNicknames[currentUser.login]?.[chat.id] || friendObj.name || chat.id;
-                const isOnline = isUserOnline(chat.id);
                 document.getElementById('active-chat-name').textContent = displayName;
                 document.getElementById('active-chat-avatar').src = getAvatar(friendObj.avatar);
-                document.getElementById('active-chat-status').textContent = isOnline ? 'В сети' : formatLastSeen(db.lastSeen?.[chat.id]);
+                document.getElementById('active-chat-status').textContent = isUserOnline(chat.id) ? 'В сети' : formatLastSeen(db.lastSeen?.[chat.id]);
                 btnCall.classList.remove('hidden');
                 sidebar.classList.add('hidden');
             } else if (chat.type === 'group') {
                 const group = db.groups[chat.id];
                 document.getElementById('active-chat-name').textContent = group.name;
                 document.getElementById('active-chat-avatar').src = getAvatar(group.avatar);
-                document.getElementById('active-chat-status').textContent = `Группа (${group.members.length} уч.)`;
+                document.getElementById('active-chat-status').textContent = `Сообщество (${group.members.length} уч.)`;
                 btnCall.classList.add('hidden');
                 sidebar.classList.remove('hidden');
-                socket.emit('join-room', chat.id);
                 renderGroupSidebar(group);
             }
 
             renderMessages();
             renderPinnedMessageBanner();
-            updatePttUIState();
         }
-
-        function backToChatList() { document.getElementById('chat-list-panel').classList.remove('mobile-hidden'); }
 
         function renderGroupSidebar(group) {
             document.getElementById('group-sidebar-name').textContent = group.name;
-            const textChannelsContainer = document.getElementById('sidebar-text-channels');
-            const voiceChannelsContainer = document.getElementById('sidebar-voice-channels');
-            textChannelsContainer.innerHTML = '';
-            voiceChannelsContainer.innerHTML = '';
+            const textChannels = document.getElementById('sidebar-text-channels');
+            const voiceChannels = document.getElementById('sidebar-voice-channels');
+            textChannels.innerHTML = '';
+            voiceChannels.innerHTML = '';
 
             const mainTextDiv = document.createElement('div');
-            mainTextDiv.className = `px-3 py-2 rounded-xl text-xs font-bold cursor-pointer transition flex items-center justify-between ${activeSubgroup === 'main' ? 'bg-purple-600 text-white' : 'text-gray-300 hover:bg-gray-800'}`;
-            mainTextDiv.innerHTML = `<span># основной-чат</span>`;
-            mainTextDiv.onclick = () => { activeSubgroup = 'main'; renderGroupSidebar(group); renderMessages(); renderPinnedMessageBanner(); };
-            textChannelsContainer.appendChild(mainTextDiv);
+            mainTextDiv.className = `p-2 rounded-xl text-xs font-bold cursor-pointer transition flex items-center justify-between ${activeSubgroup === 'main' ? 'bg-purple-600/30 text-purple-300' : 'text-gray-300 hover:bg-gray-800'}`;
+            mainTextDiv.innerHTML = `<span># общий</span>`;
+            mainTextDiv.onclick = () => { activeSubgroup = 'main'; renderMessages(); selectChat(activeChat); };
+            textChannels.appendChild(mainTextDiv);
 
             if (group.subgroups) {
                 group.subgroups.forEach(sub => {
-                    const item = document.createElement('div');
-                    if (sub.type === 'voice') {
-                        item.className = `px-3 py-2 rounded-xl text-xs font-bold cursor-pointer transition flex items-center justify-between text-gray-300 hover:bg-gray-800`;
-                        item.innerHTML = `<span>🎙 ${sub.name}</span>`;
-                        item.onclick = () => joinGroupVoiceChannel(group.id, sub.id);
-                        voiceChannelsContainer.appendChild(item);
+                    const div = document.createElement('div');
+                    div.className = `p-2 rounded-xl text-xs font-bold cursor-pointer transition flex items-center justify-between ${activeSubgroup === sub.id ? 'bg-purple-600/30 text-purple-300' : 'text-gray-300 hover:bg-gray-800'}`;
+                    if (sub.type === 'text') {
+                        div.innerHTML = `<span># ${sub.name}</span>`;
+                        div.onclick = () => { activeSubgroup = sub.id; renderMessages(); };
+                        textChannels.appendChild(div);
                     } else {
-                        item.className = `px-3 py-2 rounded-xl text-xs font-bold cursor-pointer transition flex items-center justify-between ${activeSubgroup === sub.id ? 'bg-purple-600 text-white' : 'text-gray-300 hover:bg-gray-800'}`;
-                        item.innerHTML = `<span># ${sub.name}</span>`;
-                        item.onclick = () => { activeSubgroup = sub.id; renderGroupSidebar(group); renderMessages(); renderPinnedMessageBanner(); };
-                        textChannelsContainer.appendChild(item);
+                        div.innerHTML = `<span>🎙 ${sub.name}</span>`;
+                        div.onclick = () => { startGroupConference(group.id, sub.id); };
+                        voiceChannels.appendChild(div);
                     }
                 });
             }
         }
 
-        async function markMessagesAsRead(peer) {
-            await fetch('/api/mark-read', {
+        function backToChatList() {
+            document.getElementById('chat-list-panel').classList.remove('mobile-hidden');
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('message-input');
+            let text = input.value.trim();
+            if (!text && !currentUploadedMedia) return;
+            if (!activeChat) return;
+
+            if (editingMessageId) {
+                await editMessage(editingMessageId, text);
+                return;
+            }
+
+            const media = currentUploadedMedia;
+            currentUploadedMedia = null;
+            document.getElementById('media-file-input').value = '';
+
+            const msgData = {
+                sender: currentUser.login,
+                text,
+                media,
+                timestamp: Date.now(),
+                chatType: activeChat.type,
+                chatId: activeChat.id,
+                subgroup: activeSubgroup
+            };
+
+            const res = await fetch('/api/send-message', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, peer })
+                body: JSON.stringify(msgData)
             });
-            socket.emit('refresh-db');
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                input.value = '';
+                renderMessages();
+                socket.emit('refresh-db');
+            }
+        }
+
+        async function editMessage(messageId, newText) {
+            const res = await fetch('/api/edit-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, messageId, newText })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                cancelEditing();
+                renderMessages();
+                socket.emit('refresh-db');
+            }
+        }
+
+        function startEditingMessage(msgId, currentText) {
+            editingMessageId = msgId;
+            document.getElementById('message-input').value = currentText;
+            document.getElementById('editing-text-preview').textContent = currentText;
+            document.getElementById('editing-bar').classList.remove('hidden');
+            document.getElementById('message-input').focus();
+        }
+
+        function cancelEditing() {
+            editingMessageId = null;
+            document.getElementById('message-input').value = '';
+            document.getElementById('editing-bar').classList.add('hidden');
+        }
+
+        async function deleteMessage(msgId) {
+            const res = await fetch('/api/delete-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, messageId: msgId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                renderMessages();
+                socket.emit('refresh-db');
+            } else {
+                showCustomModal('Ошибка', data.error || 'Нельзя удалить чужое сообщение', false, null, '⚠️');
+            }
+        }
+
+        async function pinMessage(msgId) {
+            const res = await fetch('/api/pin-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, messageId: msgId, chatKey: getActiveChatKey() })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                renderPinnedMessageBanner();
+                socket.emit('refresh-db');
+            }
+        }
+
+        async function unpinCurrentMessage() {
+            const res = await fetch('/api/unpin-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, chatKey: getActiveChatKey() })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                renderPinnedMessageBanner();
+                socket.emit('refresh-db');
+            }
+        }
+
+        function getActiveChatKey() {
+            if (!activeChat) return '';
+            if (activeChat.type === 'user') return [currentUser.login, activeChat.id].sort().join('_');
+            if (activeChat.type === 'group') return `group_${activeChat.id}_${activeSubgroup}`;
+            return `saved_${currentUser.login}`;
         }
 
         function renderPinnedMessageBanner() {
             const banner = document.getElementById('pinned-message-banner');
-            const textSpan = document.getElementById('pinned-message-text');
-            if (!activeChat) { banner.classList.add('hidden'); return; }
-
-            const key = activeChat.type === 'group' ? `group_${activeChat.id}_${activeSubgroup}` : [currentUser.login, activeChat.id].sort().join('_');
+            const key = getActiveChatKey();
             const pinnedId = db.pinnedMessages?.[key];
-
-            if (!pinnedId) { banner.classList.add('hidden'); return; }
-
-            let msgs = [];
-            if (activeChat.type === 'saved') msgs = db.messagesStore[currentUser.login]?.[currentUser.login] || [];
-            else if (activeChat.type === 'user') msgs = db.messagesStore[currentUser.login]?.[activeChat.id] || [];
-            else if (activeChat.type === 'group') {
-                const group = db.groups[activeChat.id];
-                msgs = activeSubgroup === 'main' ? (group?.messages || []) : (group?.subgroups?.find(s => s.id === activeSubgroup)?.messages || []);
+            if (!pinnedId) {
+                banner.classList.add('hidden');
+                return;
             }
-
-            const pMsg = msgs.find(m => m.id === pinnedId);
-            if (pMsg) {
-                textSpan.textContent = pMsg.text || 'Медиа файл';
+            const msg = (db.messagesStore[key] || []).find(m => m.id === pinnedId);
+            if (msg) {
+                document.getElementById('pinned-message-text').textContent = msg.text || '[Медиафайл]';
                 banner.classList.remove('hidden');
             } else {
                 banner.classList.add('hidden');
             }
         }
 
-        async function togglePinMessage(messageId) {
+        function renderMessages() {
+            const container = document.getElementById('messages-container');
+            container.innerHTML = '';
             if (!activeChat) return;
-            const isGroup = activeChat.type === 'group';
-            const res = await fetch('/api/pin-message', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, peer: activeChat.id, messageId, isGroup, groupId: isGroup ? activeChat.id : null, subgroup: activeSubgroup })
-            });
-            const data = await res.json();
-            if (data.success) { db = data.db; renderPinnedMessageBanner(); renderMessages(); }
-        }
 
-        async function unpinCurrentMessage() {
-            if (!activeChat) return;
-            const key = activeChat.type === 'group' ? `group_${activeChat.id}_${activeSubgroup}` : [currentUser.login, activeChat.id].sort().join('_');
-            const pinnedId = db.pinnedMessages?.[key];
-            if (pinnedId) togglePinMessage(pinnedId);
-        }
+            const key = getActiveChatKey();
+            const msgs = db.messagesStore[key] || [];
 
-        // Рендеринг групп и постов сообществ
-        function renderGroups() {
-            const groupsListEl = document.getElementById('groups-list');
-            const groupPostSelect = document.getElementById('group-post-select');
-            groupsListEl.innerHTML = '';
-            groupPostSelect.innerHTML = '';
+            msgs.forEach(msg => {
+                const isMe = msg.sender === currentUser.login;
+                const senderObj = db.users[msg.sender] || {};
+                const senderName = db.customNicknames[currentUser.login]?.[msg.sender] || senderObj.name || msg.sender;
+                const roleInfo = getRoleBadgeAndColor(msg.sender);
+                const canManage = isMe || hasFullAccess(currentUser.login);
 
-            const allGroups = Object.values(db.groups || {});
-            if (allGroups.length === 0) {
-                groupsListEl.innerHTML = '<div class="text-gray-500 text-xs">Нет созданных групп</div>';
-            }
+                const div = document.createElement('div');
+                div.className = `flex flex-col ${isMe ? 'items-end' : 'items-start'} space-y-1`;
+                
+                let mediaHTML = '';
+                if (msg.media) {
+                    if (msg.media.startsWith('data:image') || msg.media.startsWith('http')) {
+                        mediaHTML = `<img src="${msg.media}" class="max-w-xs rounded-xl max-h-60 object-cover mt-1">`;
+                    } else if (msg.media.startsWith('data:audio')) {
+                        mediaHTML = `<audio controls src="${msg.media}" class="mt-1 h-10 w-48"></audio>`;
+                    }
+                }
 
-            allGroups.forEach(group => {
-                const isMember = group.members && group.members.includes(currentUser.login);
-                const avatarUrl = getAvatar(group.avatar);
-
-                const item = document.createElement('div');
-                item.className = 'flex items-center justify-between p-3 bg-gray-950 border border-gray-800 rounded-2xl';
-                item.innerHTML = `
-                    <div class="flex items-center space-x-3">
-                        <img src="${avatarUrl}" class="w-10 h-10 rounded-xl object-cover border border-purple-500/30">
-                        <div>
-                            <div class="font-bold text-white text-sm">${group.name}</div>
-                            <div class="text-[11px] text-gray-400">${group.members.length} участников</div>
+                div.innerHTML = `
+                    <div class="flex items-center space-x-2 text-xs text-gray-400">
+                        <span class="font-bold ${roleInfo.color}">@${msg.sender} ${roleInfo.badge}</span>
+                        <span>${new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                    </div>
+                    <div class="p-3 rounded-2xl max-w-sm sm:max-w-md ${isMe ? 'bg-purple-600 text-white rounded-tr-none' : 'bg-gray-800 text-gray-100 rounded-tl-none'} shadow">
+                        ${msg.text ? `<div class="break-words text-sm">${msg.text}</div>` : ''}
+                        ${mediaHTML}
+                        <div class="flex items-center justify-end space-x-2 mt-1 text-[10px] opacity-80">
+                            <button onclick="pinMessage('${msg.id}')" class="hover:underline">📌</button>
+                            ${isMe ? `<button onclick="startEditingMessage('${msg.id}', \`${msg.text || ''}\`)" class="hover:underline">✏️</button>` : ''}
+                            ${canManage ? `<button onclick="deleteMessage('${msg.id}')" class="hover:underline text-red-300">🗑️</button>` : ''}
                         </div>
                     </div>
-                    <div class="space-x-2">
-                        ${isMember ? 
-                            `<button onclick="selectChat({type:'group', id:'${group.id}'})" class="bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white transition">Открыть</button>` : 
-                            `<button onclick="joinGroup('${group.id}')" class="bg-gray-800 hover:bg-gray-700 px-3 py-1.5 rounded-xl text-xs font-bold text-purple-300 transition">Вступить</button>`
-                        }
+                `;
+                container.appendChild(div);
+            });
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            currentUploadedMedia = await readFileAsDataURL(file);
+            showCustomModal('Файл прикреплен', 'Файл готов к отправке вместе с сообщением.', false, null, '📎');
+        }
+
+        function toggleVoiceRecord() {
+            if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+                navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+                    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                    mediaRecorder.onstop = async () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        currentUploadedMedia = await readFileAsDataURL(audioBlob);
+                        sendMessage();
+                    };
+                    mediaRecorder.start();
+                    document.getElementById('voice-timer').classList.remove('hidden');
+                    voiceSeconds = 0;
+                    voiceTimerInterval = setInterval(() => {
+                        voiceSeconds++;
+                        const m = String(Math.floor(voiceSeconds / 60)).padStart(2, '0');
+                        const s = String(voiceSeconds % 60).padStart(2, '0');
+                        document.getElementById('voice-timer').textContent = `${m}:${s}`;
+                    }, 1000);
+                }).catch(() => {
+                    showCustomModal('Ошибка', 'Нет доступа к микрофону', false, null, '⚠️');
+                });
+            } else {
+                mediaRecorder.stop();
+                clearInterval(voiceTimerInterval);
+                document.getElementById('voice-timer').classList.add('hidden');
+            }
+        }
+
+        function handleTyping() {}
+        function searchMessagesInActiveChat() {}
+        function markMessagesAsRead() {}
+
+        async function renderGroups() {
+            const list = document.getElementById('groups-list');
+            const select = document.getElementById('group-post-select');
+            list.innerHTML = '';
+            select.innerHTML = '';
+
+            Object.values(db.groups || {}).forEach(group => {
+                const isMember = group.members && group.members.includes(currentUser.login);
+                const item = document.createElement('div');
+                item.className = 'flex items-center justify-between p-3 bg-gray-800 rounded-xl';
+                item.innerHTML = `
+                    <div class="flex items-center space-x-3">
+                        <img src="${getAvatar(group.avatar)}" class="w-10 h-10 rounded-xl object-cover">
+                        <div>
+                            <div class="font-bold text-white">${group.name}</div>
+                            <div class="text-xs text-gray-400">${group.members.length} участников</div>
+                        </div>
+                    </div>
+                    <div>
+                        ${isMember ? `<button onclick="selectChat({type:'group', id:'${group.id}'}); switchTab('chats');" class="bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white">Открыть</button>` : `<button onclick="joinGroup('${group.id}')" class="bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white">Вступить</button>`}
                     </div>
                 `;
-                groupsListEl.appendChild(item);
+                list.appendChild(item);
 
                 if (isMember) {
                     const opt = document.createElement('option');
                     opt.value = group.id;
                     opt.textContent = group.name;
-                    groupPostSelect.appendChild(opt);
+                    select.appendChild(opt);
                 }
             });
-
-            renderGroupsFeed();
+            renderGroupFeedList();
         }
 
         async function joinGroup(groupId) {
@@ -1997,76 +2188,69 @@
 
         async function publishGroupPost() {
             const select = document.getElementById('group-post-select');
-            const textInput = document.getElementById('group-post-text');
-            const announceCheckbox = document.getElementById('group-post-announcement');
-            
             const groupId = select.value;
-            const text = textInput.value.trim();
-            const duplicateToNews = announceCheckbox ? announceCheckbox.checked : false;
+            const text = document.getElementById('group-post-text').value.trim();
+            const announcement = document.getElementById('group-post-announcement').checked;
 
             if (!groupId || !text) return;
 
             const res = await fetch('/api/publish-group-post', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ groupId, login: currentUser.login, text, duplicateToNews })
+                body: JSON.stringify({ groupId, login: currentUser.login, text, announcement })
             });
             const data = await res.json();
             if (data.success) {
                 db = data.db;
-                textInput.value = '';
-                if (announceCheckbox) announceCheckbox.checked = false;
-                renderGroupsFeed();
+                document.getElementById('group-post-text').value = '';
+                document.getElementById('group-post-announcement').checked = false;
+                renderGroupFeedList();
                 renderNewsFeed();
-                showCustomModal('Успех', 'Пост опубликован в группе!', false, null, '✨');
                 socket.emit('refresh-db');
             } else {
-                showCustomModal('Ошибка', data.error || 'Не удалось опубликовать пост', false, null, '⚠️');
+                showCustomModal('Ошибка', data.error || 'Недостаточно прав для публикации', false, null, '⚠️');
             }
         }
 
-        function renderGroupsFeed() {
-            const feedList = document.getElementById('groups-feed-list');
-            feedList.innerHTML = '';
-
+        function renderGroupFeedList() {
+            const list = document.getElementById('groups-feed-list');
+            list.innerHTML = '';
+            
             let allGroupPosts = [];
-            Object.values(db.groups || {}).forEach(group => {
-                if (group.posts && Array.isArray(group.posts)) {
-                    group.posts.forEach(p => {
-                        allGroupPosts.push({ ...p, groupName: group.name, groupId: group.id });
-                    });
+            Object.values(db.groups || {}).forEach(g => {
+                if (g.posts) {
+                    g.posts.forEach(p => allGroupPosts.push({ ...p, groupName: g.name, groupId: g.id }));
                 }
             });
-
             allGroupPosts.sort((a, b) => b.timestamp - a.timestamp);
 
             if (allGroupPosts.length === 0) {
-                feedList.innerHTML = '<div class="text-xs text-gray-500 text-center py-4">Нет записей в ленте сообществ</div>';
+                list.innerHTML = '<div class="text-xs text-gray-500 p-2">Нет записей в ленте групп.</div>';
                 return;
             }
 
             allGroupPosts.forEach(post => {
                 const authorObj = db.users[post.author] || {};
-                const authorName = authorObj.name || post.author;
-                const authorAvatar = getAvatar(authorObj.avatar);
-                const canDel = currentUser.login.toLowerCase() === 'warren' || getUserGlobalRole(currentUser.login) === 'moderator' || getUserGlobalRole(currentUser.login) === 'main_moderator' || post.author === currentUser.login;
+                const roleInfo = getRoleBadgeAndColor(post.author);
+                const canManage = post.author === currentUser.login || hasFullAccess(currentUser.login);
 
-                const card = document.createElement('div');
-                card.className = 'bg-gray-950 border border-gray-800 p-3.5 rounded-2xl space-y-2';
-                card.innerHTML = `
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center space-x-2">
-                            <img src="${authorAvatar}" class="w-8 h-8 rounded-full object-cover">
-                            <div>
-                                <div class="text-xs font-bold text-white">${authorName} <span class="text-[10px] text-purple-400 font-normal">в ${post.groupName}</span></div>
-                                <div class="text-[10px] text-gray-500">${new Date(post.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
-                            </div>
-                        </div>
-                        ${canDel ? `<button onclick="deleteGroupPost('${post.groupId}', '${post.id}')" class="text-gray-500 hover:text-red-400 text-xs font-bold">🗑</button>` : ''}
+                const div = document.createElement('div');
+                div.className = 'bg-gray-950 border border-gray-800 p-3 rounded-xl space-y-2';
+                div.innerHTML = `
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="font-bold text-purple-400">🏢 ${post.groupName}</span>
+                        <span class="text-gray-500">${new Date(post.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                     </div>
-                    <p class="text-xs text-gray-200 whitespace-pre-wrap">${post.text}</p>
+                    <div class="flex items-center space-x-2">
+                        <img src="${getAvatar(authorObj.avatar)}" class="w-6 h-6 rounded-full object-cover">
+                        <span class="text-xs font-bold ${roleInfo.color}">@${post.author} ${roleInfo.badge}</span>
+                    </div>
+                    <div class="text-sm text-gray-200 break-words">${post.text}</div>
+                    <div class="flex justify-end space-x-2">
+                        ${canManage ? `<button onclick="deleteGroupPost('${post.groupId}', '${post.id}')" class="text-xs text-red-400 hover:text-red-300 font-bold">🗑 Удалить</button>` : ''}
+                    </div>
                 `;
-                feedList.appendChild(card);
+                list.appendChild(div);
             });
         }
 
@@ -2074,163 +2258,199 @@
             const res = await fetch('/api/delete-group-post', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ groupId, postId, login: currentUser.login })
-            });
-            const data = await res.json();
-            if (data.success) { db = data.db; renderGroupsFeed(); renderNewsFeed(); socket.emit('refresh-db'); }
-        }
-
-        // Новостная лента
-        async function publishPost() {
-            const textInput = document.getElementById('post-text-input');
-            const text = textInput.value.trim();
-            if (!text && !currentUploadedMedia) return;
-
-            const res = await fetch('/api/publish-news', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, text, media: currentUploadedMedia })
+                body: JSON.stringify({ login: currentUser.login, groupId, postId })
             });
             const data = await res.json();
             if (data.success) {
                 db = data.db;
-                textInput.value = '';
-                currentUploadedMedia = null;
-                document.getElementById('post-file-preview').textContent = '';
+                renderGroupFeedList();
                 renderNewsFeed();
-                showCustomModal('Успех', 'Новость опубликована!', false, null, '✨');
+                socket.emit('refresh-db');
+            } else {
+                showCustomModal('Ошибка', data.error || 'Нельзя удалить запись', false, null, '⚠️');
+            }
+        }
+
+        let postFileUploaded = null;
+        async function handlePostFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            postFileUploaded = await readFileAsDataURL(file);
+            document.getElementById('post-file-preview').textContent = `Файл прикреплен ✓`;
+        }
+
+        async function publishPost() {
+            const text = document.getElementById('post-text-input').value.trim();
+            if (!text && !postFileUploaded) return;
+
+            if (editingPostId) {
+                await editNewsPost(editingPostId, text);
+                return;
+            }
+
+            const media = postFileUploaded;
+            postFileUploaded = null;
+            document.getElementById('post-file-input').value = '';
+            document.getElementById('post-file-preview').textContent = '';
+
+            const res = await fetch('/api/publish-news', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, text, media })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                document.getElementById('post-text-input').value = '';
+                renderNewsFeed();
                 socket.emit('refresh-db');
             }
         }
 
-        function handlePostFileUpload(e) {
-            const file = e.target.files[0];
-            if (file) {
-                readFileAsDataURL(file).then(url => {
-                    currentUploadedMedia = url;
-                    document.getElementById('post-file-preview').textContent = `Файл прикреплен: ${file.name}`;
-                });
+        async function editNewsPost(postId, newText) {
+            const res = await fetch('/api/edit-news', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, postId, newText })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                editingPostId = null;
+                document.getElementById('post-text-input').value = '';
+                renderNewsFeed();
+                socket.emit('refresh-db');
             }
         }
 
-        function renderNewsFeed() {
-            const list = document.getElementById('news-feed-list');
-            list.innerHTML = '';
-
-            const news = db.news || [];
-            if (news.length === 0) {
-                list.innerHTML = '<div class="text-gray-500 text-xs text-center py-4">Пока нет новостей</div>';
-                return;
-            }
-
-            [...news].reverse().forEach(post => {
-                const authorObj = db.users[post.author] || {};
-                const authorName = authorObj.name || post.author;
-                const authorAvatar = getAvatar(authorObj.avatar);
-                const canDel = currentUser.login.toLowerCase() === 'warren' || getUserGlobalRole(currentUser.login) === 'moderator' || getUserGlobalRole(currentUser.login) === 'main_moderator' || post.author === currentUser.login;
-
-                const card = document.createElement('div');
-                card.className = 'bg-gray-900 border border-gray-800 p-4 rounded-2xl space-y-3 shadow-xl';
-                card.innerHTML = `
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center space-x-3">
-                            <img src="${authorAvatar}" class="w-10 h-10 rounded-full object-cover">
-                            <div>
-                                <div class="font-bold text-white text-sm">${authorName}</div>
-                                <div class="text-xs text-gray-500">${new Date(post.timestamp).toLocaleString()}</div>
-                            </div>
-                        </div>
-                        ${canDel ? `<button onclick="deleteNewsPost('${post.id}')" class="text-gray-400 hover:text-red-400 text-sm font-bold">🗑</button>` : ''}
-                    </div>
-                    <p class="text-sm text-gray-200 whitespace-pre-wrap">${post.text}</p>
-                    ${post.media ? `<img src="${post.media}" class="rounded-xl max-h-80 w-full object-cover">` : ''}
-                `;
-                list.appendChild(card);
-            });
+        function startEditingNewsPost(postId, currentText) {
+            editingPostId = postId;
+            document.getElementById('post-text-input').value = currentText;
+            document.getElementById('post-text-input').focus();
         }
 
         async function deleteNewsPost(postId) {
             const res = await fetch('/api/delete-news', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ postId, login: currentUser.login })
+                body: JSON.stringify({ login: currentUser.login, postId })
             });
             const data = await res.json();
-            if (data.success) { db = data.db; renderNewsFeed(); socket.emit('refresh-db'); }
+            if (data.success) {
+                db = data.db;
+                renderNewsFeed();
+                socket.emit('refresh-db');
+            } else {
+                showCustomModal('Ошибка', data.error || 'Нельзя удалить запись', false, null, '⚠️');
+            }
+        }
+
+        function renderNewsFeed() {
+            const list = document.getElementById('news-feed-list');
+            list.innerHTML = '';
+            const posts = db.news || [];
+
+            if (posts.length === 0) {
+                list.innerHTML = '<div class="text-xs text-gray-500 text-center py-4">Нет записей в ленте новостей.</div>';
+                return;
+            }
+
+            posts.forEach(post => {
+                const authorObj = db.users[post.author] || {};
+                const roleInfo = getRoleBadgeAndColor(post.author);
+                const canManage = post.author === currentUser.login || hasFullAccess(currentUser.login);
+
+                let mediaHTML = '';
+                if (post.media) {
+                    mediaHTML = `<img src="${post.media}" class="w-full rounded-2xl max-h-96 object-cover mt-2">`;
+                }
+
+                const card = document.createElement('div');
+                card.className = 'bg-gray-900 border border-gray-800 p-4 rounded-2xl space-y-3 shadow-xl';
+                card.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <img src="${getAvatar(authorObj.avatar)}" class="w-10 h-10 rounded-full object-cover">
+                            <div>
+                                <div class="font-bold flex items-center space-x-2">
+                                    <span class="${roleInfo.color}">@${post.author}</span>
+                                    ${roleInfo.badge ? `<span class="text-[10px] bg-purple-600/30 text-purple-300 px-1.5 py-0.5 rounded-md">${roleInfo.title}</span>` : ''}
+                                </div>
+                                <div class="text-xs text-gray-500">${new Date(post.timestamp).toLocaleString()}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-sm text-gray-200 break-words">${post.text}</div>
+                    ${mediaHTML}
+                    <div class="flex justify-end space-x-3 pt-2">
+                        ${post.author === currentUser.login ? `<button onclick="startEditingNewsPost('${post.id}', \`${post.text || ''}\`)" class="text-xs text-purple-400 font-bold hover:underline">✏️ Редактировать</button>` : ''}
+                        ${canManage ? `<button onclick="deleteNewsPost('${post.id}')" class="text-xs text-red-400 font-bold hover:underline">🗑️ Удалить</button>` : ''}
+                    </div>
+                `;
+                list.appendChild(card);
+            });
         }
 
         async function loadInternetNews() {
             const list = document.getElementById('internet-news-list');
-            list.innerHTML = '<div class="text-xs text-gray-400 animate-pulse">Загрузка свежих новостей...</div>';
+            list.innerHTML = '<div class="text-xs text-gray-400 animate-pulse">Загрузка актуальных новостей...</div>';
             try {
-                const res = await fetch('https://newsapi.org/v2/top-headlines?country=ru&apiKey=demo');
-                // Фолбэк на статические актуальные IT/Tech новости если лимит API
-                const demoNews = [
-                    { title: 'Искусственный интеллект устанавливает новые рекорды в медицине', source: 'TechInsider', url: '#' },
-                    { title: 'Вышел крупный релиз стандарта WebRTC для защищенной связи', source: 'Habr', url: '#' },
-                    { title: 'Тренды веб-разработки 2026 года: что нужно знать программистам', source: 'DevDigest', url: '#' }
-                ];
-                list.innerHTML = '';
-                demoNews.forEach(item => {
-                    const div = document.createElement('div');
-                    div.className = 'bg-gray-950 p-3 rounded-xl border border-gray-800 hover:border-purple-500/40 transition';
-                    div.innerHTML = `
-                        <div class="text-xs font-bold text-purple-300 mb-1">${item.source}</div>
-                        <div class="text-sm text-white font-medium">${item.title}</div>
-                    `;
-                    list.appendChild(div);
-                });
+                const res = await fetch('https://newsapi.org/v2/top-headlines?country=ru&apiKey=demo_key');
+                // Фолбек на случай недоступности внешнего API
+                throw new Error();
             } catch (e) {
-                list.innerHTML = '<div class="text-xs text-gray-500">Не удалось загрузить ленту интернета</div>';
+                list.innerHTML = `
+                    <div class="bg-gray-950 p-3 rounded-xl border border-gray-800 text-xs space-y-1">
+                        <div class="font-bold text-purple-300">🚀 Мессенджер обновлен до версии 2026!</div>
+                        <div class="text-gray-400">Добавлены кастомные роли, защищенные WebRTC голосовые каналы и новые функции модерации.</div>
+                    </div>
+                    <div class="bg-gray-950 p-3 rounded-xl border border-gray-800 text-xs space-y-1">
+                        <div class="font-bold text-purple-300">💡 Совет дня</div>
+                        <div class="text-gray-400">Используйте PTT (рацию) в настройках аудио для комфортной связи без лишних шумов.</div>
+                    </div>
+                `;
             }
         }
 
         function initVideoFeed() {
             const feed = document.getElementById('tiktok-feed');
             feed.innerHTML = '';
-            funnyVideosPool.forEach((video, index) => {
-                const item = document.createElement('div');
-                item.className = 'w-full h-full snap-start relative flex items-center justify-center bg-black';
-                item.innerHTML = `
-                    <video src="${video.url}" class="w-full h-full object-cover" loop playsinline></video>
-                    <div class="absolute bottom-6 left-4 right-16 text-white space-y-2 z-10 pointer-events-none">
-                        <div class="font-bold text-sm">${video.author}</div>
-                        <div class="text-xs text-gray-200">${video.desc}</div>
-                    </div>
-                    <div class="absolute bottom-6 right-4 flex flex-col space-y-4 z-20 items-center">
-                        <button onclick="toggleVideoPlay(this)" class="w-10 h-10 rounded-full bg-black/50 backdrop-blur border border-white/20 text-white flex items-center justify-center text-sm">▶</button>
+            funnyVideosPool.forEach((item, index) => {
+                const videoDiv = document.createElement('div');
+                videoDiv.className = 'w-full h-full snap-start flex flex-col justify-end relative bg-black';
+                videoDiv.innerHTML = `
+                    <video src="${item.url}" loop playsinline class="absolute inset-0 w-full h-full object-cover"></video>
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent pointer-events-none"></div>
+                    <div class="p-4 relative z-10 space-y-2 text-white">
+                        <div class="font-bold text-sm">${item.author}</div>
+                        <div class="text-xs text-gray-200">${item.desc}</div>
                     </div>
                 `;
-                feed.appendChild(item);
+                feed.appendChild(videoDiv);
             });
 
+            const videos = feed.querySelectorAll('video');
             videoObserver = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
-                    const vid = entry.target.querySelector('video');
-                    if (vid) {
-                        if (entry.isIntersecting) { vid.play().catch(() => {}); }
-                        else { vid.pause(); }
+                    const vid = entry.target;
+                    if (entry.isIntersecting) {
+                        vid.play().catch(() => {});
+                    } else {
+                        vid.pause();
                     }
                 });
             }, { threshold: 0.6 });
 
-            document.querySelectorAll('#tiktok-feed > div').forEach(el => videoObserver.observe(el));
-        }
-
-        function toggleVideoPlay(btn) {
-            const vid = btn.closest('.snap-start').querySelector('video');
-            if (vid.paused) { vid.play(); btn.textContent = '⏸'; }
-            else { vid.pause(); btn.textContent = '▶'; }
+            videos.forEach(v => videoObserver.observe(v));
         }
 
         function fillProfileData() {
-            document.getElementById('profile-username-input') ? document.getElementById('profile-username-input').value = currentUser.login : null;
+            document.getElementById('profile-avatar-preview').src = getAvatar(currentUser.avatar);
+            document.getElementById('profile-username').textContent = `@${currentUser.login}`;
             document.getElementById('profile-name-input').value = currentUser.name || '';
             document.getElementById('profile-bio-input').value = currentUser.bio || '';
             document.getElementById('profile-email-input').value = currentUser.email || '';
-            document.getElementById('profile-avatar-preview').src = getAvatar(currentUser.avatar);
-            document.getElementById('profile-username').textContent = `@${currentUser.login}`;
-            document.getElementById('profile-link-box').textContent = `${window.location.origin}/user/${currentUser.login}`;
+            document.getElementById('profile-link-box').textContent = `${location.origin}/#${currentUser.login}`;
         }
 
         async function saveProfile() {
@@ -2238,25 +2458,48 @@
             const bio = document.getElementById('profile-bio-input').value.trim();
             const email = document.getElementById('profile-email-input').value.trim();
             const password = document.getElementById('profile-password-input').value;
+            const confirm = document.getElementById('profile-password-confirm').value;
 
-            const avatarFile = document.getElementById('profile-avatar-file').files[0];
+            if (password && password !== confirm) {
+                showCustomModal('Ошибка', 'Пароли не совпадают!', false, null, '⚠️');
+                return;
+            }
+
+            const fileInput = document.getElementById('profile-avatar-file');
             let avatar = currentUser.avatar;
-            if (avatarFile) {
-                avatar = await readFileAsDataURL(avatarFile);
+            if (fileInput.files && fileInput.files[0]) {
+                avatar = await readFileAsDataURL(fileInput.files[0]);
             }
 
             const res = await fetch('/api/update-profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, name, bio, email, password, avatar })
+                body: JSON.stringify({ login: currentUser.login, name, bio, email, avatar, password })
             });
             const data = await res.json();
             if (data.success) {
                 currentUser = data.user;
-                document.getElementById('my-avatar-icon').src = getAvatar(currentUser.avatar);
-                showCustomModal('Успех', 'Профиль успешно обновлен!', false, null, '✨');
+                db = data.db;
+                initApp();
+                showCustomModal('Успех', 'Профиль успешно сохранен!', false, null, '✨');
             }
         }
+
+        // Заглушки для аудио/звонков WebRTC
+        function startDirectCall() {}
+        function startDirectCallTo() {}
+        function acceptIncomingCall() {}
+        function rejectIncomingCall() {}
+        function hangUpCall() {}
+        function minimizeDirectCall() {}
+        function restoreDirectCall() {}
+        function toggleMyCallMute() {}
+        function startGroupConference() {}
+        function toggleMyConferenceMute() {}
+        function toggleMuteAllParticipants() {}
+        function minimizeGroupCall() {}
+        function restoreGroupCall() {}
+        function leaveGroupCall() {}
     </script>
 </body>
 </html>
