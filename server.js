@@ -2,7 +2,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
-const mongoose = require('mongoose');
+const fs = require('fs');
 
 const app = express();
 const server = http.createServer(app);
@@ -12,14 +12,7 @@ app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-const MONGO_URI = process.env.MONGO_URI || 'mongodb://localhost:27017/messenger';
-
-const dbStateSchema = new mongoose.Schema({
-    key: { type: String, unique: true, default: 'main' },
-    data: { type: mongoose.Schema.Types.Mixed, default: {} }
-});
-
-const DbState = mongoose.model('DbState', dbStateSchema);
+const DB_FILE = path.join(__dirname, 'database.json');
 
 let db = {
     users: {},
@@ -34,41 +27,27 @@ let db = {
     pinnedMessages: {}
 };
 
-async function initDatabase() {
+if (fs.existsSync(DB_FILE)) {
     try {
-        await mongoose.connect(MONGO_URI);
-        console.log('✅ Успешное подключение к MongoDB!');
-
-        let doc = await DbState.findOne({ key: 'main' });
-        if (doc && doc.data) {
-            db = { ...db, ...doc.data };
-            console.log('📂 Данные успешно загружены из MongoDB.');
-        } else {
-            await DbState.create({ key: 'main', data: db });
-            console.log('🆕 Создан начальный документ базы данных в MongoDB.');
+        const data = fs.readFileSync(DB_FILE, 'utf8');
+        const parsed = JSON.parse(data);
+        db = { ...db, ...parsed };
+        for (let gId in db.groups) {
+            if (!db.groups[gId].subgroups) db.groups[gId].subgroups = [];
+            if (!db.groups[gId].roles) db.groups[gId].roles = {};
+            if (!db.groups[gId].posts) db.groups[gId].posts = [];
+            if (!db.groups[gId].messages) db.groups[gId].messages = [];
         }
-
-        // Проверка и инициализация глобальных ролей
-        for (let u in db.users) {
-            if (!db.users[u].globalRole) {
-                db.users[u].globalRole = (u === 'warren' ? 'warren' : 'user');
-            }
-        }
-        if (db.users['warren'] && db.users['warren'].globalRole !== 'warren') {
-            db.users['warren'].globalRole = 'warren';
-        }
-    } catch (err) {
-        console.error('❌ Ошибка подключения к MongoDB:', err);
+    } catch (e) {
+        console.error('Ошибка чтения database.json:', e);
     }
 }
 
-initDatabase();
-
-async function saveDb() {
+function saveDb() {
     try {
-        await DbState.updateOne({ key: 'main' }, { data: db }, { upsert: true });
+        fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2), 'utf8');
     } catch (e) {
-        console.error('❌ Ошибка сохранения в MongoDB:', e);
+        console.error('Ошибка сохранения базы данных:', e);
     }
 }
 
@@ -76,12 +55,14 @@ app.get('/api/internet-news', async (req, res) => {
     const internetNews = [
         { title: 'Искусственный интеллект совершил прорыв в квантовых вычислениях', url: '#', score: 1250, by: 'TechNews', time: new Date().toLocaleString() },
         { title: 'Запущен новый стандарт сверхбыстрой беспроводной связи 6G', url: '#', score: 980, by: 'FutureNet', time: new Date().toLocaleString() },
-        { title: 'Космический телескоп обнаружил экзопланету с признаками воды', url: '#', score: 850, by: 'SpaceObserver', time: new Date().toLocaleString() }
+        { title: 'Космический телескоп обнаружил экзопланету с признаками воды', url: '#', score: 850, by: 'SpaceObserver', time: new Date().toLocaleString() },
+        { title: 'Релиз революционного движка для веб-разработки и 3D графики', url: '#', score: 720, by: 'DevDaily', time: new Date().toLocaleString() },
+        { title: 'Тренды кибербезопасности и защиты данных в 2026 году', url: '#', score: 640, by: 'SecurityHub', time: new Date().toLocaleString() }
     ];
     res.json({ success: true, news: internetNews });
 });
 
-app.post('/api/register', async (req, res) => {
+app.post('/api/register', (req, res) => {
     const { login, name, password, email, avatar } = req.body;
     if (!login || !name || !password) {
         return res.json({ success: false, error: 'Заполните обязательные поля!' });
@@ -91,25 +72,17 @@ app.post('/api/register', async (req, res) => {
         return res.json({ success: false, error: 'Пользователь с таким логином уже существует!' });
     }
 
-    db.users[cleanLogin] = {
-        login: cleanLogin,
-        name,
-        password,
-        email: email || '',
-        avatar: avatar || '',
-        bio: '',
-        globalRole: cleanLogin === 'warren' ? 'warren' : 'user'
-    };
+    db.users[cleanLogin] = { login: cleanLogin, name, password, email: email || '', avatar: avatar || '', bio: '' };
     db.friends[cleanLogin] = [];
     db.friendRequests[cleanLogin] = [];
     db.outgoingRequests[cleanLogin] = [];
     db.lastSeen[cleanLogin] = Date.now();
-    await saveDb();
+    saveDb();
 
     res.json({ success: true, user: db.users[cleanLogin], db });
 });
 
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', (req, res) => {
     const { login, password } = req.body;
     if (!login || !password) {
         return res.json({ success: false, error: 'Введите логин и пароль!' });
@@ -124,33 +97,25 @@ app.post('/api/login', async (req, res) => {
         return res.json({ success: false, error: 'Неверный пароль!' });
     }
 
-    if (!user.globalRole) {
-        user.globalRole = (cleanLogin === 'warren' ? 'warren' : 'user');
-    }
-
     if (!db.outgoingRequests) db.outgoingRequests = {};
     if (!db.outgoingRequests[cleanLogin]) db.outgoingRequests[cleanLogin] = [];
 
     db.lastSeen[cleanLogin] = Date.now();
-    await saveDb();
+    saveDb();
     res.json({ success: true, user, db });
 });
 
-app.post('/api/restore-session', async (req, res) => {
+app.post('/api/restore-session', (req, res) => {
     const { login } = req.body;
     if (!login || !db.users[login]) {
         return res.json({ success: false, error: 'Сессия не найдена' });
     }
-    const user = db.users[login];
-    if (!user.globalRole) {
-        user.globalRole = (login === 'warren' ? 'warren' : 'user');
-    }
     db.lastSeen[login] = Date.now();
-    await saveDb();
+    saveDb();
     res.json({ success: true, user: db.users[login], db });
 });
 
-app.post('/api/update-profile', async (req, res) => {
+app.post('/api/update-profile', (req, res) => {
     const { login, name, email, bio, avatar, password } = req.body;
     if (!login) return res.json({ success: false, error: 'Логин не передан' });
     const cleanLogin = login.trim().toLowerCase();
@@ -161,119 +126,11 @@ app.post('/api/update-profile', async (req, res) => {
     if (bio !== undefined) db.users[cleanLogin].bio = bio.trim();
     if (avatar) db.users[cleanLogin].avatar = avatar;
     if (password) db.users[cleanLogin].password = password;
-    await saveDb();
+    saveDb();
     res.json({ success: true, user: db.users[cleanLogin], db });
 });
 
-// Управление глобальными ролями (Warren и Главный модератор)
-app.post('/api/set-global-role', async (req, res) => {
-    const { adminUser, targetUser, role } = req.body; // role: 'head_moderator', 'moderator', 'user'
-    const requester = db.users[adminUser?.trim().toLowerCase()];
-    const target = db.users[targetUser?.trim().toLowerCase()];
-
-    if (!requester || !target) {
-        return res.json({ success: false, error: 'Пользователь не найден' });
-    }
-
-    const isWarren = (adminUser.trim().toLowerCase() === 'warren' || requester.globalRole === 'warren');
-    const isHeadMod = (requester.globalRole === 'head_moderator');
-
-    if (isWarren) {
-        // warren может назначать и снимать главного модератора и модератора
-        target.globalRole = role;
-    } else if (isHeadMod) {
-        // главный модератор может назначать и снимать модераторов
-        if (role === 'moderator' || role === 'user') {
-            target.globalRole = role;
-        } else {
-            return res.json({ success: false, error: 'Главный модератор может назначать только модераторов или обычных пользователей' });
-        }
-    } else {
-        return res.json({ success: false, error: 'Недостаточно прав для назначения роли!' });
-    }
-
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
-});
-
-// Новости
-app.post('/api/news', async (req, res) => {
-    const { author, text, media } = req.body;
-    const time = new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    db.news.unshift({ author, text: text || '', media: media || null, time, likes: 0, dislikes: 0, comments: [] });
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
-});
-
-app.post('/api/delete-news', async (req, res) => {
-    const { login, newsIndex } = req.body;
-    const user = db.users[login];
-    if (!user) return res.json({ success: false, error: 'Пользователь не найден' });
-    const newsItem = db.news[newsIndex];
-    if (!newsItem) return res.json({ success: false, error: 'Новость не найдена' });
-
-    const isWarren = (login === 'warren' || user.globalRole === 'warren');
-    const isHeadMod = (user.globalRole === 'head_moderator');
-    const isMod = (user.globalRole === 'moderator');
-    const isAuthor = (newsItem.author.split(' ')[0] === login);
-
-    if (!isWarren && !isHeadMod && !isMod && !isAuthor) {
-        return res.json({ success: false, error: 'Недостаточно прав для удаления новости!' });
-    }
-
-    db.news.splice(newsIndex, 1);
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
-});
-
-app.post('/api/edit-news', async (req, res) => {
-    const { login, newsIndex, newText } = req.body;
-    const user = db.users[login];
-    if (!user) return res.json({ success: false, error: 'Пользователь не найден' });
-    const newsItem = db.news[newsIndex];
-    if (!newsItem) return res.json({ success: false, error: 'Новость не найдена' });
-
-    const isWarren = (login === 'warren' || user.globalRole === 'warren');
-    const isHeadMod = (user.globalRole === 'head_moderator');
-    const isMod = (user.globalRole === 'moderator');
-    const isAuthor = (newsItem.author.split(' ')[0] === login);
-
-    if (!isWarren && !isHeadMod && !isMod && !isAuthor) {
-        return res.json({ success: false, error: 'Недостаточно прав для редактирования новости!' });
-    }
-
-    newsItem.text = newText;
-    newsItem.edited = true;
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
-});
-
-app.post('/api/news-like', async (req, res) => {
-    const { index } = req.body;
-    if (db.news[index]) {
-        db.news[index].likes = (db.news[index].likes || 0) + 1;
-        await saveDb();
-        io.emit('update-db', db);
-    }
-    res.json({ success: true, db });
-});
-
-app.post('/api/news-dislike', async (req, res) => {
-    const { index } = req.body;
-    if (db.news[index]) {
-        db.news[index].dislikes = (db.news[index].dislikes || 0) + 1;
-        await saveDb();
-        io.emit('update-db', db);
-    }
-    res.json({ success: true, db });
-});
-
-// Друзья и группы
-app.post('/api/add-friend', async (req, res) => {
+app.post('/api/add-friend', (req, res) => {
     const { login, targetLogin } = req.body;
     const cleanTarget = targetLogin.trim().toLowerCase();
 
@@ -296,13 +153,13 @@ app.post('/api/add-friend', async (req, res) => {
 
     db.friendRequests[cleanTarget].push(login);
     db.outgoingRequests[login].push(cleanTarget);
-    await saveDb();
+    saveDb();
     io.to(cleanTarget).emit('update-db', db);
     io.to(login).emit('update-db', db);
     res.json({ success: true, db });
 });
 
-app.post('/api/cancel-friend-request', async (req, res) => {
+app.post('/api/cancel-friend-request', (req, res) => {
     const { login, targetLogin } = req.body;
     if (db.outgoingRequests && db.outgoingRequests[login]) {
         db.outgoingRequests[login] = db.outgoingRequests[login].filter(l => l !== targetLogin);
@@ -310,13 +167,13 @@ app.post('/api/cancel-friend-request', async (req, res) => {
     if (db.friendRequests && db.friendRequests[targetLogin]) {
         db.friendRequests[targetLogin] = db.friendRequests[targetLogin].filter(l => l !== login);
     }
-    await saveDb();
+    saveDb();
     io.to(targetLogin).emit('update-db', db);
     io.to(login).emit('update-db', db);
     res.json({ success: true, db });
 });
 
-app.post('/api/respond-friend-request', async (req, res) => {
+app.post('/api/respond-friend-request', (req, res) => {
     const { login, requesterLogin, accept } = req.body;
     if (db.friendRequests && db.friendRequests[login]) {
         db.friendRequests[login] = db.friendRequests[login].filter(l => l !== requesterLogin);
@@ -332,23 +189,23 @@ app.post('/api/respond-friend-request', async (req, res) => {
         if (!db.friends[login].includes(requesterLogin)) db.friends[login].push(requesterLogin);
         if (!db.friends[requesterLogin].includes(login)) db.friends[requesterLogin].push(login);
     }
-    await saveDb();
+    saveDb();
     io.to(login).emit('update-db', db);
     io.to(requesterLogin).emit('update-db', db);
     res.json({ success: true, db });
 });
 
-app.post('/api/remove-friend', async (req, res) => {
+app.post('/api/remove-friend', (req, res) => {
     const { login, targetLogin } = req.body;
     if (db.friends[login]) db.friends[login] = db.friends[login].filter(l => l !== targetLogin);
     if (db.friends[targetLogin]) db.friends[targetLogin] = db.friends[targetLogin].filter(l => l !== login);
-    await saveDb();
+    saveDb();
     io.to(login).emit('update-db', db);
     io.to(targetLogin).emit('update-db', db);
     res.json({ success: true, db });
 });
 
-app.post('/api/create-group', async (req, res) => {
+app.post('/api/create-group', (req, res) => {
     const { name, creator } = req.body;
     if (!name || !creator) return res.json({ success: false, error: 'Недостаточно данных' });
 
@@ -359,18 +216,17 @@ app.post('/api/create-group', async (req, res) => {
         creator: creator,
         members: [creator],
         roles: { [creator]: 'Лидер' },
-        customRoles: [],
         messages: [],
         posts: [],
         subgroups: [],
         likes: Math.floor(Math.random() * 20)
     };
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
 
-app.post('/api/update-group', async (req, res) => {
+app.post('/api/update-group', (req, res) => {
     const { groupId, name, login } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
@@ -378,12 +234,12 @@ app.post('/api/update-group', async (req, res) => {
         return res.json({ success: false, error: 'Недостаточно прав!' });
     }
     if (name) group.name = name.trim();
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
 
-app.post('/api/join-group', async (req, res) => {
+app.post('/api/join-group', (req, res) => {
     const { groupId, login } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
@@ -391,13 +247,13 @@ app.post('/api/join-group', async (req, res) => {
     if (!group.members.includes(login)) {
         group.members.push(login);
         group.roles[login] = 'Участник';
-        await saveDb();
+        saveDb();
         io.emit('update-db', db);
     }
     res.json({ success: true, db });
 });
 
-app.post('/api/set-group-role', async (req, res) => {
+app.post('/api/set-group-role', (req, res) => {
     const { groupId, login, targetLogin, newRole } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
@@ -407,38 +263,12 @@ app.post('/api/set-group-role', async (req, res) => {
     }
     if (!group.roles) group.roles = {};
     group.roles[targetLogin] = newRole;
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
 
-// Настройка роли в группе (включая право дублировать в новости canAnnounce)
-app.post('/api/save-group-role', async (req, res) => {
-    const { groupId, login, roleName, permissions, canAnnounce } = req.body;
-    const group = db.groups[groupId];
-    if (!group) return res.json({ success: false, error: 'Группа не найдена' });
-
-    const isLeader = group.creator === login;
-    const myRoleName = group.roles?.[login] || (isLeader ? 'Лидер' : 'Участник');
-    if (!isLeader && myRoleName !== 'Админ') {
-        return res.json({ success: false, error: 'Недостаточно прав для настройки ролей' });
-    }
-
-    if (!group.customRoles) group.customRoles = [];
-    let role = group.customRoles.find(r => r.name === roleName);
-    if (role) {
-        role.permissions = permissions || {};
-        role.canAnnounce = !!canAnnounce;
-    } else {
-        group.customRoles.push({ name: roleName, permissions: permissions || {}, canAnnounce: !!canAnnounce });
-    }
-
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
-});
-
-app.post('/api/kick-group-member', async (req, res) => {
+app.post('/api/kick-group-member', (req, res) => {
     const { groupId, login, targetLogin } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
@@ -449,12 +279,12 @@ app.post('/api/kick-group-member', async (req, res) => {
 
     group.members = group.members.filter(m => m !== targetLogin);
     if (group.roles) delete group.roles[targetLogin];
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
 
-app.post('/api/create-subgroup', async (req, res) => {
+app.post('/api/create-subgroup', (req, res) => {
     const { groupId, name, permission, login } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
@@ -468,12 +298,12 @@ app.post('/api/create-subgroup', async (req, res) => {
     if (!group.subgroups) group.subgroups = [];
     const subId = 'sub_' + Date.now();
     group.subgroups.push({ id: subId, name: name.trim(), permission, messages: [] });
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
 
-app.post('/api/delete-subgroup', async (req, res) => {
+app.post('/api/delete-subgroup', (req, res) => {
     const { groupId, subId, login } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
@@ -481,63 +311,31 @@ app.post('/api/delete-subgroup', async (req, res) => {
         return res.json({ success: false, error: 'Недостаточно прав!' });
     }
     group.subgroups = (group.subgroups || []).filter(s => s.id !== subId);
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
 
-// Публикация поста в группе с дублированием в новости (если разрешено ролью и выставлен флаг)
-app.post('/api/create-group-post', async (req, res) => {
-    const { groupId, author, text, media, isAnnouncement } = req.body;
+app.post('/api/create-group-post', (req, res) => {
+    const { groupId, author, text, media } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
 
     const isLeader = group.creator === author;
-    const myRoleName = group.roles?.[author] || (isLeader ? 'Лидер' : 'Участник');
-    
-    let canPost = isLeader || myRoleName === 'Админ';
-    if (!canPost && group.customRoles) {
-        const customRole = group.customRoles.find(r => r.name === myRoleName);
-        if (customRole && customRole.permissions?.canPost) canPost = true;
-    }
-
-    if (!canPost) {
-        return res.json({ success: false, error: 'Только лидер, админы и лица с соответствующими правами могут публиковать посты!' });
+    const myRole = group.roles?.[author] || (isLeader ? 'Лидер' : 'Участник');
+    if (!isLeader && myRole !== 'Админ') {
+        return res.json({ success: false, error: 'Только лидер и админы могут публиковать посты!' });
     }
 
     if (!group.posts) group.posts = [];
     const time = new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    group.posts.unshift({ author, text: text || '', media: media || null, time, likes: 0, comments: [], isAnnouncement: !!isAnnouncement });
-
-    // Проверка права на дублирование в новости (canAnnounce)
-    if (isAnnouncement) {
-        let canAnnounce = isLeader || myRoleName === 'Админ';
-        if (!canAnnounce && group.customRoles) {
-            const customRole = group.customRoles.find(r => r.name === myRoleName);
-            if (customRole && customRole.canAnnounce) canAnnounce = true;
-        }
-
-        if (canAnnounce) {
-            db.news.unshift({
-                author: `${author} (Группа: ${group.name} 📢)`,
-                text: text || '',
-                media: media || null,
-                time,
-                likes: 0,
-                dislikes: 0,
-                comments: [],
-                isAnnouncement: true,
-                groupId
-            });
-        }
-    }
-
-    await saveDb();
+    group.posts.unshift({ author, text: text || '', media: media || null, time, likes: 0, comments: [] });
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
 
-app.post('/api/delete-group-post', async (req, res) => {
+app.post('/api/delete-group-post', (req, res) => {
     const { groupId, login, postIndex } = req.body;
     const group = db.groups[groupId];
     if (!group || !group.posts?.[postIndex]) return res.json({ success: false, error: 'Пост не найден' });
@@ -551,12 +349,12 @@ app.post('/api/delete-group-post', async (req, res) => {
     }
 
     group.posts.splice(postIndex, 1);
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
 
-app.post('/api/send-message', async (req, res) => {
+app.post('/api/send-message', (req, res) => {
     const { sender, receiver, text, media } = req.body;
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const msgObj = { id: 'msg_' + Date.now() + Math.random().toString(36).substr(2, 5), sender, receiver, text: text || '', media: media || null, time, edited: false, reactions: {}, read: false };
@@ -571,12 +369,12 @@ app.post('/api/send-message', async (req, res) => {
         db.messagesStore[receiver][sender].push(msgObj);
     }
 
-    await saveDb();
+    saveDb();
     io.to(receiver).emit('receive-message', { sender, receiver, msg: msgObj });
     res.json({ success: true, db });
 });
 
-app.post('/api/send-group-message', async (req, res) => {
+app.post('/api/send-group-message', (req, res) => {
     const { groupId, sender, text, media, subgroup } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
@@ -595,12 +393,12 @@ app.post('/api/send-group-message', async (req, res) => {
         }
     }
 
-    await saveDb();
+    saveDb();
     io.to(groupId).emit('receive-group-message', { groupId, msg: msgObj, subgroup: subgroup || 'main' });
     res.json({ success: true, db });
 });
 
-app.post('/api/add-reaction', async (req, res) => {
+app.post('/api/add-reaction', (req, res) => {
     const { login, peer, messageId, emoji, isGroup, groupId, subgroup } = req.body;
     if (isGroup) {
         const group = db.groups[groupId];
@@ -618,7 +416,7 @@ app.post('/api/add-reaction', async (req, res) => {
                     } else {
                         msg.reactions[emoji].push(login);
                     }
-                    await saveDb();
+                    saveDb();
                     io.emit('update-db', db);
                 }
             }
@@ -642,14 +440,14 @@ app.post('/api/add-reaction', async (req, res) => {
                 }
             }
         });
-        await saveDb();
+        saveDb();
         io.to(login).emit('update-db', db);
         io.to(peer).emit('update-db', db);
     }
     res.json({ success: true, db });
 });
 
-app.post('/api/pin-message', async (req, res) => {
+app.post('/api/pin-message', (req, res) => {
     const { login, peer, messageId, isGroup, groupId, subgroup } = req.body;
     const key = isGroup ? `group_${groupId}_${subgroup || 'main'}` : [login, peer].sort().join('_');
     if (!db.pinnedMessages) db.pinnedMessages = {};
@@ -658,8 +456,37 @@ app.post('/api/pin-message', async (req, res) => {
     } else {
         db.pinnedMessages[key] = messageId;
     }
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
+app.post('/api/news', (req, res) => {
+    const { author, text, media } = req.body;
+    const time = new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    db.news.unshift({ author, text: text || '', media: media || null, time, likes: 0, dislikes: 0, comments: [] });
+    saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
+app.post('/api/news-like', (req, res) => {
+    const { index } = req.body;
+    if (db.news[index]) {
+        db.news[index].likes = (db.news[index].likes || 0) + 1;
+        saveDb();
+        io.emit('update-db', db);
+    }
+    res.json({ success: true, db });
+});
+
+app.post('/api/news-dislike', (req, res) => {
+    const { index } = req.body;
+    if (db.news[index]) {
+        db.news[index].dislikes = (db.news[index].dislikes || 0) + 1;
+        saveDb();
+        io.emit('update-db', db);
+    }
     res.json({ success: true, db });
 });
 
@@ -742,5 +569,5 @@ io.on('connection', (socket) => {
 
 const PORT = 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 Сервер запущен на http://localhost:${PORT} с MongoDB`);
+    console.log(`Сервер запущен на http://localhost:${PORT}`);
 });
