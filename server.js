@@ -1040,24 +1040,23 @@ io.on('connection', (socket) => {
         socket.join(`group_${groupId}`);
     });
 
-    socket.on('call-user', ({ targetLogin, offer, callerLogin }) => {
+    // Обработчики прямых WebRTC-вызовов
+    socket.on('direct-call-offer', ({ callerLogin, targetLogin, offer }) => {
         io.to(targetLogin.toLowerCase()).emit('incoming-call', { callerLogin, offer });
     });
 
-    socket.on('accept-call', ({ targetLogin, answer, accepterLogin }) => {
-        io.to(targetLogin.toLowerCase()).emit('call-accepted', { answer, accepterLogin });
+    socket.on('direct-call-answer', ({ senderLogin, targetLogin, answer }) => {
+        io.to(targetLogin.toLowerCase()).emit('call-answered', { answer, accepterLogin: senderLogin });
     });
 
-    socket.on('reject-call', ({ targetLogin }) => {
-        io.to(targetLogin.toLowerCase()).emit('call-rejected');
+    socket.on('direct-call-reject', ({ targetLogin }) => {
+        if (targetLogin) {
+            io.to(targetLogin.toLowerCase()).emit('call-rejected');
+        }
     });
 
-    socket.on('hangup-call', ({ targetLogin }) => {
-        io.to(targetLogin.toLowerCase()).emit('call-hangup');
-    });
-
-    socket.on('webrtc-candidate', ({ targetLogin, candidate }) => {
-        io.to(targetLogin.toLowerCase()).emit('webrtc-candidate', { candidate });
+    socket.on('direct-call-candidate', ({ senderLogin, targetLogin, candidate }) => {
+        io.to(targetLogin.toLowerCase()).emit('call-candidate', { candidate });
     });
 
     socket.on('join-voice-channel', ({ roomKey, login, groupId, subId }) => {
