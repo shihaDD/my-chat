@@ -249,6 +249,24 @@ app.post('/api/set-global-role', async (req, res) => {
     res.json({ success: true, db });
 });
 
+app.post('/api/set-global-mute', async (req, res) => {
+    const { login, targetLogin, muteMinutes, reason } = req.body;
+    const cleanLogin = login ? login.trim().toLowerCase() : '';
+    if (!hasFullAccess(cleanLogin)) {
+        return res.json({ success: false, error: 'Недостаточно прав!' });
+    }
+    if (!db.mutedUsers) db.mutedUsers = {};
+    const mins = parseInt(muteMinutes) || 60;
+    const clampedMins = Math.min(Math.max(mins, 1), 9999);
+    db.mutedUsers[targetLogin.trim().toLowerCase()] = {
+        expires: Date.now() + (clampedMins * 60 * 1000),
+        reason: reason || 'Нарушение правил'
+    };
+    await saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
 app.post('/api/remove-global-mute', async (req, res) => {
     const { login, targetLogin } = req.body;
     const cleanLogin = login ? login.trim().toLowerCase() : '';
@@ -680,38 +698,6 @@ app.post('/api/delete-subgroup', async (req, res) => {
     res.json({ success: true, db });
 });
 
-// Независимые глобальные каналы отдела модерации
-app.post('/api/create-global-channel', async (req, res) => {
-    const { login, name, type } = req.body;
-    if (!hasFullAccess(login)) {
-        return res.json({ success: false, error: 'Недостаточно прав!' });
-    }
-    if (!db.globalChannels) db.globalChannels = [];
-    const channelId = 'gchan_' + Date.now();
-    db.globalChannels.push({
-        id: channelId,
-        name: name.trim(),
-        type: type || 'text',
-        createdAt: Date.now()
-    });
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
-});
-
-app.post('/api/delete-global-channel', async (req, res) => {
-    const { login, channelId } = req.body;
-    if (!hasFullAccess(login)) {
-        return res.json({ success: false, error: 'Недостаточно прав!' });
-    }
-    if (db.globalChannels) {
-        db.globalChannels = db.globalChannels.filter(c => c.id !== channelId);
-    }
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
-});
-
 app.post('/api/send-message', async (req, res) => {
     const { sender, text, media, chatType, chatId, subgroup } = req.body;
     if (!sender) return res.json({ success: false, error: 'Не авторизован' });
@@ -943,7 +929,9 @@ app.post('/api/publish-group-post', async (req, res) => {
         db.news.unshift({
             id: 'news_' + Date.now(),
             author: login,
-            text: `[${group.name} ✓] ${text}`,
+            groupName: group.name,
+            groupVerified: true,
+            text: text,
             timestamp: Date.now()
         });
     }
@@ -1003,6 +991,8 @@ app.post('/api/resolve-violation-action', async (req, res) => {
         db.news.unshift({
             id: 'news_' + Date.now(),
             author: viol.author,
+            groupName: viol.groupName || '',
+            groupVerified: !!viol.groupName,
             text: viol.text,
             timestamp: Date.now()
         });
@@ -1012,6 +1002,8 @@ app.post('/api/resolve-violation-action', async (req, res) => {
         db.news.unshift({
             id: 'news_' + Date.now(),
             author: viol.author,
+            groupName: viol.groupName || '',
+            groupVerified: !!viol.groupName,
             text: newText,
             timestamp: Date.now()
         });
@@ -1024,7 +1016,6 @@ app.post('/api/resolve-violation-action', async (req, res) => {
             reason: reason || 'Нарушение правил'
         };
     } else if (action === 'delete') {
-        // Удаление со всех мест публикации повсеместно
         if (viol.messageId && viol.storeKey && db.messagesStore[viol.storeKey]) {
             db.messagesStore[viol.storeKey] = db.messagesStore[viol.storeKey].filter(m => m.id !== viol.messageId);
         }
@@ -1045,7 +1036,6 @@ app.post('/api/resolve-violation-action', async (req, res) => {
     res.json({ success: true, db });
 });
 
-// WebRTC Сигнализация (голосовые каналы и звонки с STUN-конфигурацией)
 io.on('connection', (socket) => {
     socket.on('register', (login) => {
         if (login) {
@@ -1061,10 +1051,6 @@ io.on('connection', (socket) => {
 
     socket.on('join-group-room', (groupId) => {
         socket.join(`group_${groupId}`);
-    });
-
-    socket.on('join-global-room', (channelId) => {
-        socket.join(`global_${channelId}`);
     });
 
     socket.on('call-user', ({ targetLogin, offer, callerLogin }) => {
@@ -1095,18 +1081,6 @@ io.on('connection', (socket) => {
     socket.on('leave-voice-channel', ({ roomKey }) => {
         socket.leave(roomKey);
         socket.to(roomKey).emit('user-left-voice', { socketId: socket.id });
-    });
-
-    socket.on('group-webrtc-offer', ({ targetSocketId, offer }) => {
-        io.to(targetSocketId).emit('group-webrtc-offer', { offer, senderSocketId: socket.id });
-    });
-
-    socket.on('group-webrtc-answer', ({ targetSocketId, answer }) => {
-        io.to(targetSocketId).emit('group-webrtc-answer', { answer, senderSocketId: socket.id });
-    });
-
-    socket.on('group-webrtc-candidate', ({ targetSocketId, candidate }) => {
-        io.to(targetSocketId).emit('group-webrtc-candidate', { candidate, senderSocketId: socket.id });
     });
 
     socket.on('disconnect', () => {
