@@ -23,7 +23,9 @@ let db = {
     customNicknames: {},
     groups: {},
     news: [],
-    lastSeen: {}
+    lastSeen: {},
+    pinnedMessages: {},
+    globalRoles: {}
 };
 
 if (fs.existsSync(DB_FILE)) {
@@ -111,6 +113,17 @@ app.post('/api/login', (req, res) => {
     res.json({ success: true, user, db });
 });
 
+app.post('/api/restore-session', (req, res) => {
+    const { login } = req.body;
+    if (!login) return res.json({ success: false });
+    const cleanLogin = login.trim().toLowerCase();
+    const user = db.users[cleanLogin];
+    if (!user) return res.json({ success: false });
+    db.lastSeen[cleanLogin] = Date.now();
+    saveDb();
+    res.json({ success: true, user, db });
+});
+
 app.post('/api/update-profile', (req, res) => {
     const { login, name, email, bio, avatar, password } = req.body;
     if (!login) return res.json({ success: false, error: 'Логин не передан' });
@@ -124,6 +137,19 @@ app.post('/api/update-profile', (req, res) => {
     if (password) db.users[cleanLogin].password = password;
     saveDb();
     res.json({ success: true, user: db.users[cleanLogin], db });
+});
+
+app.post('/api/set-global-role', (req, res) => {
+    const { login, targetLogin, newRole } = req.body;
+    const cleanLogin = login ? login.trim().toLowerCase() : '';
+    if (cleanLogin !== 'warren' && db.globalRoles?.[cleanLogin] !== 'main_moderator') {
+        return res.json({ success: false, error: 'Недостаточно прав!' });
+    }
+    if (!db.globalRoles) db.globalRoles = {};
+    db.globalRoles[targetLogin.trim().toLowerCase()] = newRole;
+    saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
 });
 
 app.post('/api/add-friend', (req, res) => {
@@ -202,7 +228,8 @@ app.post('/api/remove-friend', (req, res) => {
 });
 
 app.post('/api/create-group', (req, res) => {
-    const { name, creator } = req.body;
+    const { name } = req.body;
+    const creator = req.body.creator || req.body.login;
     if (!name || !creator) return res.json({ success: false, error: 'Недостаточно данных' });
 
     const groupId = 'group_' + Date.now();
@@ -220,8 +247,22 @@ app.post('/api/create-group', (req, res) => {
         messages: [],
         posts: [],
         subgroups: [],
-        likes: Math.floor(Math.random() * 20)
+        likes: 0
     };
+    saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
+app.post('/api/delete-group', (req, res) => {
+    const { groupId, login } = req.body;
+    const group = db.groups[groupId];
+    if (!group) return res.json({ success: false, error: 'Группа не найдена' });
+    const isLeader = group.creator === login;
+    if (!isLeader && login.toLowerCase() !== 'warren' && getUserGlobalRole(login) !== 'main_moderator') {
+        return res.json({ success: false, error: 'Недостаточно прав!' });
+    }
+    delete db.groups[groupId];
     saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
@@ -231,7 +272,7 @@ app.post('/api/update-group', (req, res) => {
     const { groupId, name, avatar, login } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
-    if (group.creator !== login && group.roles?.[login] !== 'Админ') {
+    if (group.creator !== login && group.roles?.[login] !== 'Админ' && login.toLowerCase() !== 'warren') {
         return res.json({ success: false, error: 'Недостаточно прав!' });
     }
     if (name) group.name = name.trim();
@@ -261,7 +302,7 @@ app.post('/api/set-group-role', (req, res) => {
     if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
 
     const isLeader = group.creator === login;
-    if (!isLeader && group.roles?.[login] !== 'Админ') {
+    if (!isLeader && group.roles?.[login] !== 'Админ' && login.toLowerCase() !== 'warren') {
         return res.json({ success: false, error: 'Недостаточно прав для изменения ролей!' });
     }
     if (!group.roles) group.roles = {};
@@ -275,7 +316,7 @@ app.post('/api/create-custom-role', (req, res) => {
     const { groupId, login, roleName, permissions } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
-    if (group.creator !== login) {
+    if (group.creator !== login && login.toLowerCase() !== 'warren') {
         return res.json({ success: false, error: 'Только лидер группы может создавать роли!' });
     }
     if (!group.customRoles) group.customRoles = {};
@@ -292,7 +333,7 @@ app.post('/api/delete-custom-role', (req, res) => {
     const { groupId, login, roleName } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
-    if (group.creator !== login) {
+    if (group.creator !== login && login.toLowerCase() !== 'warren') {
         return res.json({ success: false, error: 'Только лидер группы может удалять роли!' });
     }
     if (roleName === 'Лидер' || roleName === 'Админ' || roleName === 'Участник') {
@@ -313,7 +354,7 @@ app.post('/api/kick-group-member', (req, res) => {
 
     const isLeader = group.creator === login;
     const myRole = group.roles?.[login];
-    if (!isLeader && myRole !== 'Админ') {
+    if (!isLeader && myRole !== 'Админ' && login.toLowerCase() !== 'warren') {
         return res.json({ success: false, error: 'Только лидер и админы могут исключать участников!' });
     }
     if (group.creator === targetLogin) {
@@ -334,7 +375,7 @@ app.post('/api/create-subgroup', (req, res) => {
 
     const isLeader = group.creator === login;
     const myRole = group.roles?.[login] || (isLeader ? 'Лидер' : 'Участник');
-    if (!isLeader && myRole !== 'Админ') {
+    if (!isLeader && myRole !== 'Админ' && login.toLowerCase() !== 'warren') {
         return res.json({ success: false, error: 'Недостаточно прав для создания канала!' });
     }
 
@@ -350,7 +391,7 @@ app.post('/api/delete-subgroup', (req, res) => {
     const { groupId, subId, login } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
-    if (group.creator !== login && group.roles?.[login] !== 'Админ') {
+    if (group.creator !== login && group.roles?.[login] !== 'Админ' && login.toLowerCase() !== 'warren') {
         return res.json({ success: false, error: 'Недостаточно прав!' });
     }
     group.subgroups = (group.subgroups || []).filter(s => s.id !== subId);
@@ -359,180 +400,167 @@ app.post('/api/delete-subgroup', (req, res) => {
     res.json({ success: true, db });
 });
 
-app.post('/api/create-group-post', (req, res) => {
-    const { groupId, author, text, media } = req.body;
+app.post('/api/publish-group-post', (req, res) => {
+    const { groupId, login, text, media, announcement } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
 
-    const isLeader = group.creator === author;
-    const myRole = group.roles?.[author] || (isLeader ? 'Лидер' : 'Участник');
-    const rolePermissions = group.customRoles?.[myRole] || { canPost: myRole === 'Лидер' || myRole === 'Админ' };
-    
-    if (!isLeader && myRole !== 'Админ' && !rolePermissions.canPost) {
-        return res.json({ success: false, error: 'Ваша роль не имеет прав на публикацию постов!' });
+    if (!group.posts) group.posts = [];
+    const postId = 'gpost_' + Date.now();
+    const postObj = { id: postId, author: login, text: text || '', media: media || null, timestamp: Date.now(), likes: 0 };
+    group.posts.unshift(postObj);
+
+    if (announcement) {
+        if (!db.news) db.news = [];
+        db.news.unshift({
+            id: 'news_' + Date.now(),
+            author: login,
+            text: `📢 Объявление из группы "${group.name}":\n${text || ''}`,
+            media: media || null,
+            timestamp: Date.now(),
+            likes: 0,
+            dislikes: 0,
+            comments: []
+        });
     }
 
-    if (!group.posts) group.posts = [];
-    const time = new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    group.posts.unshift({ author, text: text || '', media: media || null, time, likes: 0, comments: [] });
     saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
 
 app.post('/api/delete-group-post', (req, res) => {
-    const { groupId, login, postIndex } = req.body;
+    const { groupId, login, postId } = req.body;
     const group = db.groups[groupId];
-    if (!group || !group.posts?.[postIndex]) return res.json({ success: false, error: 'Пост не найден' });
+    if (!group || !group.posts) return res.json({ success: false, error: 'Пост не найден' });
 
-    const post = group.posts[postIndex];
-    const isLeader = group.creator === login;
-    const myRole = group.roles?.[login] || (isLeader ? 'Лидер' : 'Участник');
-    const rolePermissions = group.customRoles?.[myRole] || {};
-
-    if (!isLeader && myRole !== 'Админ' && !rolePermissions.canDelete && post.author !== login) {
-        return res.json({ success: false, error: 'Недостаточно прав для удаления поста!' });
-    }
-
-    group.posts.splice(postIndex, 1);
+    group.posts = group.posts.filter(p => p.id !== postId);
     saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
 
 app.post('/api/send-message', (req, res) => {
-    const { sender, receiver, text, media, messageId } = req.body;
+    const { sender, receiver, text, media, messageId, chatType, chatId, subgroup } = req.body;
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const msgObj = { id: messageId || 'msg_' + Date.now() + '_' + Math.random(), sender, receiver, text: text || '', media: media || null, time, edited: false, read: false };
+    const timestamp = req.body.timestamp || Date.now();
+    const msgObj = { id: messageId || 'msg_' + Date.now() + '_' + Math.random(), sender, text: text || '', media: media || null, time, timestamp, edited: false, read: false };
 
-    if (!db.messagesStore[sender]) db.messagesStore[sender] = {};
-    if (!db.messagesStore[sender][receiver]) db.messagesStore[sender][receiver] = [];
-    db.messagesStore[sender][receiver].push(msgObj);
-
-    if (sender !== receiver) {
-        if (!db.messagesStore[receiver]) db.messagesStore[receiver] = {};
-        if (!db.messagesStore[receiver][sender]) db.messagesStore[receiver][sender] = [];
-        db.messagesStore[receiver][sender].push(msgObj);
+    if (chatType === 'group' && chatId) {
+        const key = `group_${chatId}_${subgroup || 'main'}`;
+        if (!db.messagesStore[key]) db.messagesStore[key] = [];
+        db.messagesStore[key].push(msgObj);
+        saveDb();
+        io.to(chatId).emit('receive-group-message', { groupId: chatId, msg: msgObj, subgroup: subgroup || 'main' });
+        io.emit('update-db', db);
+        return res.json({ success: true, db, msg: msgObj });
     }
 
+    const peer = receiver || chatId;
+    if (!peer) return res.json({ success: false, error: 'Получатель не указан' });
+
+    const chatKey = [sender, peer].sort().join('_');
+    if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
+    db.messagesStore[chatKey].push(msgObj);
+
     saveDb();
-    io.to(receiver).emit('receive-message', { sender, receiver, msg: msgObj });
+    io.to(peer).emit('receive-message', { sender, receiver: peer, msg: msgObj });
+    io.to(sender).emit('receive-message', { sender, receiver: peer, msg: msgObj });
     res.json({ success: true, db, msg: msgObj });
 });
 
 app.post('/api/edit-message', (req, res) => {
-    const { login, peer, messageId, newText } = req.body;
-    if (!db.messagesStore[login]?.[peer]) return res.json({ success: false, error: 'Чат не найден' });
-
+    const { login, messageId, newText } = req.body;
     let found = false;
-    db.messagesStore[login][peer].forEach(m => {
-        if (m.id === messageId && m.sender === login) {
-            m.text = newText;
-            m.edited = true;
-            found = true;
-        }
-    });
-
-    if (login !== peer && db.messagesStore[peer]?.[login]) {
-        db.messagesStore[peer][login].forEach(m => {
+    for (let key in db.messagesStore) {
+        db.messagesStore[key].forEach(m => {
             if (m.id === messageId && m.sender === login) {
                 m.text = newText;
                 m.edited = true;
+                found = true;
             }
         });
     }
-
     if (found) {
         saveDb();
-        io.to(peer).emit('message-edited', { sender: login, receiver: peer, messageId, newText });
-        io.to(login).emit('message-edited', { sender: login, receiver: peer, messageId, newText });
+        io.emit('update-db', db);
         res.json({ success: true, db });
     } else {
-        res.json({ success: false, error: 'Не удалось отредактировать сообщение' });
+        res.json({ success: false, error: 'Сообщение не найдено' });
     }
 });
 
 app.post('/api/delete-message', (req, res) => {
-    const { login, peer, messageId } = req.body;
-    if (db.messagesStore[login]?.[peer]) {
-        db.messagesStore[login][peer] = db.messagesStore[login][peer].filter(m => m.id !== messageId);
+    const { login, messageId } = req.body;
+    let found = false;
+    for (let key in db.messagesStore) {
+        const beforeLen = db.messagesStore[key].length;
+        db.messagesStore[key] = db.messagesStore[key].filter(m => !(m.id === messageId && (m.sender === login || login.toLowerCase() === 'warren')));
+        if (db.messagesStore[key].length < beforeLen) found = true;
     }
-    if (login !== peer && db.messagesStore[peer]?.[login]) {
-        db.messagesStore[peer][login] = db.messagesStore[peer][login].filter(m => m.id !== messageId);
-    }
-    saveDb();
-    io.to(peer).emit('message-deleted', { sender: login, receiver: peer, messageId });
-    io.to(login).emit('message-deleted', { sender: login, receiver: peer, messageId });
-    res.json({ success: true, db });
-});
-
-app.post('/api/mark-read', (req, res) => {
-    const { login, peer } = req.body;
-    if (db.messagesStore[login]?.[peer]) {
-        db.messagesStore[login][peer].forEach(m => {
-            if (m.sender === peer) m.read = true;
-        });
-    }
-    if (db.messagesStore[peer]?.[login]) {
-        db.messagesStore[peer][login].forEach(m => {
-            if (m.sender === peer) m.read = true;
-        });
-    }
-    saveDb();
-    io.to(peer).emit('messages-read', { reader: login, peer });
-    res.json({ success: true });
-});
-
-app.post('/api/send-group-message', (req, res) => {
-    const { groupId, sender, text, media, subgroup } = req.body;
-    const group = db.groups[groupId];
-    if (!group) return res.json({ success: false, error: 'Группа не найдена' });
-
-    const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const msgObj = { id: 'gmsg_' + Date.now(), sender, text: text || '', media: media || null, time, edited: false };
-
-    if (!subgroup || subgroup === 'main') {
-        if (!group.messages) group.messages = [];
-        group.messages.push(msgObj);
+    if (found) {
+        saveDb();
+        io.emit('update-db', db);
+        res.json({ success: true, db });
     } else {
-        const sub = group.subgroups?.find(s => s.id === subgroup);
-        if (sub) {
-            if (!sub.messages) sub.messages = [];
-            sub.messages.push(msgObj);
-        }
+        res.json({ success: false, error: 'Не удалось удалить сообщение' });
     }
-
-    saveDb();
-    io.to(groupId).emit('receive-group-message', { groupId, msg: msgObj, subgroup: subgroup || 'main' });
-    res.json({ success: true, db });
 });
 
-app.post('/api/news', (req, res) => {
-    const { author, text, media } = req.body;
-    const time = new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    db.news.unshift({ author, text: text || '', media: media || null, time, likes: 0, dislikes: 0, comments: [] });
+app.post('/api/pin-message', (req, res) => {
+    const { messageId, chatKey } = req.body;
+    if (!db.pinnedMessages) db.pinnedMessages = {};
+    db.pinnedMessages[chatKey] = messageId;
     saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
 
-app.post('/api/news-like', (req, res) => {
-    const { index } = req.body;
-    if (db.news[index]) {
-        db.news[index].likes = (db.news[index].likes || 0) + 1;
+app.post('/api/unpin-message', (req, res) => {
+    const { chatKey } = req.body;
+    if (db.pinnedMessages && db.pinnedMessages[chatKey]) {
+        delete db.pinnedMessages[chatKey];
         saveDb();
         io.emit('update-db', db);
     }
     res.json({ success: true, db });
 });
 
-app.post('/api/news-dislike', (req, res) => {
-    const { index } = req.body;
-    if (db.news[index]) {
-        db.news[index].dislikes = (db.news[index].dislikes || 0) + 1;
-        saveDb();
-        io.emit('update-db', db);
+app.post(['/api/news', '/api/publish-news'], (req, res) => {
+    const { login, author, text, media } = req.body;
+    const postAuthor = author || login;
+    if (!postAuthor) return res.json({ success: false, error: 'Автор не указан' });
+    const time = new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const postId = 'post_' + Date.now();
+    db.news.unshift({ id: postId, author: postAuthor, text: text || '', media: media || null, time, timestamp: Date.now(), likes: 0, dislikes: 0, comments: [] });
+    saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
+app.post('/api/edit-news', (req, res) => {
+    const { login, postId, newText } = req.body;
+    const post = db.news.find(p => p.id === postId);
+    if (!post) return res.json({ success: false, error: 'Новость не найдена' });
+    if (post.author !== login && login.toLowerCase() !== 'warren') {
+        return res.json({ success: false, error: 'Недостаточно прав' });
     }
+    post.text = newText;
+    saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
+app.post('/api/delete-news', (req, res) => {
+    const { login, postId } = req.body;
+    const post = db.news.find(p => p.id === postId);
+    if (!post) return res.json({ success: false, error: 'Новость не найдена' });
+    if (post.author !== login && login.toLowerCase() !== 'warren') {
+        return res.json({ success: false, error: 'Недостаточно прав' });
+    }
+    db.news = db.news.filter(p => p.id !== postId);
+    saveDb();
+    io.emit('update-db', db);
     res.json({ success: true, db });
 });
 
@@ -570,54 +598,6 @@ io.on('connection', (socket) => {
 
     socket.on('hang-up', ({ to }) => {
         io.to(to).emit('hang-up');
-    });
-
-    socket.on('typing', ({ from, to, isGroup }) => {
-        if (!isGroup) io.to(to).emit('user-typing', { from, to, isGroup });
-    });
-
-    socket.on('stop-typing', ({ from, to, isGroup }) => {
-        if (!isGroup) io.to(to).emit('user-stop-typing');
-    });
-
-    socket.on('join-group-call', ({ groupId, channelId, login }) => {
-        const roomName = `${groupId}_${channelId || 'main'}`;
-        socket.join(roomName);
-        const room = io.sockets.adapter.rooms.get(roomName);
-        const clients = [];
-        if (room) {
-            room.forEach(socketId => {
-                const s = io.sockets.sockets.get(socketId);
-                if (s && s.id !== socket.id) {
-                    clients.push({ socketId: s.id, login: s.login });
-                }
-            });
-        }
-        socket.emit('group-call-users', clients);
-        socket.to(roomName).emit('user-joined-group-call', { login, socketId: socket.id, roomName });
-    });
-
-    socket.on('group-signal', ({ toSocketId, signal, fromLogin }) => {
-        io.to(toSocketId).emit('group-signal', { fromSocketId: socket.id, signal, fromLogin });
-    });
-
-    socket.on('leave-group-call', ({ groupId, channelId, login }) => {
-        const roomName = `${groupId}_${channelId || 'main'}`;
-        socket.leave(roomName);
-        socket.to(roomName).emit('user-left-group-call', { socketId: socket.id });
-    });
-
-    socket.on('mod-mute-user', ({ targetSocketId, muted }) => {
-        io.to(targetSocketId).emit('mod-mute-action', { muted });
-    });
-
-    socket.on('mod-mute-all', ({ roomName, muted }) => {
-        socket.to(roomName).emit('mod-mute-action', { muted });
-        socket.emit('mod-mute-action', { muted });
-    });
-
-    socket.on('mod-kick-user', ({ targetSocketId }) => {
-        io.to(targetSocketId).emit('mod-kick-action');
     });
 
     socket.on('disconnect', () => {});
