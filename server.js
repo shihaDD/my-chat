@@ -680,7 +680,7 @@ app.post('/api/delete-subgroup', async (req, res) => {
     res.json({ success: true, db });
 });
 
-// Независимые глобальные каналы отдела модерации (Warren / Модераторы)
+// Независимые глобальные каналы отдела модерации
 app.post('/api/create-global-channel', async (req, res) => {
     const { login, name, type } = req.body;
     if (!hasFullAccess(login)) {
@@ -728,7 +728,6 @@ app.post('/api/send-message', async (req, res) => {
     }
 
     let storeKey = '';
-    let violationMeta = {};
     if (chatType === 'group') {
         storeKey = `group_${chatId}_${subgroup || 'main'}`;
     } else if (chatType === 'global') {
@@ -1025,7 +1024,7 @@ app.post('/api/resolve-violation-action', async (req, res) => {
             reason: reason || 'Нарушение правил'
         };
     } else if (action === 'delete') {
-        // Удаляем оригинал сообщения/поста повсеместно
+        // Удаление со всех мест публикации повсеместно
         if (viol.messageId && viol.storeKey && db.messagesStore[viol.storeKey]) {
             db.messagesStore[viol.storeKey] = db.messagesStore[viol.storeKey].filter(m => m.id !== viol.messageId);
         }
@@ -1046,7 +1045,7 @@ app.post('/api/resolve-violation-action', async (req, res) => {
     res.json({ success: true, db });
 });
 
-// Socket.io WebRTC сигнализация (стабильная связь без вечных подключений)
+// WebRTC Сигнализация (голосовые каналы и звонки с STUN-конфигурацией)
 io.on('connection', (socket) => {
     socket.on('register', (login) => {
         if (login) {
