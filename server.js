@@ -107,32 +107,31 @@ async function initDatabase() {
     }
 }
 
-async function saveDb() {
-    try {
-        await AppState.findOneAndUpdate(
-            { key: 'main_db' },
-            {
-                users: db.users,
-                messagesStore: db.messagesStore,
-                friends: db.friends,
-                friendRequests: db.friendRequests,
-                outgoingRequests: db.outgoingRequests,
-                customNicknames: db.customNicknames,
-                groups: db.groups,
-                globalChannels: db.globalChannels,
-                news: db.news,
-                lastSeen: db.lastSeen,
-                pinnedMessages: db.pinnedMessages,
-                globalRoles: db.globalRoles,
-                violations: db.violations,
-                verificationRequests: db.verificationRequests,
-                mutedUsers: db.mutedUsers
-            },
-            { upsert: true, new: true }
-        );
-    } catch (e) {
+// Асинхронное фоновое сохранение для максимальной скорости отклика
+function saveDb() {
+    AppState.findOneAndUpdate(
+        { key: 'main_db' },
+        {
+            users: db.users,
+            messagesStore: db.messagesStore,
+            friends: db.friends,
+            friendRequests: db.friendRequests,
+            outgoingRequests: db.outgoingRequests,
+            customNicknames: db.customNicknames,
+            groups: db.groups,
+            globalChannels: db.globalChannels,
+            news: db.news,
+            lastSeen: db.lastSeen,
+            pinnedMessages: db.pinnedMessages,
+            globalRoles: db.globalRoles,
+            violations: db.violations,
+            verificationRequests: db.verificationRequests,
+            mutedUsers: db.mutedUsers
+        },
+        { upsert: true, new: true }
+    ).catch(e => {
         console.error('Ошибка сохранения базы данных в MongoDB:', e);
-    }
+    });
 }
 
 function getUserGlobalRole(login) {
@@ -181,7 +180,7 @@ app.post('/api/register', async (req, res) => {
     db.friendRequests[cleanLogin] = [];
     db.outgoingRequests[cleanLogin] = [];
     db.lastSeen[cleanLogin] = Date.now();
-    await saveDb();
+    saveDb();
 
     res.json({ success: true, user: db.users[cleanLogin], db });
 });
@@ -205,7 +204,7 @@ app.post('/api/login', async (req, res) => {
     if (!db.outgoingRequests[cleanLogin]) db.outgoingRequests[cleanLogin] = [];
 
     db.lastSeen[cleanLogin] = Date.now();
-    await saveDb();
+    saveDb();
     res.json({ success: true, user, db });
 });
 
@@ -216,7 +215,7 @@ app.post('/api/restore-session', async (req, res) => {
     const user = db.users[cleanLogin];
     if (!user) return res.json({ success: false });
     db.lastSeen[cleanLogin] = Date.now();
-    await saveDb();
+    saveDb();
     res.json({ success: true, user, db });
 });
 
@@ -231,7 +230,7 @@ app.post('/api/update-profile', async (req, res) => {
     if (bio !== undefined) db.users[cleanLogin].bio = bio.trim();
     if (avatar) db.users[cleanLogin].avatar = avatar;
     if (password) db.users[cleanLogin].password = password;
-    await saveDb();
+    saveDb();
     res.json({ success: true, user: db.users[cleanLogin], db });
 });
 
@@ -243,7 +242,7 @@ app.post('/api/set-global-role', async (req, res) => {
     }
     if (!db.globalRoles) db.globalRoles = {};
     db.globalRoles[targetLogin.trim().toLowerCase()] = newRole;
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -261,7 +260,7 @@ app.post('/api/set-global-mute', async (req, res) => {
         expires: Date.now() + (clampedMins * 60 * 1000),
         reason: reason || 'Нарушение правил'
     };
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -275,7 +274,7 @@ app.post('/api/remove-global-mute', async (req, res) => {
     if (db.mutedUsers && targetLogin) {
         delete db.mutedUsers[targetLogin.trim().toLowerCase()];
     }
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -303,7 +302,7 @@ app.post('/api/add-friend', async (req, res) => {
 
     db.friendRequests[cleanTarget].push(login);
     db.outgoingRequests[login].push(cleanTarget);
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -316,7 +315,7 @@ app.post('/api/cancel-friend-request', async (req, res) => {
     if (db.friendRequests && db.friendRequests[targetLogin]) {
         db.friendRequests[targetLogin] = db.friendRequests[targetLogin].filter(l => l !== login);
     }
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -337,7 +336,7 @@ app.post('/api/respond-friend-request', async (req, res) => {
         if (!db.friends[login].includes(requesterLogin)) db.friends[login].push(requesterLogin);
         if (!db.friends[requesterLogin].includes(login)) db.friends[requesterLogin].push(login);
     }
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -346,7 +345,7 @@ app.post('/api/remove-friend', async (req, res) => {
     const { login, targetLogin } = req.body;
     if (db.friends[login]) db.friends[login] = db.friends[login].filter(l => l !== targetLogin);
     if (db.friends[targetLogin]) db.friends[targetLogin] = db.friends[targetLogin].filter(l => l !== login);
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -379,7 +378,7 @@ app.post('/api/create-group', async (req, res) => {
         isVerified: false,
         verificationPending: false
     };
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -393,7 +392,7 @@ app.post('/api/delete-group', async (req, res) => {
         return res.json({ success: false, error: 'Недостаточно прав!' });
     }
     delete db.groups[groupId];
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -408,7 +407,7 @@ app.post('/api/update-group', async (req, res) => {
     if (name) group.name = name.trim();
     if (avatar) group.avatar = avatar;
     if (isClosed !== undefined) group.isClosed = !!isClosed;
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db, group });
 });
@@ -436,7 +435,7 @@ app.post('/api/group-mute-member', async (req, res) => {
         };
     }
 
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -463,7 +462,7 @@ app.post('/api/group-set-nickname', async (req, res) => {
         group.groupNicknames[targetLogin] = cleanNick;
     }
 
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -490,7 +489,7 @@ app.post('/api/request-verification', async (req, res) => {
         timestamp: Date.now()
     });
 
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -512,7 +511,7 @@ app.post('/api/resolve-verification', async (req, res) => {
     }
 
     db.verificationRequests = db.verificationRequests.filter(r => r.id !== requestId);
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -529,7 +528,7 @@ app.post('/api/join-group', async (req, res) => {
     if (!group.members.includes(login)) {
         group.members.push(login);
         group.roles[login] = 'Участник';
-        await saveDb();
+        saveDb();
         io.emit('update-db', db);
     }
     res.json({ success: true, db });
@@ -544,7 +543,7 @@ app.post('/api/request-join-group', async (req, res) => {
     if (!group.joinRequests) group.joinRequests = [];
     if (!group.joinRequests.includes(login)) {
         group.joinRequests.push(login);
-        await saveDb();
+        saveDb();
         io.emit('update-db', db);
     }
     res.json({ success: true, db });
@@ -570,7 +569,7 @@ app.post('/api/respond-join-request', async (req, res) => {
             group.roles[targetLogin] = 'Участник';
         }
     }
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -586,7 +585,7 @@ app.post('/api/set-group-role', async (req, res) => {
     }
     if (!group.roles) group.roles = {};
     group.roles[targetLogin] = newRole;
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -603,7 +602,7 @@ app.post('/api/create-custom-role', async (req, res) => {
     if (!cleanName) return res.json({ success: false, error: 'Введите название роли' });
 
     group.customRoles[cleanName] = permissions || { canPost: true, canDelete: true, canVoice: true, canDuplicateNews: false };
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -617,7 +616,7 @@ app.post('/api/update-role-permissions', async (req, res) => {
     }
     if (!group.customRoles) group.customRoles = {};
     group.customRoles[roleName] = permissions;
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -634,7 +633,7 @@ app.post('/api/delete-custom-role', async (req, res) => {
     }
     if (group.customRoles && group.customRoles[roleName]) {
         delete group.customRoles[roleName];
-        await saveDb();
+        saveDb();
         io.emit('update-db', db);
     }
     res.json({ success: true, db });
@@ -658,7 +657,7 @@ app.post('/api/kick-group-member', async (req, res) => {
     if (group.roles) delete group.roles[targetLogin];
     if (group.groupMutedUsers) delete group.groupMutedUsers[targetLogin];
     if (group.groupNicknames) delete group.groupNicknames[targetLogin];
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -679,7 +678,7 @@ app.post('/api/create-subgroup', async (req, res) => {
         type: type || 'text',
         allowedRole: allowedRole || 'all'
     });
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -695,7 +694,7 @@ app.post('/api/delete-subgroup', async (req, res) => {
     if (group.subgroups) {
         group.subgroups = group.subgroups.filter(s => s.id !== subId);
     }
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -752,7 +751,7 @@ app.post('/api/send-message', async (req, res) => {
         timestamp: Date.now()
     };
     db.messagesStore[storeKey].push(msg);
-    await saveDb();
+    saveDb();
 
     if (chatType === 'group') {
         io.emit('receive-group-message', { groupId: chatId, msg, subgroup });
@@ -786,7 +785,7 @@ app.post('/api/edit-message', async (req, res) => {
     }
 
     if (found) {
-        await saveDb();
+        saveDb();
         io.emit('update-db', db);
         res.json({ success: true, db });
     } else {
@@ -813,7 +812,7 @@ app.post('/api/delete-message', async (req, res) => {
     }
 
     if (found) {
-        await saveDb();
+        saveDb();
         io.emit('update-db', db);
         res.json({ success: true, db });
     } else {
@@ -825,7 +824,7 @@ app.post('/api/pin-message', async (req, res) => {
     const { login, messageId, chatKey } = req.body;
     if (!db.pinnedMessages) db.pinnedMessages = {};
     db.pinnedMessages[chatKey] = messageId;
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -834,7 +833,7 @@ app.post('/api/unpin-message', async (req, res) => {
     const { chatKey } = req.body;
     if (db.pinnedMessages && db.pinnedMessages[chatKey]) {
         delete db.pinnedMessages[chatKey];
-        await saveDb();
+        saveDb();
         io.emit('update-db', db);
     }
     res.json({ success: true, db });
@@ -868,7 +867,7 @@ app.post('/api/publish-news', async (req, res) => {
         });
     }
 
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -881,7 +880,7 @@ app.post('/api/edit-news', async (req, res) => {
         return res.json({ success: false, error: 'Недостаточно прав' });
     }
     post.text = newText;
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -894,7 +893,7 @@ app.post('/api/delete-news', async (req, res) => {
         return res.json({ success: false, error: 'Недостаточно прав' });
     }
     db.news = db.news.filter(p => p.id !== postId);
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -953,7 +952,7 @@ app.post('/api/publish-group-post', async (req, res) => {
         });
     }
 
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -976,7 +975,7 @@ app.post('/api/delete-group-post', async (req, res) => {
     }
 
     group.posts = group.posts.filter(p => p.id !== postId);
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
@@ -1037,7 +1036,7 @@ app.post('/api/resolve-violation-action', async (req, res) => {
     }
 
     db.violations = db.violations.filter(v => v.id !== violId);
-    await saveDb();
+    saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
 });
