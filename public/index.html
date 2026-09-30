@@ -2745,7 +2745,7 @@
                 body: JSON.stringify({ groupId, login: currentUser.login, roleName })
             });
             const data = await res.json();
-            if (data.success) { db = data.db; openGroupSettings(groupId); }
+            if (data.success) { db = data.db; openGroupSettings(editingGroupId); }
         }
 
         async function changeMemberRole(groupId, targetLogin, newRole) {
@@ -2806,7 +2806,7 @@
                 } else {
                     showCustomModal('Ошибка', data.error, false, null, '⚠️');
                 }
-            }, '⚠️');
+            }, '⚠️️');
         }
 
         async function createNewGroup() {
