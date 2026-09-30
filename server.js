@@ -26,12 +26,12 @@ const AppStateSchema = new mongoose.Schema({
     outgoingRequests: { type: Object, default: {} },
     customNicknames: { type: Object, default: {} },
     groups: { type: Object, default: {} },
+    globalChannels: { type: Array, default: [] },
     news: { type: Array, default: [] },
     lastSeen: { type: Object, default: {} },
     pinnedMessages: { type: Object, default: {} },
     globalRoles: { type: Object, default: {} },
     violations: { type: Array, default: [] },
-    groupPostRequests: { type: Object, default: {} },
     verificationRequests: { type: Array, default: [] },
     mutedUsers: { type: Object, default: {} }
 });
@@ -46,12 +46,12 @@ let db = {
     outgoingRequests: {},
     customNicknames: {},
     groups: {},
+    globalChannels: [],
     news: [],
     lastSeen: {},
     pinnedMessages: {},
     globalRoles: {},
     violations: [],
-    groupPostRequests: {},
     verificationRequests: [],
     mutedUsers: {}
 };
@@ -75,12 +75,12 @@ async function initDatabase() {
                 outgoingRequests: doc.outgoingRequests || {},
                 customNicknames: doc.customNicknames || {},
                 groups: doc.groups || {},
+                globalChannels: doc.globalChannels || [],
                 news: doc.news || [],
                 lastSeen: doc.lastSeen || {},
                 pinnedMessages: doc.pinnedMessages || {},
                 globalRoles: doc.globalRoles || {},
                 violations: doc.violations || [],
-                groupPostRequests: doc.groupPostRequests || {},
                 verificationRequests: doc.verificationRequests || [],
                 mutedUsers: doc.mutedUsers || {}
             };
@@ -96,7 +96,6 @@ async function initDatabase() {
                 };
             }
             if (!db.groups[gId].posts) db.groups[gId].posts = [];
-            if (!db.groups[gId].messages) db.groups[gId].messages = [];
             if (!db.groups[gId].avatar) db.groups[gId].avatar = 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150';
             if (db.groups[gId].isClosed === undefined) db.groups[gId].isClosed = false;
             if (!db.groups[gId].joinRequests) db.groups[gId].joinRequests = [];
@@ -122,12 +121,12 @@ async function saveDb() {
                 outgoingRequests: db.outgoingRequests,
                 customNicknames: db.customNicknames,
                 groups: db.groups,
+                globalChannels: db.globalChannels,
                 news: db.news,
                 lastSeen: db.lastSeen,
                 pinnedMessages: db.pinnedMessages,
                 globalRoles: db.globalRoles,
                 violations: db.violations,
-                groupPostRequests: db.groupPostRequests,
                 verificationRequests: db.verificationRequests,
                 mutedUsers: db.mutedUsers
             },
@@ -684,23 +683,33 @@ app.post('/api/delete-subgroup', async (req, res) => {
     res.json({ success: true, db });
 });
 
+// Независимые глобальные каналы отдела модерации (для Warren и Модераторов)
 app.post('/api/create-global-channel', async (req, res) => {
     const { login, name, type } = req.body;
     if (!hasFullAccess(login)) {
         return res.json({ success: false, error: 'Недостаточно прав!' });
     }
-    const targetGroupId = Object.keys(db.groups)[0];
-    if (!targetGroupId) {
-        return res.json({ success: false, error: 'Сначала создайте хотя бы одну группу!' });
-    }
-    const group = db.groups[targetGroupId];
-    if (!group.subgroups) group.subgroups = [];
-    group.subgroups.push({
-        id: 'global_sub_' + Date.now(),
+    if (!db.globalChannels) db.globalChannels = [];
+    const channelId = 'gchan_' + Date.now();
+    db.globalChannels.push({
+        id: channelId,
         name: name.trim(),
         type: type || 'text',
-        allowedRole: 'all'
+        createdAt: Date.now()
     });
+    await saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
+app.post('/api/delete-global-channel', async (req, res) => {
+    const { login, channelId } = req.body;
+    if (!hasFullAccess(login)) {
+        return res.json({ success: false, error: 'Недостаточно прав!' });
+    }
+    if (db.globalChannels) {
+        db.globalChannels = db.globalChannels.filter(c => c.id !== channelId);
+    }
     await saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
@@ -736,6 +745,8 @@ app.post('/api/send-message', async (req, res) => {
     let storeKey = '';
     if (chatType === 'group') {
         storeKey = `group_${chatId}_${subgroup || 'main'}`;
+    } else if (chatType === 'global') {
+        storeKey = `global_${chatId}`;
     } else if (chatType === 'user') {
         storeKey = [sender, chatId].sort().join('_');
     } else {
@@ -755,6 +766,8 @@ app.post('/api/send-message', async (req, res) => {
 
     if (chatType === 'group') {
         io.emit('receive-group-message', { groupId: chatId, msg, subgroup });
+    } else if (chatType === 'global') {
+        io.emit('receive-global-message', { channelId: chatId, msg });
     } else if (chatType === 'user') {
         io.to(chatId).emit('receive-message', { sender, receiver: chatId, msg });
         io.to(sender).emit('receive-message', { sender, receiver: chatId, msg });
@@ -968,7 +981,6 @@ app.post('/api/resolve-violation-action', async (req, res) => {
     if (!viol) return res.json({ success: false, error: 'Нарушение не найдено' });
 
     if (action === 'approve') {
-        // Одобрить и отправить в новости
         if (!db.news) db.news = [];
         db.news.unshift({
             id: 'news_' + Date.now(),
@@ -1001,7 +1013,7 @@ app.post('/api/resolve-violation-action', async (req, res) => {
     res.json({ success: true, db });
 });
 
-// Socket.io WebRTC Сигнализация (для устранения вечного подключения в звонках и конференциях)
+// Socket.io WebRTC сигнализация (стабильная связь без вечных подключений)
 io.on('connection', (socket) => {
     socket.on('register', (login) => {
         if (login) {
@@ -1017,6 +1029,10 @@ io.on('connection', (socket) => {
 
     socket.on('join-group-room', (groupId) => {
         socket.join(`group_${groupId}`);
+    });
+
+    socket.on('join-global-room', (channelId) => {
+        socket.join(`global_${channelId}`);
     });
 
     // Прямые аудиозвонки WebRTC
@@ -1040,17 +1056,15 @@ io.on('connection', (socket) => {
         io.to(targetLogin.toLowerCase()).emit('webrtc-candidate', { candidate });
     });
 
-    // Конференции и голосовые каналы в группах
-    socket.on('join-voice-channel', ({ groupId, channelId, login }) => {
-        const roomName = `voice_${groupId}_${channelId}`;
-        socket.join(roomName);
-        socket.to(roomName).emit('user-joined-voice', { socketId: socket.id, login });
+    // Конференции и голосовые каналы (групповые и глобальные)
+    socket.on('join-voice-channel', ({ roomKey, login }) => {
+        socket.join(roomKey);
+        socket.to(roomKey).emit('user-joined-voice', { socketId: socket.id, login });
     });
 
-    socket.on('leave-voice-channel', ({ groupId, channelId }) => {
-        const roomName = `voice_${groupId}_${channelId}`;
-        socket.leave(roomName);
-        socket.to(roomName).emit('user-left-voice', { socketId: socket.id });
+    socket.on('leave-voice-channel', ({ roomKey }) => {
+        socket.leave(roomKey);
+        socket.to(roomKey).emit('user-left-voice', { socketId: socket.id });
     });
 
     socket.on('group-webrtc-offer', ({ targetSocketId, offer }) => {
