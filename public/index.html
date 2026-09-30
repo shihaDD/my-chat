@@ -521,10 +521,6 @@
                                 📎
                                 <input type="file" id="ws-media-file-input" onchange="handleFileUpload(event)" class="hidden">
                             </label>
-                            
-                            <button id="ws-btn-voice" onclick="toggleVoiceRecord()" title="Голосовое сообщение" class="p-2 text-gray-400 hover:text-red-500 transition flex items-center space-x-1 relative flex-shrink-0">
-                                🎙 <span id="ws-voice-timer" class="text-xs text-red-500 font-mono hidden">00:00</span>
-                            </button>
 
                             <input type="text" id="ws-message-input" onkeydown="if(event.key==='Enter') sendMessage()" placeholder="Сообщение в канал..." class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 md:px-4 py-2 text-sm text-white focus:outline-none focus:border-purple-500 transition">
                             
@@ -909,9 +905,6 @@
         let connectionTimeout = null;
         let iceCandidateQueue = {};
 
-        let outgoingRingtoneInterval = null;
-        let incomingRingtoneInterval = null;
-        
         let unreadMessagesMap = {};
         let unreadGroupsCount = 0;
         let unreadNewsCount = 0;
@@ -1943,32 +1936,6 @@
             } catch (e) {}
         }
 
-        function playPhoneRing() {
-            try {
-                const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                const osc1 = ctx.createOscillator();
-                const osc2 = ctx.createOscillator();
-                const gain = ctx.createGain();
-
-                osc1.type = 'sine';
-                osc2.type = 'sine';
-                osc1.frequency.setValueAtTime(440, ctx.currentTime);
-                osc2.frequency.setValueAtTime(480, ctx.currentTime);
-
-                gain.gain.setValueAtTime(0.15, ctx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
-
-                osc1.connect(gain);
-                osc2.connect(gain);
-                gain.connect(ctx.destination);
-
-                osc1.start();
-                osc2.start();
-                osc1.stop(ctx.currentTime + 1.2);
-                osc2.stop(ctx.currentTime + 1.2);
-            } catch (e) {}
-        }
-
         function renderRadioStations() {
             const list = document.getElementById('radio-stations-list');
             if (!list) return;
@@ -2223,6 +2190,7 @@
                 unreadGroupsCount++;
                 updateGroupsBadge();
                 playNotificationSound();
+                showWebNotification('Новое сообщение в группе', msg.text || '[Медиафайл]');
             }
             renderMessages();
             renderModerationPanel();
@@ -2317,6 +2285,8 @@
         function openGroupSettings(groupId) {
             editingGroupId = groupId;
             const group = db.groups[groupId];
+            if (!group) return;
+
             document.getElementById('edit-group-name-input').value = group.name;
             document.getElementById('edit-group-avatar-preview').src = getAvatar(group.avatar);
             document.getElementById('edit-group-closed-checkbox').checked = !!group.isClosed;
@@ -2708,7 +2678,7 @@
                             <span>Дубл. в новости</span>
                         </label>
                         <label class="text-[11px] text-gray-300 flex items-center space-x-1 cursor-pointer">
-                            <input type="checkbox" id="perm-voice-${roleName}" ${perms.canVoiceControl !== false ? 'checked' : ''} onchange="updateRolePerms('${group.id}', '${roleName}')" class="accent-purple-500"> 
+                            <input type="checkbox" id="perm-voice-${roleName}" ${perms.canVoiceControl ? 'checked' : ''} onchange="updateRolePerms('${group.id}', '${roleName}')" class="accent-purple-500"> 
                             <span>Управление голосом</span>
                         </label>
                         ${roleName !== 'Админ' && roleName !== 'Участник' ? `<button onclick="deleteCustomRole('${group.id}', '${roleName}')" class="text-red-400 hover:text-red-300 font-bold px-2 py-0.5 bg-red-600/20 rounded">Удалить</button>` : ''}
@@ -2818,9 +2788,9 @@
                     renderGroups();
                     showCustomModal('Успех', 'Группа успешно удалена.', false, null, '🗑️');
                 } else {
-                    showCustomModal('Ошибка', data.error, false, null, '⚠️');
+                    showCustomModal('Ошибка', data.error, false, null, '⚠️️');
                 }
-            }, '⚠️️');
+            }, '⚠');
         }
 
         async function createNewGroup() {
@@ -2938,13 +2908,13 @@
             renderGroups();
         }
 
-        let voiceParticipantsMap = {}; // channelId -> array of logins
+        let voiceParticipantsMap = {};
 
         async function startGroupVoiceConference(groupId, subId, subName) {
             if (activeVoiceRoomKey) {
                 leaveGroupVoiceConference();
             }
-            activeVoiceRoomKey = `group_${groupId}_${subId}`;
+            activeVoiceRoomKey = `voice_${groupId}_${subId}`;
             activeVoiceGroup = groupId;
             activeVoiceChannel = subId;
 
@@ -2955,6 +2925,7 @@
                 socket.emit('join-voice-channel', { roomKey: activeVoiceRoomKey, login: currentUser.login, groupId, subId });
                 showCustomModal('Голосовой канал', `Вы вошли в голосовой канал: ${subName}`, false, null, '🎙️');
 
+                socket.off('voice-channel-users');
                 socket.off('user-joined-voice');
                 socket.off('voice-offer');
                 socket.off('voice-answer');
@@ -2963,21 +2934,28 @@
                 socket.off('voice-participants-update');
 
                 socket.on('voice-participants-update', ({ channelKey, participants }) => {
-                    voiceParticipantsMap[subId] = participants || [];
+                    voiceParticipantsMap[channelKey] = participants || [];
                     const grp = db.groups[activeGroupWorkspaceId];
                     if (grp) renderGroupWorkspaceSidebar(grp);
                 });
 
-                socket.on('user-joined-voice', async ({ socketId, login }) => {
-                    const pc = createVoicePeerConnection(socketId, login);
-                    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-                    const offer = await pc.createOffer();
-                    await pc.setLocalDescription(offer);
-                    socket.emit('voice-offer', { targetSocketId: socketId, offer, callerLogin: currentUser.login });
+                socket.on('voice-channel-users', async ({ users }) => {
+                    for (const socketId of users) {
+                        const pc = createVoicePeerConnection(socketId);
+                        localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+                        const offer = await pc.createOffer();
+                        await pc.setLocalDescription(offer);
+                        socket.emit('voice-offer', { targetSocketId: socketId, offer, senderLogin: currentUser.login });
+                    }
                 });
 
-                socket.on('voice-offer', async ({ targetSocketId, offer, callerLogin }) => {
-                    const pc = createVoicePeerConnection(targetSocketId, callerLogin);
+                socket.on('user-joined-voice', async ({ socketId, login }) => {
+                    const pc = createVoicePeerConnection(socketId);
+                    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+                });
+
+                socket.on('voice-offer', async ({ offer, senderLogin, targetSocketId }) => {
+                    const pc = createVoicePeerConnection(targetSocketId);
                     await pc.setRemoteDescription(new RTCSessionDescription(offer));
                     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
                     const answer = await pc.createAnswer();
@@ -2985,14 +2963,14 @@
                     socket.emit('voice-answer', { targetSocketId, answer });
                 });
 
-                socket.on('voice-answer', async ({ targetSocketId, answer }) => {
+                socket.on('voice-answer', async ({ answer, targetSocketId }) => {
                     const pc = voicePeerConnections[targetSocketId];
                     if (pc) {
                         await pc.setRemoteDescription(new RTCSessionDescription(answer));
                     }
                 });
 
-                socket.on('voice-candidate', async ({ targetSocketId, candidate }) => {
+                socket.on('voice-candidate', async ({ candidate, targetSocketId }) => {
                     const pc = voicePeerConnections[targetSocketId];
                     if (pc && candidate) {
                         await pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -3013,7 +2991,7 @@
             }
         }
 
-        function createVoicePeerConnection(socketId, login) {
+        function createVoicePeerConnection(socketId) {
             if (voicePeerConnections[socketId]) {
                 voicePeerConnections[socketId].close();
             }
@@ -3063,7 +3041,7 @@
             if (group.creator === login || hasFullAccess(login)) return true;
             const role = group.roles?.[login] || 'Участник';
             if (role === 'Админ') return true;
-            if (group.customRoles?.[role] && group.customRoles[role].canVoiceControl !== false) return true;
+            if (group.customRoles?.[role] && group.customRoles[role].canVoiceControl === true) return true;
             return false;
         }
 
@@ -3471,229 +3449,250 @@
                 `;
                 container.appendChild(div);
             });
+
             container.scrollTop = container.scrollHeight;
         }
+
+        function searchMessagesInActiveChat() {
+            const query = document.getElementById('message-history-search').value.toLowerCase();
+            const isGroup = !!activeGroupWorkspaceId;
+            const container = document.getElementById(isGroup ? 'ws-messages-container' : 'messages-container');
+            if (!container) return;
+
+            const messageDivs = container.children;
+            for (let div of messageDivs) {
+                const text = div.textContent.toLowerCase();
+                div.style.display = text.includes(query) ? 'flex' : 'none';
+            }
+        }
+
+        function handleTyping() {
+            if (activeChat && activeChat.type === 'user') {
+                socket.emit('typing', { sender: currentUser.login, receiver: activeChat.id });
+            }
+        }
+
+        let typingTimeout = null;
+        socket.on('display-typing', ({ sender }) => {
+            if (activeChat && activeChat.type === 'user' && activeChat.id === sender) {
+                const indicator = document.getElementById('typing-indicator');
+                if (indicator) {
+                    indicator.textContent = `@${sender} печатает...`;
+                    clearTimeout(typingTimeout);
+                    typingTimeout = setTimeout(() => { indicator.textContent = ''; }, 2500);
+                }
+            }
+        });
 
         async function handleFileUpload(e) {
             const file = e.target.files[0];
             if (!file) return;
             currentUploadedMedia = await readFileAsDataURL(file);
-            showCustomModal('Файл прикреплен', 'Файл готов к отправке.', false, null, '📎');
+            showCustomModal('Файл выбран', `Файл "${file.name}" готов к отправке. Нажмите "Отправить".`, false, null, '📎');
+        }
+
+        async function handlePostFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            currentUploadedMedia = await readFileAsDataURL(file);
+            document.getElementById('post-file-preview').textContent = `Прикреплен файл: ${file.name}`;
         }
 
         function toggleVoiceRecord() {
-            const now = Date.now();
-            if (db.mutedUsers?.[currentUser.login]) {
-                const muteObj = db.mutedUsers[currentUser.login];
-                const exp = typeof muteObj === 'object' ? muteObj.expires : muteObj;
-                if (exp > now) {
-                    showCustomModal('Мут', 'У вас активен мут.', false, null, '🔇');
-                    return;
-                }
-            }
-
-            if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-                navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-                    mediaRecorder = new MediaRecorder(stream);
-                    audioChunks = [];
-                    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-                    mediaRecorder.onstop = async () => {
-                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                        currentUploadedMedia = await readFileAsDataURL(audioBlob);
-                        sendMessage();
-                    };
-                    mediaRecorder.start();
-                    const isGroup = !!activeGroupWorkspaceId;
-                    document.getElementById(isGroup ? 'ws-voice-timer' : 'voice-timer')?.classList.remove('hidden');
-                    voiceSeconds = 0;
-                }).catch(() => {
-                    showCustomModal('Ошибка', 'Нет доступа к микрофону', false, null, '⚠️');
-                });
+            if (mediaRecorder && mediaRecorder.state === 'recording') {
+                stopVoiceRecord();
             } else {
-                mediaRecorder.stop();
-                const isGroup = !!activeGroupWorkspaceId;
-                document.getElementById(isGroup ? 'ws-voice-timer' : 'voice-timer')?.classList.add('hidden');
+                startVoiceRecord();
             }
         }
 
-        async function renderGroups() {
-            const list = document.getElementById('groups-list');
-            const select = document.getElementById('group-post-select');
-            if (!list || !select) return;
-            list.innerHTML = '';
-            select.innerHTML = '';
+        async function startVoiceRecord() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+                audioChunks = [];
 
-            const globalRole = getUserGlobalRole(currentUser.login);
-            const isWarrenOrMainMod = currentUser.login.toLowerCase() === 'warren' || globalRole === 'main_moderator';
+                mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                mediaRecorder.onstop = async () => {
+                    const blob = new Blob(audioChunks, { type: 'audio/webm' });
+                    const reader = new FileReader();
+                    reader.readAsDataURL(blob);
+                    reader.onloadend = () => {
+                        currentUploadedMedia = reader.result;
+                        sendMessage();
+                    };
+                    stream.getTracks().forEach(t => t.stop());
+                };
 
-            Object.values(db.groups || {}).forEach(group => {
-                const isMember = group.members && group.members.includes(currentUser.login);
-                const isRequested = group.joinRequests && group.joinRequests.includes(currentUser.login);
+                mediaRecorder.start();
+                voiceSeconds = 0;
+                document.getElementById('voice-timer').classList.remove('hidden');
+                document.getElementById('voice-waveform').classList.remove('hidden');
 
-                const item = document.createElement('div');
-                item.className = 'flex items-center justify-between p-3 bg-gray-800 rounded-xl';
-                item.setAttribute('data-group-name', group.name.toLowerCase());
-                
-                let actionBtnHTML = '';
-                if (isMember) {
-                    actionBtnHTML = `<button onclick="switchTab('groups'); openGroupWorkspace('${group.id}');" class="bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white">Открыть</button>`;
-                } else if (group.isClosed) {
-                    if (isRequested) {
-                        actionBtnHTML = `<span class="text-xs text-yellow-400 font-bold">Заявка отправлена</span>`;
-                    } else {
-                        actionBtnHTML = `<button onclick="requestJoinGroup('${group.id}')" class="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white">Подать заявку</button>`;
-                    }
-                } else {
-                    actionBtnHTML = `<button onclick="joinGroup('${group.id}')" class="bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white">Вступить</button>`;
-                }
+                voiceTimerInterval = setInterval(() => {
+                    voiceSeconds++;
+                    const m = String(Math.floor(voiceSeconds / 60)).padStart(2, '0');
+                    const s = String(voiceSeconds % 60).padStart(2, '0');
+                    document.getElementById('voice-timer').textContent = `${m}:${s}`;
+                }, 1000);
 
-                let deleteBtnHTML = '';
-                if (isWarrenOrMainMod || hasFullAccess(currentUser.login)) {
-                    deleteBtnHTML = `<button onclick="deleteGroupDirectFromList('${group.id}')" class="bg-red-600/30 hover:bg-red-600 text-red-300 hover:text-white px-2.5 py-1.5 rounded-xl text-xs font-bold transition" title="Удалить группу">🗑️</button>`;
-                }
+            } catch (e) {
+                showCustomModal('Ошибка', 'Не удалось включить микрофон для записи!', false, null, '🎙️');
+            }
+        }
 
-                const nameDisplay = group.isVerified 
-                    ? `<span class="verified-gradient-name font-bold">${group.name}</span> <span class="text-blue-400 font-bold" title="Верифицировано">✅</span>` 
-                    : `<span class="font-bold text-white">${group.name}</span>`;
+        function stopVoiceRecord() {
+            if (mediaRecorder) {
+                mediaRecorder.stop();
+                clearInterval(voiceTimerInterval);
+                document.getElementById('voice-timer').classList.add('hidden');
+                document.getElementById('voice-waveform').classList.add('hidden');
+            }
+        }
 
-                item.innerHTML = `
-                    <div class="flex items-center space-x-3">
-                        <img src="${getAvatar(group.avatar)}" class="w-10 h-10 rounded-xl object-cover">
-                        <div>
-                            <div class="flex items-center space-x-1">
-                                ${nameDisplay}
-                                ${group.isClosed ? '<span class="text-xs" title="Закрытая">🔒</span>' : ''}
-                            </div>
-                            <div class="text-xs text-gray-400">${group.members.length} участников</div>
-                        </div>
-                    </div>
-                    <div class="flex items-center space-x-2">
-                        ${actionBtnHTML}
-                        ${deleteBtnHTML}
-                    </div>
-                `;
-                list.appendChild(item);
+        function renderGroups() {
+            const groupsList = document.getElementById('groups-list');
+            const selectEl = document.getElementById('group-post-select');
+            if (!groupsList) return;
 
-                if (isMember) {
+            groupsList.innerHTML = '';
+            if (selectEl) selectEl.innerHTML = '';
+
+            const groups = Object.values(db.groups || {});
+            if (groups.length === 0) {
+                groupsList.innerHTML = '<div class="text-xs text-gray-500 py-4 text-center">Нет доступных групп.</div>';
+            }
+
+            groups.forEach(group => {
+                const isMember = group.members.includes(currentUser.login);
+                const isLeader = group.creator === currentUser.login;
+                const myRole = group.roles?.[currentUser.login] || (isLeader ? 'Лидер' : 'Участник');
+                const canManage = isLeader || myRole === 'Админ' || hasFullAccess(currentUser.login);
+
+                if (isMember && selectEl) {
                     const opt = document.createElement('option');
                     opt.value = group.id;
-                    opt.textContent = group.name + (group.isVerified ? ' (✅ Верифицировано)' : '');
-                    select.appendChild(opt);
+                    opt.textContent = `${group.isVerified ? '✅ ' : ''}${group.name} (${group.members.length} уч.)`;
+                    selectEl.appendChild(opt);
                 }
+
+                const card = document.createElement('div');
+                card.setAttribute('data-group-name', group.name.toLowerCase());
+                card.className = 'bg-gray-950 border border-gray-800 p-3.5 rounded-2xl flex items-center justify-between shadow-sm hover:border-purple-500/40 transition';
+                
+                card.innerHTML = `
+                    <div class="flex items-center space-x-3 overflow-hidden cursor-pointer" onclick="${isMember ? `openGroupWorkspace('${group.id}')` : ''}">
+                        <img src="${getAvatar(group.avatar)}" class="w-11 h-11 rounded-2xl object-cover border border-purple-500/30 flex-shrink-0">
+                        <div class="overflow-hidden">
+                            <div class="font-bold flex items-center space-x-1 text-sm text-white">
+                                <span class="${group.isVerified ? 'verified-gradient-name' : 'truncate'}">${group.name}</span>
+                                ${group.isVerified ? '<span class="text-blue-400 text-xs">✅</span>' : ''}
+                                ${group.isClosed ? '<span class="text-xs" title="Закрытая группа">🔒</span>' : ''}
+                            </div>
+                            <div class="text-[11px] text-gray-400 font-mono">${group.members.length} участников</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2 flex-shrink-0">
+                        ${isMember ? `
+                            <button onclick="openGroupWorkspace('${group.id}')" class="bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition shadow">Войти</button>
+                            <button onclick="openGroupSettings('${group.id}')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 p-1.5 rounded-xl text-xs font-bold transition">⚙</button>
+                        ` : `
+                            <button onclick="joinGroupAutomatically('${group.id}')" class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold transition shadow">Вступить</button>
+                        `}
+                        ${hasFullAccess(currentUser.login) || isLeader ? `
+                            <button onclick="deleteGroupDirectFromList('${group.id}')" class="bg-red-600/30 hover:bg-red-600 text-red-300 hover:text-white p-1.5 rounded-xl text-xs font-bold transition" title="Удалить сообщество">🗑</button>
+                        ` : ''}
+                    </div>
+                `;
+                groupsList.appendChild(card);
             });
+
             renderGroupFeedList();
         }
 
-        async function joinGroup(groupId) {
-            const res = await fetch('/api/join-group', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ groupId, login: currentUser.login })
-            });
-            const data = await res.json();
-            if (data.success) { db = data.db; renderGroups(); socket.emit('refresh-db'); }
-            else { showCustomModal('Информация', data.error, false, null, '⚠'); }
-        }
-
-        async function requestJoinGroup(groupId) {
-            const res = await fetch('/api/request-join-group', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ groupId, login: currentUser.login })
-            });
-            const data = await res.json();
-            if (data.success) { db = data.db; renderGroups(); socket.emit('refresh-db'); }
-        }
-
         async function publishGroupPost() {
-            const select = document.getElementById('group-post-select');
-            const textarea = document.getElementById('group-post-text');
-            const groupId = select.value;
-            const text = textarea.value.trim();
-            const duplicateToNews = document.getElementById('group-post-announcement').checked;
+            const selectEl = document.getElementById('group-post-select');
+            const textEl = document.getElementById('group-post-text');
+            const annCheckbox = document.getElementById('group-post-announcement');
 
-            if (!groupId || !text) return;
+            const groupId = selectEl ? selectEl.value : null;
+            const text = textEl ? textEl.value.trim() : '';
+            const isAnnouncement = annCheckbox ? annCheckbox.checked : false;
+
+            if (!groupId || (!text && !currentUploadedMedia)) {
+                showCustomModal('Ошибка', 'Выберите группу и введите текст поста!', false, null, '⚠️');
+                return;
+            }
+
+            const media = currentUploadedMedia;
+            currentUploadedMedia = null;
 
             const res = await fetch('/api/publish-group-post', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ groupId, login: currentUser.login, text, duplicateToNews })
+                body: JSON.stringify({ groupId, login: currentUser.login, text, media, isAnnouncement })
             });
             const data = await res.json();
             if (data.success) {
                 db = data.db;
-                textarea.value = '';
+                textEl.value = '';
+                if (annCheckbox) annCheckbox.checked = false;
                 renderGroups();
-                showCustomModal('Успех', 'Пост опубликован!', false, null, '✨');
+                renderNewsFeed();
+                showCustomModal('Успех', 'Пост опубликован в группу!', false, null, '✨');
                 socket.emit('refresh-db');
             } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠️️');
+                showCustomModal('Ошибка', data.error || 'Не удалось опубликовать пост', false, null, '⚠️');
             }
         }
 
         function renderGroupFeedList() {
-            const feedList = document.getElementById('groups-feed-list');
-            if (!feedList) return;
-            feedList.innerHTML = '';
-            
-            let allPosts = [];
+            const feedEl = document.getElementById('groups-feed-list');
+            if (!feedEl) return;
+            feedEl.innerHTML = '';
+
+            const allPosts = [];
             Object.values(db.groups || {}).forEach(group => {
                 if (group.posts) {
-                    group.posts.forEach(p => {
-                        allPosts.push({ ...p, groupName: group.name, groupId: group.id });
-                    });
+                    group.posts.forEach(p => allPosts.push({ ...p, groupName: group.name, groupAvatar: group.avatar, isVerified: group.isVerified }));
                 }
             });
 
             allPosts.sort((a, b) => b.timestamp - a.timestamp);
 
             if (allPosts.length === 0) {
-                feedList.innerHTML = '<div class="text-xs text-gray-500 text-center py-4">Нет записей в ленте сообществ.</div>';
+                feedEl.innerHTML = '<div class="text-xs text-gray-500 py-4 text-center">Лента постов пуста.</div>';
                 return;
             }
 
             allPosts.forEach(post => {
-                const group = db.groups[post.groupId] || {};
-                const isCreator = group.creator === currentUser.login;
-                const myRole = group.roles?.[currentUser.login] || 'Участник';
-                const canManage = isCreator || myRole === 'Админ' || hasFullAccess(currentUser.login);
-                const roleInfo = getRoleBadgeAndColor(post.author);
-
-                const div = document.createElement('div');
-                div.className = 'bg-gray-950 border border-gray-800 p-3 rounded-xl space-y-2 text-xs';
-                div.innerHTML = `
-                    <div class="flex justify-between items-center text-gray-400">
-                        <span class="font-bold text-purple-300">🏢 ${post.groupName}</span>
-                        <span>${new Date(post.timestamp).toLocaleString()}</span>
+                const card = document.createElement('div');
+                card.className = 'bg-gray-950 border border-gray-800 p-4 rounded-2xl space-y-2 text-xs shadow';
+                card.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <img src="${getAvatar(post.groupAvatar)}" class="w-7 h-7 rounded-lg object-cover">
+                            <div>
+                                <div class="font-bold text-white flex items-center space-x-1">
+                                    <span class="${post.isVerified ? 'verified-gradient-name' : ''}">${post.groupName}</span>
+                                    ${post.isVerified ? '<span class="text-blue-400 text-[10px]">✅</span>' : ''}
+                                </div>
+                                <div class="text-[10px] text-gray-500">${new Date(post.timestamp).toLocaleString()}</div>
+                            </div>
+                        </div>
+                        <span class="text-[10px] text-purple-400 font-mono">@${post.author}</span>
                     </div>
-                    <div class="font-bold text-white flex items-center space-x-1">
-                        <span>@${post.author}</span>
-                        <span class="${roleInfo.color}">${roleInfo.badge}</span>
-                    </div>
-                    <div class="text-gray-200 break-words">${post.text}</div>
-                    ${canManage ? `<div class="flex justify-end pt-1"><button onclick="deleteGroupPost('${post.groupId}', '${post.id}')" class="text-red-400 hover:text-red-300 font-bold">🗑 Удалить</button></div>` : ''}
+                    ${post.text ? `<div class="text-gray-200 text-sm break-words pt-1">${post.text}</div>` : ''}
+                    ${post.media ? `<img src="${post.media}" class="rounded-xl max-h-56 w-full object-cover mt-2">` : ''}
                 `;
-                feedList.appendChild(div);
+                feedEl.appendChild(card);
             });
-        }
-
-        async function deleteGroupPost(groupId, postId) {
-            const res = await fetch('/api/delete-group-post', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ groupId, postId, login: currentUser.login })
-            });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                renderGroups();
-                socket.emit('refresh-db');
-            }
         }
 
         async function publishPost() {
-            const textarea = document.getElementById('post-text-input');
-            const text = textarea.value.trim();
+            const textEl = document.getElementById('post-text-input');
+            const text = textEl ? textEl.value.trim() : '';
+
             if (!text && !currentUploadedMedia) return;
 
             const media = currentUploadedMedia;
@@ -3708,119 +3707,111 @@
             const data = await res.json();
             if (data.success) {
                 db = data.db;
-                textarea.value = '';
+                textEl.value = '';
                 renderNewsFeed();
-                showCustomModal('Успех', 'Новость опубликована в ленте!', false, null, '✨');
+                showCustomModal('Успех', 'Новость успешно опубликована!', false, null, '✨');
                 socket.emit('refresh-db');
             } else {
-                showCustomModal('Доступ запрещен', data.error || 'Только модераторы и Warren могут публиковать новости напрямую.', false, null, '⚠️');
+                showCustomModal('Ошибка', data.error || 'Недостаточно прав', false, null, '⚠️');
             }
         }
 
-        async function handlePostFileUpload(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            currentUploadedMedia = await readFileAsDataURL(file);
-            document.getElementById('post-file-preview').textContent = `Файл прикреплен: ${file.name}`;
-        }
-
         function renderNewsFeed() {
-            const feedList = document.getElementById('news-feed-list');
-            if (!feedList) return;
-            feedList.innerHTML = '';
+            const newsEl = document.getElementById('news-feed-list');
+            if (!newsEl) return;
+            newsEl.innerHTML = '';
 
             const news = db.news || [];
             if (news.length === 0) {
-                feedList.innerHTML = '<div class="text-xs text-gray-500 text-center py-6">Лента новостей пуста.</div>';
+                newsEl.innerHTML = '<div class="text-xs text-gray-500 py-6 text-center">Лента новостей пуста.</div>';
                 return;
             }
 
             news.forEach(item => {
+                const isMe = item.author === currentUser.login;
                 const roleInfo = getRoleBadgeAndColor(item.author);
-                const canDel = hasFullAccess(currentUser.login) || item.author === currentUser.login;
-
-                const div = document.createElement('div');
-                div.className = 'bg-gray-900 border border-gray-800 p-4 rounded-2xl space-y-3 shadow-xl';
-                
-                let mediaHTML = '';
-                if (item.media) {
-                    if (item.media.startsWith('data:image') || item.media.startsWith('http')) {
-                        mediaHTML = `<img src="${item.media}" class="w-full rounded-xl max-h-80 object-cover mt-2">`;
-                    }
-                }
-
-                div.innerHTML = `
+                const card = document.createElement('div');
+                card.className = 'bg-gray-900 border border-gray-800 p-5 rounded-2xl space-y-3 shadow-xl';
+                card.innerHTML = `
                     <div class="flex items-center justify-between">
-                        <div class="flex items-center space-x-2">
-                            <div class="font-bold text-white flex items-center space-x-1">
-                                <span>@${item.author}</span>
-                                <span class="${roleInfo.color}">${roleInfo.badge}</span>
+                        <div class="flex items-center space-x-3">
+                            <div class="w-9 h-9 rounded-full overflow-hidden">${getAvatarWithMuteBadge(db.users[item.author]?.avatar, item.author)}</div>
+                            <div>
+                                <div class="font-bold text-white flex items-center space-x-2">
+                                    <span class="${roleInfo.color}">@${item.author}</span>
+                                    ${roleInfo.badge ? `<span class="text-xs">${roleInfo.badge}</span>` : ''}
+                                    ${item.groupName ? `<span class="text-xs text-purple-400 font-normal">(${item.groupName})</span>` : ''}
+                                </div>
+                                <div class="text-[11px] text-gray-500">${new Date(item.timestamp).toLocaleString()}</div>
                             </div>
                         </div>
-                        <div class="text-xs text-gray-400">${new Date(item.timestamp).toLocaleString()}</div>
+                        ${hasFullAccess(currentUser.login) || isMe ? `
+                            <button onclick="deleteNewsPost('${item.id}')" class="text-red-400 hover:text-red-300 font-bold text-xs bg-red-600/20 px-2.5 py-1 rounded-lg transition">Удалить</button>
+                        ` : ''}
                     </div>
-                    <div class="text-gray-200 text-sm break-words">${item.text}</div>
-                    ${mediaHTML}
-                    ${canDel ? `<div class="flex justify-end pt-1"><button onclick="deleteNewsPost('${item.id}')" class="text-xs text-red-400 hover:text-red-300 font-bold">🗑️ Удалить новость</button></div>` : ''}
+                    ${item.text ? `<div class="text-gray-100 text-sm break-words leading-relaxed">${item.text}</div>` : ''}
+                    ${item.media ? `<img src="${item.media}" class="rounded-2xl max-h-80 w-full object-cover">` : ''}
                 `;
-                feedList.appendChild(div);
+                newsEl.appendChild(card);
             });
         }
 
         async function deleteNewsPost(postId) {
-            const res = await fetch('/api/delete-news', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, postId })
-            });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                renderNewsFeed();
-                socket.emit('refresh-db');
-            }
+            showCustomModal('Подтверждение', 'Удалить этот пост из новостей?', true, async (confirmed) => {
+                if (!confirmed) return;
+                const res = await fetch('/api/delete-news', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ login: currentUser.login, postId })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    db = data.db;
+                    renderNewsFeed();
+                    socket.emit('refresh-db');
+                }
+            }, '⚠');
         }
 
         async function loadInternetNews() {
             const container = document.getElementById('internet-news-list');
             if (!container) return;
-            container.innerHTML = '<div class="text-xs text-gray-500">Загрузка ленты RSS...</div>';
-            
             try {
-                const res = await fetch('https://api.rss2json.com/v1/api.json?rss_url=https%3A%2F%2Flenta.ru%2Frss%2Fnews');
+                const res = await fetch('https://min-api.cryptocompare.com/data/v2/news/?lang=EN');
                 const data = await res.json();
-                if (data.status === 'ok' && data.items) {
+                if (data.Data && data.Data.length > 0) {
                     container.innerHTML = '';
-                    data.items.slice(0, 5).forEach(article => {
+                    data.Data.slice(0, 5).forEach(newsItem => {
                         const div = document.createElement('div');
-                        div.className = 'bg-gray-950 p-3 rounded-xl border border-gray-800 space-y-1 text-xs';
+                        div.className = 'bg-gray-950 p-3 rounded-xl border border-gray-800 flex items-center justify-between text-xs hover:border-purple-500/30 transition';
                         div.innerHTML = `
-                            <a href="${article.link}" target="_blank" class="font-bold text-purple-300 hover:underline block">${article.title}</a>
-                            <div class="text-gray-400 text-[11px]">${new Date(article.pubDate).toLocaleString()}</div>
+                            <div class="overflow-hidden pr-2">
+                                <a href="${newsItem.url}" target="_blank" class="font-bold text-purple-300 hover:underline truncate block">${newsItem.title}</a>
+                                <span class="text-[10px] text-gray-500">${newsItem.source_info.name} • ${new Date(newsItem.published_on * 1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
+                            </div>
+                            <a href="${newsItem.url}" target="_blank" class="bg-purple-600/30 hover:bg-purple-600 text-purple-300 hover:text-white px-2.5 py-1 rounded-lg text-[10px] font-bold flex-shrink-0">Читать ↗</a>
                         `;
                         container.appendChild(div);
                     });
                 }
             } catch (e) {
-                container.innerHTML = '<div class="text-xs text-gray-500">Не удалось загрузить ленту новостей.</div>';
+                container.innerHTML = '<div class="text-xs text-gray-500">Не удалось загрузить новости из сети.</div>';
             }
         }
 
         function fillProfileData() {
             if (!currentUser) return;
-            document.getElementById('profile-username').textContent = `@${currentUser.login} (${currentUser.name})`;
+            document.getElementById('profile-username').textContent = `@${currentUser.login}`;
             document.getElementById('profile-avatar-preview').src = getAvatar(currentUser.avatar);
             document.getElementById('profile-name-input').value = currentUser.name || '';
             document.getElementById('profile-bio-input').value = currentUser.bio || '';
             document.getElementById('profile-email-input').value = currentUser.email || '';
             document.getElementById('profile-link-box').textContent = `${location.origin}/#${currentUser.login}`;
 
-            const muteOverlay = document.getElementById('profile-mute-badge-overlay');
-            if (isUserMutedAnywhere(currentUser.login)) {
-                muteOverlay.classList.remove('hidden');
-            } else {
-                muteOverlay.classList.add('hidden');
-            }
+            const isMuted = isUserMutedAnywhere(currentUser.login);
+            const badgeOverlay = document.getElementById('profile-mute-badge-overlay');
+            if (isMuted) badgeOverlay.classList.remove('hidden');
+            else badgeOverlay.classList.add('hidden');
         }
 
         async function saveProfile() {
@@ -3828,7 +3819,18 @@
             const bio = document.getElementById('profile-bio-input').value.trim();
             const email = document.getElementById('profile-email-input').value.trim();
             const password = document.getElementById('profile-password-input').value;
-            const avatar = currentUser.avatar;
+            const confirm = document.getElementById('profile-password-confirm').value;
+
+            if (password && password !== confirm) {
+                showCustomModal('Ошибка', 'Пароли не совпадают!', false, null, '⚠️');
+                return;
+            }
+
+            const fileInput = document.getElementById('profile-avatar-file');
+            let avatar = currentUser.avatar;
+            if (fileInput.files && fileInput.files[0]) {
+                avatar = await readFileAsDataURL(fileInput.files[0]);
+            }
 
             const res = await fetch('/api/update-profile', {
                 method: 'POST',
@@ -3839,91 +3841,25 @@
             if (data.success) {
                 currentUser = data.user;
                 db = data.db;
+                fillProfileData();
                 showCustomModal('Успех', 'Профиль успешно обновлен!', false, null, '✨');
-                initApp();
                 socket.emit('refresh-db');
             } else {
-                showCustomModal('Ошибка', data.error || 'Не удалось обновить профиль', false, null, '⚠');
+                showCustomModal('Ошибка', data.error || 'Ошибка при сохранении', false, null, '⚠️');
             }
         }
 
-        function startDirectCallTo(targetLogin) {
-            callTargetUser = targetLogin;
-            document.getElementById('call-partner-name').textContent = `@${targetLogin}`;
-            document.getElementById('call-status-text').textContent = 'Вызов абонента...';
-            document.getElementById('single-call-modal').classList.remove('hidden');
-            updatePttUIState();
-
-            navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false }).then(async stream => {
-                localStream = stream;
-                isInCallOrConference = true;
-                const pc = createPeerConnection(targetLogin, true);
-                stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                socket.emit('call-offer', { targetLogin, offer, callerLogin: currentUser.login });
-
-                outgoingRingtoneInterval = setInterval(() => playPhoneRing(), 1500);
-            }).catch(() => {
-                showCustomModal('Ошибка', 'Нет доступа к микрофону для звонка', false, null, '⚠');
-                hangUpCall();
-            });
+        async function startDirectCallTo(targetLogin) {
+            openUserChat(targetLogin);
+            startDirectCall();
         }
 
-        function startDirectCall() {
-            if (activeChat && activeChat.type === 'user') {
-                startDirectCallTo(activeChat.id);
-            }
-        }
+        async function startDirectCall() {
+            if (!activeChat || activeChat.type !== 'user') return;
+            callTargetUser = activeChat.id;
 
-        function createPeerConnection(partnerLogin, isInitiator) {
-            const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-            const pc = new RTCPeerConnection(config);
-            peerConnections[partnerLogin] = pc;
-
-            pc.onicecandidate = (event) => {
-                if (event.candidate) {
-                    socket.emit('ice-candidate', { targetLogin: partnerLogin, candidate: event.candidate });
-                }
-            };
-
-            pc.ontrack = (event) => {
-                let audioEl = document.getElementById('call-remote-audio');
-                if (!audioEl) {
-                    audioEl = document.createElement('audio');
-                    audioEl.id = 'call-remote-audio';
-                    audioEl.autoplay = true;
-                    document.getElementById('remote-audio-container').appendChild(audioEl);
-                }
-                audioEl.srcObject = event.streams[0];
-            };
-
-            return pc;
-        }
-
-        socket.on('call-offer', async ({ callerLogin, offer }) => {
-            if (isInCallOrConference) {
-                socket.emit('call-reject', { targetLogin: callerLogin });
-                return;
-            }
-            incomingOffer = offer;
-            incomingCallerLogin = callerLogin;
-            const callerObj = db.users[callerLogin] || {};
-            document.getElementById('incoming-caller-avatar').src = getAvatar(callerObj.avatar);
-            document.getElementById('incoming-caller-title').textContent = `Входящий вызов от @${callerLogin}`;
-            document.getElementById('incoming-call-modal').classList.remove('hidden');
-
-            incomingRingtoneInterval = setInterval(() => playPhoneRing(), 1500);
-        });
-
-        async function acceptIncomingCall() {
-            document.getElementById('incoming-call-modal').classList.add('hidden');
-            clearInterval(incomingRingtoneInterval);
-
-            callTargetUser = incomingCallerLogin;
-            document.getElementById('call-partner-name').textContent = `@${incomingCallerLogin}`;
-            document.getElementById('call-status-text').textContent = 'Соединение установлено';
+            document.getElementById('call-partner-name').textContent = `@${callTargetUser}`;
+            document.getElementById('call-status-text').textContent = 'Вызов адресата...';
             document.getElementById('single-call-modal').classList.remove('hidden');
             updatePttUIState();
 
@@ -3931,75 +3867,112 @@
                 localStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
                 isInCallOrConference = true;
 
-                const pc = createPeerConnection(incomingCallerLogin, false);
+                const pc = createDirectPeerConnection(callTargetUser);
                 localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
 
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                socket.emit('direct-call-offer', { callerLogin: currentUser.login, targetLogin: callTargetUser, offer });
+
+            } catch (e) {
+                showCustomModal('Ошибка', 'Не удалось получить доступ к микрофону для вызова!', false, null, '🎙️');
+                hangUpCall();
+            }
+        }
+
+        function createDirectPeerConnection(targetLogin) {
+            if (peerConnections[targetLogin]) peerConnections[targetLogin].close();
+            const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+            const pc = new RTCPeerConnection(config);
+            peerConnections[targetLogin] = pc;
+
+            pc.onicecandidate = (e) => {
+                if (e.candidate) {
+                    socket.emit('direct-call-candidate', { senderLogin: currentUser.login, targetLogin, candidate: e.candidate });
+                }
+            };
+
+            pc.ontrack = (e) => {
+                const container = document.getElementById('remote-audio-container');
+                container.innerHTML = '';
+                const audio = document.createElement('audio');
+                audio.autoplay = true;
+                audio.srcObject = e.streams[0];
+                container.appendChild(audio);
+                document.getElementById('call-status-text').textContent = '🟢 Соединение установлено (Разговор)';
+            };
+
+            return pc;
+        }
+
+        socket.on('incoming-call', ({ callerLogin, offer }) => {
+            incomingCallerLogin = callerLogin;
+            incomingOffer = offer;
+
+            const callerObj = db.users[callerLogin] || {};
+            document.getElementById('incoming-caller-title').textContent = `Входящий вызов от @${callerLogin}`;
+            document.getElementById('incoming-caller-avatar').src = getAvatar(callerObj.avatar);
+            document.getElementById('incoming-call-modal').classList.remove('hidden');
+            playNotificationSound();
+        });
+
+        async function acceptIncomingCall() {
+            document.getElementById('incoming-call-modal').classList.add('hidden');
+            callTargetUser = incomingCallerLogin;
+
+            document.getElementById('call-partner-name').textContent = `@${callTargetUser}`;
+            document.getElementById('call-status-text').textContent = 'Подключение...';
+            document.getElementById('single-call-modal').classList.remove('hidden');
+            updatePttUIState();
+
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
+                isInCallOrConference = true;
+
+                const pc = createDirectPeerConnection(callTargetUser);
                 await pc.setRemoteDescription(new RTCSessionDescription(incomingOffer));
+                localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
                 const answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
 
-                socket.emit('call-answer', { targetLogin: incomingCallerLogin, answer });
-                flushIceQueue(incomingCallerLogin, pc);
+                socket.emit('direct-call-answer', { senderLogin: currentUser.login, targetLogin: callTargetUser, answer });
+
             } catch (e) {
+                showCustomModal('Ошибка', 'Не удалось ответить на звонок!', false, null, '⚠️');
                 hangUpCall();
             }
         }
 
         function rejectIncomingCall() {
             document.getElementById('incoming-call-modal').classList.add('hidden');
-            clearInterval(incomingRingtoneInterval);
             if (incomingCallerLogin) {
-                socket.emit('call-reject', { targetLogin: incomingCallerLogin });
+                socket.emit('direct-call-reject', { targetLogin: incomingCallerLogin });
             }
-            incomingCallerLogin = null;
-            incomingOffer = null;
         }
 
-        socket.on('call-answer', async ({ answer }) => {
-            clearInterval(outgoingRingtoneInterval);
-            document.getElementById('call-status-text').textContent = 'Разговор идет';
+        socket.on('call-answered', async ({ answer }) => {
             if (callTargetUser && peerConnections[callTargetUser]) {
                 await peerConnections[callTargetUser].setRemoteDescription(new RTCSessionDescription(answer));
-                flushIceQueue(callTargetUser, peerConnections[callTargetUser]);
             }
         });
 
-        socket.on('call-reject', () => {
-            clearInterval(outgoingRingtoneInterval);
-            showCustomModal('Звонок отклонен', 'Абонент отклонил вызов или занят.', false, null, '📞');
+        socket.on('call-rejected', () => {
+            showCustomModal('Сброс', 'Собеседник отклонил или завершил вызов.', false, null, '📞');
             hangUpCall();
         });
 
-        socket.on('ice-candidate', async ({ senderLogin, candidate }) => {
-            const pc = peerConnections[senderLogin];
-            if (pc && pc.remoteDescription) {
-                await pc.addIceCandidate(new RTCIceCandidate(candidate));
-            } else {
-                if (!iceCandidateQueue[senderLogin]) iceCandidateQueue[senderLogin] = [];
-                iceCandidateQueue[senderLogin].push(candidate);
+        socket.on('call-candidate', async ({ candidate }) => {
+            if (callTargetUser && peerConnections[callTargetUser] && candidate) {
+                await peerConnections[callTargetUser].addIceCandidate(new RTCIceCandidate(candidate));
             }
         });
 
-        function flushIceQueue(partnerLogin, pc) {
-            if (iceCandidateQueue[partnerLogin]) {
-                iceCandidateQueue[partnerLogin].forEach(c => pc.addIceCandidate(new RTCIceCandidate(c)));
-                delete iceCandidateQueue[partnerLogin];
-            }
-        }
-
         function hangUpCall() {
-            clearInterval(outgoingRingtoneInterval);
-            clearInterval(incomingRingtoneInterval);
-            document.getElementById('single-call-modal').classList.add('hidden');
-            document.getElementById('incoming-call-modal').classList.add('hidden');
-
             if (callTargetUser) {
-                socket.emit('hang-up', { targetLogin: callTargetUser });
+                socket.emit('direct-call-reject', { targetLogin: callTargetUser });
             }
-            if (incomingCallerLogin) {
-                socket.emit('hang-up', { targetLogin: incomingCallerLogin });
-            }
-
             if (localStream) {
                 localStream.getTracks().forEach(t => t.stop());
                 localStream = null;
@@ -4007,60 +3980,22 @@
             Object.values(peerConnections).forEach(pc => pc.close());
             peerConnections = {};
             callTargetUser = null;
-            incomingCallerLogin = null;
             incomingOffer = null;
+            incomingCallerLogin = null;
             isInCallOrConference = false;
 
-            const remoteAudio = document.getElementById('call-remote-audio');
-            if (remoteAudio) remoteAudio.remove();
+            document.getElementById('single-call-modal').classList.add('hidden');
+            document.getElementById('incoming-call-modal').classList.add('hidden');
         }
-
-        socket.on('hang-up', () => {
-            hangUpCall();
-        });
 
         function toggleMyCallMute() {
             if (localStream) {
-                const audioTrack = localStream.getAudioTracks()[0];
-                if (audioTrack) {
-                    audioTrack.enabled = !audioTrack.enabled;
+                const track = localStream.getAudioTracks()[0];
+                if (track) {
+                    track.enabled = !track.enabled;
                     const btn = document.getElementById('btn-call-mute');
-                    btn.textContent = audioTrack.enabled ? 'Микрофон' : '🔇 Выкл';
-                    btn.className = audioTrack.enabled ? 'flex-1 bg-gray-800 hover:bg-gray-700 text-white py-2 rounded-xl text-xs font-bold transition' : 'flex-1 bg-red-600 text-white py-2 rounded-xl text-xs font-bold transition';
-                }
-            }
-        }
-
-        let typingTimeout = null;
-        function handleTyping() {
-            if (!activeChat || activeChat.type !== 'user') return;
-            socket.emit('typing', { targetLogin: activeChat.id, sender: currentUser.login });
-        }
-
-        socket.on('typing', ({ sender }) => {
-            if (activeChat && activeChat.type === 'user' && activeChat.id === sender) {
-                document.getElementById('typing-indicator').textContent = `@${sender} печатает...`;
-                clearTimeout(typingTimeout);
-                typingTimeout = setTimeout(() => {
-                    document.getElementById('typing-indicator').textContent = '';
-                }, 2000);
-            }
-        });
-
-        function searchMessagesInActiveChat() {
-            const query = document.getElementById('message-history-search').value.toLowerCase();
-            const key = getActiveChatKey();
-            const msgs = db.messagesStore[key] || [];
-            const container = document.getElementById(activeGroupWorkspaceId ? 'ws-messages-container' : 'messages-container');
-            if (!container) return;
-
-            const divs = container.children;
-            for (let i = 0; i < divs.length; i++) {
-                const txt = divs[i].textContent.toLowerCase();
-                if (query === '' || txt.includes(query)) {
-                    divs[i].style.display = 'flex';
-                } else {
-                    divs[i].style.display = 'none';
+                    btn.textContent = track.enabled ? 'Микрофон' : '🔇 Выкл';
+                    btn.className = track.enabled ? 'flex-1 bg-gray-800 hover:bg-gray-700 text-white py-2 rounded-xl text-xs font-bold transition' : 'flex-1 bg-red-600 hover:bg-red-500 text-white py-2 rounded-xl text-xs font-bold transition';
                 }
             }
         }
