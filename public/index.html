@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Точка сбора</title>
+    <title>Мессенджер</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="/socket.io/socket.io.js"></script>
     <style>
@@ -18,9 +18,6 @@
     </style>
 </head>
 <body class="bg-gray-950 text-gray-100 h-screen overflow-hidden font-sans select-none">
-
-    <!-- КОНТЕЙНЕР НЕОНОВЫХ УВЕДОМЛЕНИЙ -->
-    <div id="neon-notifications-container" class="fixed top-5 right-5 z-50 flex flex-col space-y-3 pointer-events-none"></div>
 
     <!-- ОКНО АВТОРИЗАЦИИ И РЕГИСТРАЦИИ -->
     <div id="auth-screen" class="fixed inset-0 z-50 bg-gray-950/90 backdrop-blur-md flex items-center justify-center p-4">
@@ -186,7 +183,7 @@
                 </div>
             </div>
 
-            <!-- Вкладка: ДРУЗЬЯ (С РАЗДЕЛЕНИЕМ НА 3 ПОДРАЗДЕЛА) -->
+            <!-- Вкладка: ДРУЗЬЯ (МОИ ДРУЗЬЯ, ВХОДЯЩИЕ И ИСХОДЯЩИЕ ЗАЯВКИ) -->
             <div id="tab-content-friends" class="flex-1 p-6 overflow-y-auto hidden">
                 <h2 class="text-2xl font-bold mb-6 text-purple-400">Управление Друзьями</h2>
                 <div class="bg-gray-900 border border-gray-800 p-5 rounded-2xl mb-6 max-w-xl shadow-xl">
@@ -199,30 +196,26 @@
                     </div>
                 </div>
 
-                <!-- Подразделы друзей -->
-                <div class="flex space-x-2 mb-6 border-b border-gray-800 pb-3 max-w-xl">
-                    <button onclick="switchFriendsSubTab('my')" id="btn-friends-sub-my" class="px-4 py-2 rounded-xl text-xs font-bold bg-purple-600 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)] transition">Мои друзья</button>
-                    <button onclick="switchFriendsSubTab('incoming')" id="btn-friends-sub-incoming" class="px-4 py-2 rounded-xl text-xs font-bold bg-gray-800 text-gray-400 hover:text-white transition">Входящие заявки</button>
-                    <button onclick="switchFriendsSubTab('outgoing')" id="btn-friends-sub-outgoing" class="px-4 py-2 rounded-xl text-xs font-bold bg-gray-800 text-gray-400 hover:text-white transition">Исходящие заявки</button>
-                </div>
-
-                <!-- 1. Мои друзья -->
-                <div id="friends-sub-my" class="max-w-xl space-y-2">
-                    <div id="friends-list" class="space-y-2"></div>
-                </div>
-
-                <!-- 2. Входящие заявки -->
-                <div id="friends-sub-incoming" class="max-w-xl space-y-2 hidden">
+                <!-- ВХОДЯЩИЕ ЗАЯВКИ -->
+                <div id="friend-requests-section" class="mb-6 max-w-xl hidden">
+                    <h3 class="text-sm font-semibold mb-2 text-yellow-400">📥 Входящие заявки</h3>
                     <div id="friend-requests-list" class="space-y-2"></div>
                 </div>
 
-                <!-- 3. Исходящие заявки -->
-                <div id="friends-sub-outgoing" class="max-w-xl space-y-2 hidden">
-                    <div id="friend-outgoing-list" class="space-y-2"></div>
+                <!-- ИСХОДЯЩИЕ ЗАЯВКИ -->
+                <div id="outgoing-requests-section" class="mb-6 max-w-xl hidden">
+                    <h3 class="text-sm font-semibold mb-2 text-blue-400">📤 Исходящие заявки</h3>
+                    <div id="outgoing-requests-list" class="space-y-2"></div>
+                </div>
+
+                <!-- МОИ ДРУЗЬЯ -->
+                <div class="max-w-xl">
+                    <h3 class="text-sm font-semibold mb-3 text-gray-300">👥 Мои Друзья</h3>
+                    <div id="friends-list" class="space-y-2"></div>
                 </div>
             </div>
 
-            <!-- Вкладка: СООБЩЕСТВА -->
+            <!-- Вкладка: СООБЩЕСТВА С ЛЕНТОЙ ПОСТОВ -->
             <div id="tab-content-groups" class="flex-1 p-6 overflow-y-auto hidden">
                 <h2 class="text-2xl font-bold mb-6 text-purple-400">Сообщества и Группы</h2>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl">
@@ -241,17 +234,37 @@
                             <div id="recommended-groups-list" class="space-y-3 max-h-72 overflow-y-auto"></div>
                         </div>
                     </div>
-                    <div class="bg-gray-900 border border-gray-800 p-5 rounded-2xl shadow-xl h-fit">
-                        <h3 class="text-sm font-semibold mb-3 text-gray-300">Все Доступные Сообщества</h3>
-                        <div id="groups-list" class="space-y-2 max-h-[500px] overflow-y-auto"></div>
+                    <div class="space-y-6">
+                        <div class="bg-gray-900 border border-gray-800 p-5 rounded-2xl shadow-xl">
+                            <h3 class="text-sm font-semibold mb-3 text-gray-300">Все Доступные Сообщества</h3>
+                            <div id="groups-list" class="space-y-2 max-h-[300px] overflow-y-auto"></div>
+                        </div>
                     </div>
+                </div>
+
+                <!-- Лента постов групп -->
+                <div class="mt-8 max-w-3xl mx-auto space-y-6">
+                    <h3 class="text-xl font-bold text-purple-400">Лента постов сообществ</h3>
+                    <div class="bg-gray-900 border border-gray-800 p-5 rounded-2xl space-y-3 shadow-xl">
+                        <select id="group-post-select" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-purple-500"></select>
+                        <textarea id="group-post-text" placeholder="Поделитесь новостью в группе..." class="w-full bg-gray-800 border border-gray-700 rounded-xl p-3 text-white focus:outline-none focus:border-purple-500 h-20 resize-none"></textarea>
+                        <button onclick="publishGroupPost()" class="bg-purple-600 hover:bg-purple-500 px-5 py-2 rounded-xl font-bold transition shadow-[0_0_15px_rgba(168,85,247,0.3)]">Опубликовать в группу</button>
+                    </div>
+                    <div id="groups-feed-list" class="space-y-4"></div>
                 </div>
             </div>
 
-            <!-- Вкладка: НОВОСТИ -->
+            <!-- Вкладка: НОВОСТИ (С АКТУАЛЬНЫМИ НОВОСТЯМИ ИЗ ИНТЕРНЕТА) -->
             <div id="tab-content-news" class="flex-1 p-6 overflow-y-auto hidden">
                 <div class="max-w-2xl mx-auto space-y-6">
-                    <h2 class="text-2xl font-bold text-purple-400">Лента Постов</h2>
+                    <h2 class="text-2xl font-bold text-purple-400">Лента Новостей</h2>
+                    
+                    <!-- Актуальные новости из интернета -->
+                    <div class="bg-gray-900 border border-purple-500/30 p-5 rounded-2xl space-y-3 shadow-xl">
+                        <h3 class="text-sm font-bold text-purple-300 uppercase tracking-wider">🔥 Актуальные новости из интернета</h3>
+                        <div id="internet-news-list" class="space-y-3 max-h-60 overflow-y-auto pr-1"></div>
+                    </div>
+
                     <div class="bg-gray-900 border border-gray-800 p-5 rounded-2xl space-y-3 shadow-xl">
                         <textarea id="post-text-input" placeholder="Что у вас нового?..." class="w-full bg-gray-800 border border-gray-700 rounded-xl p-3 text-white focus:outline-none focus:border-purple-500 h-24 resize-none transition"></textarea>
                         <div class="flex justify-between items-center">
@@ -274,7 +287,7 @@
                 <div id="tiktok-feed" class="w-full max-w-sm h-full overflow-y-scroll snap-y-mandatory no-scrollbar relative"></div>
             </div>
 
-            <!-- Вкладка: МУЗЫКА (С ПОИСКОМ, ОБЛОЖКАМИ И ПРЕВЬЮ) -->
+            <!-- Вкладка: МУЗЫКА -->
             <div id="tab-content-music" class="flex-1 p-6 overflow-y-auto hidden">
                 <div class="max-w-3xl mx-auto space-y-6">
                     <h2 class="text-2xl font-bold text-purple-400">Музыкальный плеер</h2>
@@ -288,21 +301,33 @@
 
             <!-- Вкладка: ПРОФИЛЬ -->
             <div id="tab-content-profile" class="flex-1 p-6 overflow-y-auto hidden">
-                <div class="max-w-md mx-auto bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-2xl space-y-6">
+                <div class="max-w-md mx-auto bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-2xl space-y-6 relative">
+                    <!-- КРЕСТИК ЗАКРЫТИЯ ПРОФИЛЯ -->
+                    <button onclick="switchTab('chats')" class="absolute top-5 right-5 text-gray-400 hover:text-white text-lg font-bold">✕</button>
+
                     <h2 class="text-2xl font-bold text-purple-400 text-center">Мой Профиль</h2>
                     <div class="flex flex-col items-center">
                         <img id="profile-avatar-preview" src="" class="w-24 h-24 rounded-full border-4 border-purple-500 object-cover mb-3 shadow-[0_0_20px_rgba(168,85,247,0.3)]">
                         <div id="profile-username" class="text-xl font-bold text-white"></div>
                         <div id="profile-link-box" class="mt-2 text-xs bg-gray-800 p-2 rounded-xl text-purple-300 font-mono select-all"></div>
                     </div>
+
+                    <!-- ВЫБОР АВАТАРОК НА ВЫБОР + ЗАГРУЗКА С ПК -->
+                    <div>
+                        <label class="block text-xs text-gray-400 uppercase mb-2">Выберите готовый аватар или загрузите свой</label>
+                        <div class="grid grid-cols-4 gap-2 mb-3">
+                            <img src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150" onclick="selectPresetAvatar(this.src)" class="w-14 h-14 rounded-xl object-cover cursor-pointer border-2 border-transparent hover:border-purple-500 transition">
+                            <img src="https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=150" onclick="selectPresetAvatar(this.src)" class="w-14 h-14 rounded-xl object-cover cursor-pointer border-2 border-transparent hover:border-purple-500 transition">
+                            <img src="https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150" onclick="selectPresetAvatar(this.src)" class="w-14 h-14 rounded-xl object-cover cursor-pointer border-2 border-transparent hover:border-purple-500 transition">
+                            <img src="https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=150" onclick="selectPresetAvatar(this.src)" class="w-14 h-14 rounded-xl object-cover cursor-pointer border-2 border-transparent hover:border-purple-500 transition">
+                        </div>
+                        <input type="file" id="profile-avatar-file" accept="image/*" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2 text-white text-xs">
+                    </div>
+
                     <div class="space-y-4">
                         <div>
                             <label class="block text-xs text-gray-400 uppercase mb-1">Имя</label>
                             <input type="text" id="profile-name-input" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-purple-500 transition">
-                        </div>
-                        <div>
-                            <label class="block text-xs text-gray-400 uppercase mb-1">Новый аватар</label>
-                            <input type="file" id="profile-avatar-file" accept="image/*" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2 text-white text-xs">
                         </div>
                         <div>
                             <label class="block text-xs text-gray-400 uppercase mb-1">О себе (Bio)</label>
@@ -314,9 +339,14 @@
                         </div>
                         <div>
                             <label class="block text-xs text-gray-400 uppercase mb-1">Новый пароль</label>
-                            <input type="password" id="profile-password-input" placeholder="Заполните для смены пароля" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-purple-500 transition">
+                            <input type="password" id="profile-password-input" oninput="checkProfilePasswordMatch()" placeholder="Оставьте пустым, если не нужно менять" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-purple-500 transition">
                         </div>
-                        <button onclick="saveProfile()" class="w-full bg-purple-600 hover:bg-purple-500 py-3 rounded-xl font-bold text-white transition shadow-[0_0_20px_rgba(168,85,247,0.4)]">
+                        <div>
+                            <label class="block text-xs text-gray-400 uppercase mb-1">Подтвердите новый пароль</label>
+                            <input type="password" id="profile-password-confirm" oninput="checkProfilePasswordMatch()" placeholder="Подтвердите пароль" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-purple-500 transition">
+                            <div id="profile-password-match-status" class="text-xs mt-1 font-semibold"></div>
+                        </div>
+                        <button onclick="saveProfile()" id="profile-save-btn" class="w-full bg-purple-600 hover:bg-purple-500 py-3 rounded-xl font-bold text-white transition shadow-[0_0_20px_rgba(168,85,247,0.4)]">
                             Сохранить Изменения
                         </button>
                         <button onclick="logout()" class="w-full bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white py-2.5 rounded-xl font-bold transition">
@@ -329,7 +359,7 @@
         </div>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО НАСТРОЕК -->
+    <!-- МОДАЛЬНОЕ ОКНО НАСТРОЕК (АККУРАТНОЕ НЕОНОВОЕ) -->
     <div id="settings-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
         <div class="bg-gray-900 border border-purple-500/40 p-6 rounded-3xl w-full max-w-lg shadow-[0_0_35px_rgba(168,85,247,0.25)] space-y-4">
             <div class="flex justify-between items-center border-b border-gray-800 pb-3">
@@ -338,24 +368,10 @@
             </div>
             <div class="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
                 <div>
-                    <label class="block text-xs text-gray-400 uppercase mb-1">Гарнитура / Микрофон</label>
+                    <label class="block text-xs text-gray-400 uppercase mb-1">Микрофон</label>
                     <div class="flex space-x-2">
                         <select id="audio-device-select" class="flex-1 bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-purple-500 transition"></select>
                         <button onclick="requestMicrophoneAccess()" class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-xl text-xs font-bold transition shadow-[0_0_15px_rgba(168,85,247,0.3)]">Разрешить мик.</button>
-                    </div>
-                </div>
-                <div>
-                    <label class="block text-xs text-gray-400 uppercase mb-1">Режим передачи звука</label>
-                    <select id="ptt-mode-select" onchange="togglePttMode()" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-purple-500 transition">
-                        <option value="voice">Активация по голосу</option>
-                        <option value="ptt">Рация (Push-to-Talk)</option>
-                    </select>
-                </div>
-                <div id="ptt-key-config" class="hidden">
-                    <label class="block text-xs text-gray-400 uppercase mb-1">Клавиша для рации</label>
-                    <div class="flex space-x-2 items-center">
-                        <input type="text" id="ptt-key-input" readonly value="Space" class="flex-1 bg-gray-800 border border-gray-700 rounded-xl p-2 text-sm text-white text-center font-mono">
-                        <button onclick="startCapturingPttKey()" class="bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-xl text-xs font-bold transition">Назначить</button>
                     </div>
                 </div>
                 <div>
@@ -364,8 +380,6 @@
                         <option value="1">Звук 1: Классический пинг</option>
                         <option value="2">Звук 2: Неоновый капельный</option>
                         <option value="3">Звук 3: Мягкий колокольчик</option>
-                        <option value="4">Звук 4: Цифровой радар</option>
-                        <option value="5">Звук 5: Космический импульс</option>
                     </select>
                 </div>
             </div>
@@ -375,18 +389,15 @@
         </div>
     </div>
 
-    <!-- НЕОНОВОЕ ВСПЛЫВАЮЩЕЕ ОКНО ВХОДЯЩЕГО ЗВОНКА С АНИМИРОВАННЫМИ КНОПКАМИ -->
-    <div id="incoming-call-modal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 hidden">
-        <div class="bg-gray-900 border border-green-500/80 p-8 rounded-3xl w-full max-w-sm shadow-[0_0_40px_rgba(34,197,94,0.4)] text-center space-y-6 relative overflow-hidden animate-pulse">
-            <div class="absolute -top-10 -right-10 w-28 h-28 bg-green-500/20 rounded-full blur-xl"></div>
-            <div class="text-4xl animate-bounce">📞</div>
-            <div>
-                <h3 class="text-2xl font-extrabold text-white mb-1" id="incoming-caller-title">Входящий вызов</h3>
-                <p class="text-xs text-gray-400">Защищенное голосовое и видеосоединение</p>
-            </div>
+    <!-- УВЕДОМЛЕНИЕ НА ВХОДЯЩИЙ ЗВОНОК (С КНОПКАМИ ПРИНЯТЬ И ОТКЛОНИТЬ) -->
+    <div id="incoming-call-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+        <div class="bg-gray-900 border border-green-500/50 p-6 rounded-3xl w-full max-w-sm shadow-[0_0_35px_rgba(34,197,94,0.35)] text-center space-y-4 animate-pulse">
+            <div class="text-4xl">📞</div>
+            <h3 class="text-xl font-bold text-white" id="incoming-caller-title">Входящий вызов...</h3>
+            <p class="text-sm text-gray-400">Вам звонят в реальном времени</p>
             <div class="flex space-x-3 justify-center pt-2">
-                <button onclick="acceptIncomingCall()" class="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 text-white py-3 rounded-2xl font-bold transition shadow-[0_0_20px_rgba(34,197,94,0.5)] transform hover:scale-105">Принять</button>
-                <button onclick="rejectIncomingCall()" class="flex-1 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white py-3 rounded-2xl font-bold transition shadow-[0_0_20px_rgba(239,68,68,0.5)] transform hover:scale-105">Отклонить</button>
+                <button onclick="acceptIncomingCall()" class="bg-green-600 hover:bg-green-500 text-white px-5 py-2.5 rounded-xl font-bold transition shadow-[0_0_15px_rgba(34,197,94,0.4)]">Принять</button>
+                <button onclick="rejectIncomingCall()" class="bg-red-600 hover:bg-red-500 text-white px-5 py-2.5 rounded-xl font-bold transition shadow-[0_0_15px_rgba(239,68,68,0.4)]">Отклонить</button>
             </div>
         </div>
     </div>
@@ -422,12 +433,12 @@
         <div id="group-video-grid" class="flex-1 grid grid-cols-2 md:grid-cols-3 gap-4 overflow-y-auto"></div>
     </div>
 
-    <!-- СИСТЕМНАЯ ЛОГИКА (JAVASCRIPT) -->
+    <!-- КЛИЕНТСКАЯ ЛОГИКА -->
     <script>
         const socket = io();
 
         let currentUser = null;
-        let db = { users: [], messagesStore: {}, friendRequests: {}, friendRequestsOut: {}, friends: {}, news: [], customNicknames: {}, groups: {}, lastSeen: {} };
+        let db = { users: [], messagesStore: {}, friendRequests: {}, outgoingRequests: {}, friends: {}, news: [], customNicknames: {}, groups: {}, lastSeen: {} };
         let activeChat = null;
         let currentUploadedMedia = null;
         let currentPostMedia = null;
@@ -446,10 +457,8 @@
         let groupPeerConnections = {};
         let currentCallGroupId = null;
 
-        let appSettings = { audioDevice: '', pttMode: 'voice', pttKey: 'Space', soundId: '1' };
-        let isPttPressed = false;
-        let capturingKey = false;
-        let currentFriendsSubTab = 'my';
+        let appSettings = { audioDevice: '', soundId: '1' };
+        let tiktokObserver = null;
 
         const sampleVideos = [
             { url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4', author: '@neon_vibes', desc: 'Атмосфера ночного города 🌌 #cyberpunk' },
@@ -457,27 +466,6 @@
             { url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4', author: '@tech_master', desc: 'Новый обзор скоро! 📱 #tech' },
             { url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4', author: '@cat_lover', desc: 'Милота дня 🐾 #cats' }
         ];
-        let tiktokObserver = null;
-
-        // НЕОНОВЫЕ ВСПЛЫВАЮЩИЕ УВЕДОМЛЕНИЯ
-        function showNeonNotification(title, text) {
-            playNotificationSound();
-            const container = document.getElementById('neon-notifications-container');
-            const toast = document.createElement('div');
-            toast.className = 'pointer-events-auto bg-gray-900/90 border border-purple-500/80 text-white px-5 py-4 rounded-2xl shadow-[0_0_25px_rgba(168,85,247,0.5)] backdrop-blur-md transform translate-x-10 opacity-0 transition-all duration-300 max-w-sm';
-            toast.innerHTML = `
-                <div class="font-bold text-purple-400 text-sm mb-0.5">${title}</div>
-                <div class="text-xs text-gray-200">${text}</div>
-            `;
-            container.appendChild(toast);
-            setTimeout(() => {
-                toast.classList.remove('translate-x-10', 'opacity-0');
-            }, 10);
-            setTimeout(() => {
-                toast.classList.add('translate-x-10', 'opacity-0');
-                setTimeout(() => toast.remove(), 300);
-            }, 4000);
-        }
 
         function switchAuthTab(tab) {
             if (tab === 'login') {
@@ -517,6 +505,34 @@
                 submitBtn.disabled = true;
                 submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
             }
+        }
+
+        function checkProfilePasswordMatch() {
+            const pass = document.getElementById('profile-password-input').value;
+            const confirm = document.getElementById('profile-password-confirm').value;
+            const status = document.getElementById('profile-password-match-status');
+            const submitBtn = document.getElementById('profile-save-btn');
+
+            if (!pass && !confirm) {
+                status.textContent = '';
+                submitBtn.disabled = false;
+                return;
+            }
+
+            if (pass === confirm) {
+                status.textContent = 'Пароли совпадают ✓';
+                status.className = 'text-xs mt-1 font-semibold text-green-400';
+                submitBtn.disabled = false;
+            } else {
+                status.textContent = 'Пароли не совпадают ✕';
+                status.className = 'text-xs mt-1 font-semibold text-red-400';
+                submitBtn.disabled = true;
+            }
+        }
+
+        function selectPresetAvatar(url) {
+            document.getElementById('profile-avatar-preview').src = url;
+            currentUser.avatar = url;
         }
 
         async function handleLogin(e) {
@@ -590,10 +606,10 @@
             renderFriends();
             renderGroups();
             renderNewsFeed();
+            loadInternetNews();
             initTikTokFeed();
             fillProfileData();
             loadAudioDevices();
-            setupPttListeners();
             searchMusicTracks();
         }
 
@@ -615,7 +631,7 @@
 
             if (tab === 'friends') renderFriends();
             if (tab === 'groups') renderGroups();
-            if (tab === 'news') renderNewsFeed();
+            if (tab === 'news') { renderNewsFeed(); loadInternetNews(); }
             if (tab === 'music') searchMusicTracks();
         }
 
@@ -626,8 +642,6 @@
         function closeSettingsModal() {
             document.getElementById('settings-modal').classList.add('hidden');
             appSettings.soundId = document.getElementById('notification-sound-select').value;
-            appSettings.pttMode = document.getElementById('ptt-mode-select').value;
-            appSettings.audioDevice = document.getElementById('audio-device-select').value;
         }
 
         async function loadAudioDevices() {
@@ -650,44 +664,8 @@
                 alert('Доступ к микрофону успешно разрешен!');
                 loadAudioDevices();
             } catch (e) {
-                alert('Не удалось получить доступ к микрофону в браузере.');
+                alert('Не удалось получить доступ к микрофону.');
             }
-        }
-
-        function togglePttMode() {
-            const mode = document.getElementById('ptt-mode-select').value;
-            const keyConfig = document.getElementById('ptt-key-config');
-            if (mode === 'ptt') {
-                keyConfig.classList.remove('hidden');
-            } else {
-                keyConfig.classList.add('hidden');
-            }
-        }
-
-        function startCapturingPttKey() {
-            capturingKey = true;
-            document.getElementById('ptt-key-input').value = 'Нажмите клавишу...';
-            window.onkeydown = (e) => {
-                if (capturingKey) {
-                    appSettings.pttKey = e.code;
-                    document.getElementById('ptt-key-input').value = e.code;
-                    capturingKey = false;
-                    window.onkeydown = null;
-                }
-            };
-        }
-
-        function setupPttListeners() {
-            window.addEventListener('keydown', (e) => {
-                if (appSettings.pttMode === 'ptt' && e.code === appSettings.pttKey && !isPttPressed) {
-                    isPttPressed = true;
-                }
-            });
-            window.addEventListener('keyup', (e) => {
-                if (appSettings.pttMode === 'ptt' && e.code === appSettings.pttKey) {
-                    isPttPressed = false;
-                }
-            });
         }
 
         function playNotificationSound() {
@@ -696,7 +674,7 @@
                 const osc = ctx.createOscillator();
                 const gain = ctx.createGain();
                 osc.type = 'sine';
-                osc.frequency.setValueAtTime(440 + parseInt(appSettings.soundId) * 60, ctx.currentTime);
+                osc.frequency.setValueAtTime(520, ctx.currentTime);
                 gain.gain.setValueAtTime(0.1, ctx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
                 osc.connect(gain);
@@ -707,65 +685,21 @@
         }
 
         function previewNotificationSound() {
-            appSettings.soundId = document.getElementById('notification-sound-select').value;
             playNotificationSound();
         }
 
-        // РАЗДЕЛЕНИЕ ВКЛАДКИ «ДРУЗЬЯ» НА 3 ПОДРАЗДЕЛА
-        function switchFriendsSubTab(sub) {
-            currentFriendsSubTab = sub;
-            ['my', 'incoming', 'outgoing'].forEach(s => {
-                document.getElementById(`friends-sub-${s}`).classList.toggle('hidden', s !== sub);
-                const btn = document.getElementById(`btn-friends-sub-${s}`);
-                if (s === sub) {
-                    btn.className = 'px-4 py-2 rounded-xl text-xs font-bold bg-purple-600 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)] transition';
-                } else {
-                    btn.className = 'px-4 py-2 rounded-xl text-xs font-bold bg-gray-800 text-gray-400 hover:text-white transition';
-                }
-            });
-            renderFriends();
-        }
-
+        // РЕНДЕР ДРУЗЕЙ (МОИ ДРУЗЬЯ, ВХОДЯЩИЕ И ИСХОДЯЩИЕ ЗАЯВКИ)
         function renderFriends() {
-            // Подраздел 1: Мои друзья
-            const list = document.getElementById('friends-list');
-            list.innerHTML = '';
-            const myFriends = db.friends[currentUser.login] || [];
-            if (myFriends.length === 0) {
-                list.innerHTML = '<div class="text-gray-500 text-sm py-4">У вас пока нет друзей.</div>';
-            } else {
-                myFriends.forEach(friendLogin => {
-                    const friendObj = db.users[friendLogin] || { avatar: 'https://via.placeholder.com/150', name: friendLogin };
-                    const customNick = db.customNicknames[currentUser.login]?.[friendLogin] || friendObj.name;
-
-                    const card = document.createElement('div');
-                    card.className = 'flex items-center justify-between p-3 bg-gray-900 border border-gray-800 rounded-2xl shadow-sm hover:border-gray-700 transition';
-                    card.innerHTML = `
-                        <div class="flex items-center space-x-3 cursor-pointer" onclick="openUserChat('${friendLogin}')">
-                            <img src="${friendObj.avatar}" class="w-10 h-10 rounded-full object-cover">
-                            <div>
-                                <div class="font-bold text-white">${customNick}</div>
-                                <div class="text-xs text-gray-400">@${friendLogin}</div>
-                            </div>
-                        </div>
-                        <div class="flex items-center space-x-2">
-                            <button onclick="openCustomNickPrompt('${friendLogin}')" title="Задать псевдоним" class="p-2 bg-gray-800 hover:bg-gray-700 rounded-xl text-xs text-gray-300 transition">✏</button>
-                            <button onclick="openUserChat('${friendLogin}')" title="Написать" class="p-2 bg-purple-600 hover:bg-purple-500 rounded-xl text-white font-bold text-xs transition">💬</button>
-                            <button onclick="startDirectCallTo('${friendLogin}')" title="Позвонить" class="p-2 bg-green-600 hover:bg-green-500 rounded-xl text-white font-bold text-xs transition">📞</button>
-                            <button onclick="removeFriend('${friendLogin}')" title="Удалить" class="p-2 bg-red-600/30 hover:bg-red-600 rounded-xl text-red-300 hover:text-white font-bold text-xs transition">❌</button>
-                        </div>
-                    `;
-                    list.appendChild(card);
-                });
-            }
-
-            // Подраздел 2: Входящие заявки
-            const requestsList = document.getElementById('friend-requests-list');
-            requestsList.innerHTML = '';
+            const friendsListEl = document.getElementById('friends-list');
+            friendsListEl.innerHTML = '';
+            
+            const reqSection = document.getElementById('friend-requests-section');
+            const reqList = document.getElementById('friend-requests-list');
             const myRequests = db.friendRequests[currentUser.login] || [];
-            if (myRequests.length === 0) {
-                requestsList.innerHTML = '<div class="text-gray-500 text-sm py-4">Нет входящих заявок.</div>';
-            } else {
+
+            if (myRequests.length > 0) {
+                reqSection.classList.remove('hidden');
+                reqList.innerHTML = '';
                 myRequests.forEach(reqLogin => {
                     const div = document.createElement('div');
                     div.className = 'flex items-center justify-between p-3 bg-gray-800 rounded-xl border border-yellow-500/30';
@@ -776,27 +710,61 @@
                             <button onclick="respondFriendRequest('${reqLogin}', false)" class="bg-red-600 hover:bg-red-500 px-3 py-1 rounded-lg text-xs font-bold text-white transition">Отклонить</button>
                         </div>
                     `;
-                    requestsList.appendChild(div);
+                    reqList.appendChild(div);
                 });
+            } else {
+                reqSection.classList.add('hidden');
             }
 
-            // Подраздел 3: Исходящие заявки
-            const outgoingList = document.getElementById('friend-outgoing-list');
-            outgoingList.innerHTML = '';
-            const myOutgoing = db.friendRequestsOut?.[currentUser.login] || [];
-            if (myOutgoing.length === 0) {
-                outgoingList.innerHTML = '<div class="text-gray-500 text-sm py-4">Нет исходящих заявок.</div>';
-            } else {
-                myOutgoing.forEach(outLogin => {
+            // ИСХОДЯЩИЕ ЗАЯВКИ С ВОЗМОЖНОСТЬЮ ОТМЕНЫ
+            const outSection = document.getElementById('outgoing-requests-section');
+            const outList = document.getElementById('outgoing-requests-list');
+            const myOutgoing = db.outgoingRequests?.[currentUser.login] || [];
+
+            if (myOutgoing.length > 0) {
+                outSection.classList.remove('hidden');
+                outList.innerHTML = '';
+                myOutgoing.forEach(targetLogin => {
                     const div = document.createElement('div');
-                    div.className = 'flex items-center justify-between p-3 bg-gray-800 rounded-xl border border-purple-500/30';
+                    div.className = 'flex items-center justify-between p-3 bg-gray-800 rounded-xl border border-blue-500/30';
                     div.innerHTML = `
-                        <span class="font-bold text-white">@${outLogin}</span>
-                        <span class="text-xs text-purple-400 font-medium">Ожидает ответа...</span>
+                        <span class="font-bold text-white">@${targetLogin}</span>
+                        <button onclick="cancelFriendRequest('${targetLogin}')" class="bg-gray-700 hover:bg-red-600 px-3 py-1 rounded-lg text-xs font-bold text-white transition">Отменить заявку</button>
                     `;
-                    outgoingList.appendChild(div);
+                    outList.appendChild(div);
                 });
+            } else {
+                outSection.classList.add('hidden');
             }
+
+            const myFriends = db.friends[currentUser.login] || [];
+            if (myFriends.length === 0) {
+                friendsListEl.innerHTML = '<div class="text-gray-500 text-sm py-2">У вас пока нет друзей.</div>';
+                return;
+            }
+
+            myFriends.forEach(friendLogin => {
+                const friendObj = db.users[friendLogin] || { avatar: 'https://via.placeholder.com/150', name: friendLogin };
+                const displayName = db.customNicknames[currentUser.login]?.[friendLogin] || friendObj.name;
+
+                const card = document.createElement('div');
+                card.className = 'flex items-center justify-between p-3 bg-gray-900 border border-gray-800 rounded-2xl shadow-sm hover:border-gray-700 transition';
+                card.innerHTML = `
+                    <div class="flex items-center space-x-3 cursor-pointer" onclick="openUserChat('${friendLogin}')">
+                        <img src="${friendObj.avatar}" class="w-10 h-10 rounded-full object-cover">
+                        <div>
+                            <div class="font-bold text-white">${displayName}</div>
+                            <div class="text-xs text-gray-400">@${friendLogin}</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="openUserChat('${friendLogin}')" title="Написать" class="p-2 bg-purple-600 hover:bg-purple-500 rounded-xl text-white font-bold text-xs transition">💬</button>
+                        <button onclick="startDirectCallTo('${friendLogin}')" title="Позвонить" class="p-2 bg-green-600 hover:bg-green-500 rounded-xl text-white font-bold text-xs transition">📞</button>
+                        <button onclick="removeFriend('${friendLogin}')" title="Удалить из друзей" class="p-2 bg-red-600/30 hover:bg-red-600 rounded-xl text-red-300 hover:text-white font-bold text-xs transition">❌</button>
+                    </div>
+                `;
+                friendsListEl.appendChild(card);
+            });
         }
 
         async function sendFriendRequest() {
@@ -811,12 +779,25 @@
             });
             const data = await res.json();
             if (data.success) {
-                showNeonNotification('Заявка отправлена', `Заявка в друзья пользователю @${targetLogin} успешно отправлена.`);
+                alert('Заявка отправлена!');
                 input.value = '';
                 db = data.db;
                 renderFriends();
             } else {
                 alert(data.error);
+            }
+        }
+
+        async function cancelFriendRequest(targetLogin) {
+            const res = await fetch('/api/cancel-friend-request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, targetLogin })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                renderFriends();
             }
         }
 
@@ -849,25 +830,7 @@
             }
         }
 
-        async function openCustomNickPrompt(targetLogin) {
-            const current = db.customNicknames[currentUser.login]?.[targetLogin] || '';
-            const newNick = prompt(`Введите локальное имя для пользователя @${targetLogin}:`, current);
-            if (newNick === null) return;
-
-            const res = await fetch('/api/set-nickname', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ owner: currentUser.login, target: targetLogin, nickname: newNick })
-            });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                renderFriends();
-                renderChatsList();
-            }
-        }
-
-        // ЧАТЫ
+        // ЧАТЫ И МГНОВЕННАЯ ДОСТАВКА СООБЩЕНИЙ ЧЕРЕЗ СОКЕТЫ
         function renderChatsList() {
             const list = document.getElementById('chats-list');
             list.innerHTML = '';
@@ -879,7 +842,7 @@
                 <div class="w-10 h-10 rounded-full bg-purple-600/30 text-purple-400 flex items-center justify-center font-bold flex-shrink-0">📌</div>
                 <div class="overflow-hidden">
                     <div class="font-bold text-white truncate">Избранное</div>
-                    <div class="text-xs text-gray-400 truncate">Заметки и сообщения</div>
+                    <div class="text-xs text-gray-400 truncate">Заметки и файлы</div>
                 </div>
             `;
             list.appendChild(savedCard);
@@ -911,7 +874,7 @@
                         <div class="w-10 h-10 rounded-full bg-blue-600/30 text-blue-400 flex items-center justify-center font-bold flex-shrink-0">👥</div>
                         <div class="overflow-hidden">
                             <div class="font-bold text-white truncate">${group.name}</div>
-                            <div class="text-xs text-gray-400 truncate">${group.members.length} участников</div>
+                            <div class="text-xs text-gray-400 truncate">${group.members.length} уч.</div>
                         </div>
                     `;
                     list.appendChild(item);
@@ -961,7 +924,7 @@
                 const group = db.groups[chat.id];
                 document.getElementById('active-chat-name').textContent = group.name;
                 document.getElementById('active-chat-avatar').src = 'https://via.placeholder.com/150';
-                document.getElementById('active-chat-status').textContent = `Групповой чат (${group.members.length} уч.)`;
+                document.getElementById('active-chat-status').textContent = `Группа (${group.members.length} уч.)`;
                 btnCall.classList.add('hidden');
                 btnGroupCall.classList.remove('hidden');
             }
@@ -995,26 +958,12 @@
                     if (m.media.type === 'audio') mediaHTML = `<audio src="${m.media.url}" controls class="my-1"></audio>`;
                 }
 
-                let senderName = m.sender;
-                if (activeChat.type === 'group') {
-                    const group = db.groups[activeChat.id];
-                    const isLeader = group.creator === m.sender;
-                    const role = group.roles?.[m.sender] || (isLeader ? 'Лидер' : 'Участник');
-                    senderName = `${m.sender} ${isLeader ? '⭐' : ''} (${role})`;
-                }
-
                 div.innerHTML = `
                     <div class="max-w-md px-4 py-2.5 rounded-2xl ${isMe ? 'bg-purple-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-200 rounded-bl-none'} border border-gray-700/50 relative group shadow">
-                        ${!isMe && activeChat.type === 'group' ? `<div class="text-xs font-bold text-purple-300 mb-1">${senderName}</div>` : ''}
+                        ${!isMe && activeChat.type === 'group' ? `<div class="text-xs font-bold text-purple-300 mb-1">${m.sender}</div>` : ''}
                         ${mediaHTML}
                         <div class="break-words">${m.text}</div>
                         <div class="text-[10px] opacity-60 text-right mt-1">${m.time} ${m.edited ? '(изм.)' : ''}</div>
-                        
-                        ${(isMe || (activeChat.type === 'group' && (db.groups[activeChat.id].creator === currentUser.login || db.groups[activeChat.id].roles?.[currentUser.login] === 'Админ'))) ? `
-                        <div class="absolute top-1 right-1 hidden group-hover:flex space-x-1 bg-black/70 rounded px-1 backdrop-blur">
-                            <button onclick="editMsgPrompt(${idx})" class="text-xs text-yellow-300 p-1">✏️️</button>
-                            <button onclick="deleteMsg(${idx})" class="text-xs text-red-300 p-1">❌</button>
-                        </div>` : ''}
                     </div>
                 `;
                 container.appendChild(div);
@@ -1050,49 +999,29 @@
             }
         }
 
-        async function editMsgPrompt(msgIndex) {
-            const newText = prompt('Отредактируйте сообщение:');
-            if (!newText) return;
+        // Получение сообщений в реальном времени через веб-сокеты
+        socket.on('receive-message', ({ sender, receiver, msg }) => {
+            if (!db.messagesStore[currentUser.login]) db.messagesStore[currentUser.login] = {};
+            const peer = (sender === currentUser.login) ? receiver : sender;
+            if (!db.messagesStore[currentUser.login][peer]) db.messagesStore[currentUser.login][peer] = [];
+            db.messagesStore[currentUser.login][peer].push(msg);
 
-            let endpoint = '/api/edit-message';
-            let payload = { sender: currentUser.login, receiver: activeChat.id, msgIndex, newText };
-            if (activeChat.type === 'group') {
-                endpoint = '/api/edit-group-message';
-                payload = { groupId: activeChat.id, sender: currentUser.login, msgIndex, newText };
-            }
-
-            const res = await fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
+            playNotificationSound();
+            if (activeChat && activeChat.type === 'user' && activeChat.id === peer) {
                 renderMessages();
             }
-        }
+        });
 
-        async function deleteMsg(msgIndex) {
-            if (!confirm('Удалить сообщение?')) return;
-            let endpoint = '/api/delete-message';
-            let payload = { sender: currentUser.login, receiver: activeChat.id, msgIndex };
-            if (activeChat.type === 'group') {
-                endpoint = '/api/delete-group-message';
-                payload = { groupId: activeChat.id, sender: currentUser.login, msgIndex };
+        socket.on('receive-group-message', ({ groupId, msg }) => {
+            if (db.groups[groupId]) {
+                if (!db.groups[groupId].messages) db.groups[groupId].messages = [];
+                db.groups[groupId].messages.push(msg);
+                playNotificationSound();
+                if (activeChat && activeChat.type === 'group' && activeChat.id === groupId) {
+                    renderMessages();
+                }
             }
-
-            const res = await fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                renderMessages();
-            }
-        }
+        });
 
         async function handleFileUpload(e) {
             const file = e.target.files[0];
@@ -1161,76 +1090,41 @@
             document.getElementById('typing-indicator').textContent = '';
         });
 
-        // СООБЩЕСТВА И РОЛИ
+        // СООБЩЕСТВА И ПОСТЫ В ГРУППАХ
         function renderGroups() {
             const list = document.getElementById('groups-list');
             const recList = document.getElementById('recommended-groups-list');
+            const select = document.getElementById('group-post-select');
             list.innerHTML = '';
             recList.innerHTML = '';
+            select.innerHTML = '<option value="">Выберите группу для поста...</option>';
 
             const groupsArr = Object.values(db.groups || {});
-            const sortedRec = [...groupsArr].sort((a, b) => {
-                const scoreA = (a.members?.length || 0) * 2 + (a.likes || 0);
-                const scoreB = (b.members?.length || 0) * 2 + (b.likes || 0);
-                return scoreB - scoreA;
-            });
-
-            sortedRec.slice(0, 3).forEach(g => {
-                const div = document.createElement('div');
-                div.className = 'p-3 bg-gray-800 rounded-xl border border-purple-500/20 flex justify-between items-center';
-                div.innerHTML = `
-                    <div>
-                        <div class="font-bold text-white">${g.name}</div>
-                        <div class="text-xs text-gray-400">Участников: ${g.members.length} | Лайков: ${g.likes || 0}</div>
-                    </div>
-                    <button onclick="selectChat({type:'group', id:'${g.id}'}); switchTab('chats');" class="bg-purple-600 hover:bg-purple-500 px-3 py-1 rounded-lg text-xs font-bold text-white transition">Перейти</button>
-                `;
-                recList.appendChild(div);
-            });
-
             groupsArr.forEach(group => {
                 const isMember = group.members.includes(currentUser.login);
-                const isLeader = group.creator === currentUser.login;
-                const myRole = group.roles?.[currentUser.login] || (isLeader ? 'Лидер' : 'Участник');
+                if (isMember) {
+                    const opt = document.createElement('option');
+                    opt.value = group.id;
+                    opt.textContent = group.name;
+                    select.appendChild(opt);
+                }
 
                 const card = document.createElement('div');
-                card.className = 'p-3 bg-gray-800 rounded-xl border border-gray-700/50 space-y-2';
-                
-                let membersHTML = '<div class="text-xs text-gray-400 mt-1">Участники и роли:</div><div class="space-y-1 mt-1">';
-                group.members.forEach(m => {
-                    const mLeader = group.creator === m;
-                    const mRole = group.roles?.[m] || (mLeader ? 'Лидер' : 'Участник');
-                    membersHTML += `
-                        <div class="flex justify-between items-center text-xs bg-gray-900 p-2 rounded-lg">
-                            <span class="text-white">${m} ${mLeader ? '⭐' : ''} <span class="text-purple-400 font-semibold">[${mRole}]</span></span>
-                            ${(isLeader && !mLeader) ? `
-                                <div class="space-x-1">
-                                    <button onclick="setGroupRole('${group.id}', '${m}', 'Админ')" class="bg-blue-600 hover:bg-blue-500 px-2 py-0.5 rounded text-[10px]">Админ</button>
-                                    <button onclick="setGroupRole('${group.id}', '${m}', 'Участник')" class="bg-gray-700 hover:bg-gray-600 px-2 py-0.5 rounded text-[10px]">Участник</button>
-                                    <button onclick="kickGroupMember('${group.id}', '${m}')" class="bg-red-600 hover:bg-red-500 px-2 py-0.5 rounded text-[10px]">Выгнать</button>
-                                </div>
-                            ` : ''}
-                        </div>
-                    `;
-                });
-                membersHTML += '</div>';
-
+                card.className = 'p-3 bg-gray-800 rounded-xl border border-gray-700/50 flex items-center justify-between';
                 card.innerHTML = `
-                    <div class="flex items-center justify-between">
-                        <div>
-                            <div class="font-bold text-white">${group.name}</div>
-                            <div class="text-xs text-gray-400">Роль: <span class="text-purple-400">${myRole}</span> | Участников: ${group.members.length}</div>
-                        </div>
-                        ${isMember ? `
-                            <button onclick="selectChat({type:'group', id:'${group.id}'}); switchTab('chats');" class="bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded-lg text-xs font-bold text-white transition">Открыть</button>
-                        ` : `
-                            <button onclick="joinGroup('${group.id}')" class="bg-purple-600 hover:bg-purple-500 px-3 py-1 rounded-lg text-xs font-bold text-white transition shadow-[0_0_15px_rgba(168,85,247,0.3)]">Вступить</button>
-                        `}
+                    <div>
+                        <div class="font-bold text-white">${group.name}</div>
+                        <div class="text-xs text-gray-400">Участников: ${group.members.length}</div>
                     </div>
-                    ${isMember ? membersHTML : ''}
+                    ${isMember ? `
+                        <button onclick="selectChat({type:'group', id:'${group.id}'}); switchTab('chats');" class="bg-blue-600 hover:bg-blue-500 px-3 py-1 rounded-lg text-xs font-bold text-white transition">Открыть</button>
+                    ` : `
+                        <button onclick="joinGroup('${group.id}')" class="bg-purple-600 hover:bg-purple-500 px-3 py-1 rounded-lg text-xs font-bold text-white transition">Вступить</button>
+                    `}
                 `;
                 list.appendChild(card);
             });
+            renderGroupsFeed();
         }
 
         async function createNewGroup() {
@@ -1266,38 +1160,52 @@
             }
         }
 
-        async function setGroupRole(groupId, targetLogin, newRole) {
-            const res = await fetch('/api/set-group-role', {
+        async function publishGroupPost() {
+            const groupId = document.getElementById('group-post-select').value;
+            const textInput = document.getElementById('group-post-text');
+            const text = textInput.value.trim();
+            if (!groupId || !text) {
+                alert('Выберите группу и введите текст поста!');
+                return;
+            }
+
+            const res = await fetch('/api/create-group-post', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ groupId, login: currentUser.login, targetLogin, newRole })
+                body: JSON.stringify({ groupId, author: currentUser.login, text })
             });
             const data = await res.json();
             if (data.success) {
                 db = data.db;
-                renderGroups();
-            } else {
-                alert(data.error);
+                textInput.value = '';
+                renderGroupsFeed();
             }
         }
 
-        async function kickGroupMember(groupId, targetLogin) {
-            if (!confirm(`Выгнать пользователя ${targetLogin} из группы?`)) return;
-            const res = await fetch('/api/kick-group-member', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ groupId, login: currentUser.login, targetLogin })
+        function renderGroupsFeed() {
+            const feedList = document.getElementById('groups-feed-list');
+            feedList.innerHTML = '';
+
+            Object.values(db.groups || {}).forEach(group => {
+                if (group.posts && group.posts.length > 0) {
+                    group.posts.forEach((post, pIdx) => {
+                        const card = document.createElement('div');
+                        card.className = 'bg-gray-900 border border-gray-800 p-4 rounded-2xl space-y-2';
+                        card.innerHTML = `
+                            <div class="flex justify-between items-center text-xs text-purple-400 font-bold">
+                                <span>🏢 ${group.name}</span>
+                                <span class="text-gray-400 font-normal">${post.time}</span>
+                            </div>
+                            <div class="text-sm font-semibold text-white">@${post.author}</div>
+                            <div class="text-gray-200 text-sm">${post.text}</div>
+                        `;
+                        feedList.appendChild(card);
+                    });
+                }
             });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                renderGroups();
-            } else {
-                alert(data.error);
-            }
         }
 
-        // НОВОСТИ И ПОСТЫ
+        // НОВОСТИ И АКТУАЛЬНЫЕ НОВОСТИ ИЗ ИНТЕРНЕТА
         function renderNewsFeed() {
             const list = document.getElementById('news-feed-list');
             list.innerHTML = '';
@@ -1309,17 +1217,6 @@
                     if (post.media.type === 'image') mediaHTML = `<img src="${post.media.url}" class="w-full rounded-2xl my-2 border border-gray-800">`;
                     if (post.media.type === 'video') mediaHTML = `<video src="${post.media.url}" controls class="w-full rounded-2xl my-2 border border-gray-800"></video>`;
                 }
-
-                let commentsHTML = '<div class="space-y-2 mt-3 pt-3 border-t border-gray-800">';
-                (post.comments || []).forEach(c => {
-                    commentsHTML += `<div class="text-xs bg-gray-800 p-2 rounded-xl text-gray-300"><span class="font-bold text-purple-400">@${c.author}:</span> ${c.text}</div>`;
-                });
-                commentsHTML += `
-                    <div class="flex space-x-2 mt-2">
-                        <input type="text" id="comment-input-${pIdx}" placeholder="Написать комментарий..." class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-purple-500">
-                        <button onclick="addComment(${pIdx})" class="bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded-xl text-xs font-bold transition">Отправить</button>
-                    </div>
-                </div>`;
 
                 const card = document.createElement('div');
                 card.className = 'bg-gray-900 border border-gray-800 p-5 rounded-2xl space-y-2 shadow-xl';
@@ -1337,10 +1234,34 @@
                         <button onclick="likePost(${pIdx})" class="text-xs text-purple-400 hover:text-purple-300 transition flex items-center space-x-1">👍 <span>${post.likes || 0}</span></button>
                         <button onclick="dislikePost(${pIdx})" class="text-xs text-red-400 hover:text-red-300 transition flex items-center space-x-1">👎 <span>${post.dislikes || 0}</span></button>
                     </div>
-                    ${commentsHTML}
                 `;
                 list.appendChild(card);
             });
+        }
+
+        async function loadInternetNews() {
+            const list = document.getElementById('internet-news-list');
+            try {
+                const res = await fetch('/api/internet-news');
+                const data = await res.json();
+                list.innerHTML = '';
+                if (data.success && data.news) {
+                    data.news.forEach(item => {
+                        const div = document.createElement('div');
+                        div.className = 'p-3 bg-gray-800/80 rounded-xl border border-gray-700/50 hover:border-purple-500/50 transition';
+                        div.innerHTML = `
+                            <a href="${item.url}" target="_blank" class="font-bold text-white text-sm hover:text-purple-400 transition block">${item.title}</a>
+                            <div class="flex justify-between items-center text-[10px] text-gray-400 mt-1">
+                                <span>Источник: ${item.by}</span>
+                                <span>❤️ ${item.score}</span>
+                            </div>
+                        `;
+                        list.appendChild(div);
+                    });
+                }
+            } catch (e) {
+                list.innerHTML = '<div class="text-gray-500 text-xs">Не удалось загрузить новости.</div>';
+            }
         }
 
         async function handlePostFileUpload(e) {
@@ -1399,24 +1320,7 @@
             }
         }
 
-        async function addComment(pIdx) {
-            const input = document.getElementById(`comment-input-${pIdx}`);
-            const text = input.value.trim();
-            if (!text) return;
-
-            const res = await fetch('/api/news-comment', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ index: pIdx, author: currentUser.login, text })
-            });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                renderNewsFeed();
-            }
-        }
-
-        // TIKTOK / REELS ЛЕНТА (ИСПРАВЛЕННАЯ С INTERSECTION OBSERVER)
+        // TIKTOK / REELS ЛЕНТА ВИДЕО
         function initTikTokFeed() {
             const feed = document.getElementById('tiktok-feed');
             feed.innerHTML = '';
@@ -1431,7 +1335,6 @@
                             video.play().catch(() => {});
                         } else {
                             video.pause();
-                            video.currentTime = 0;
                         }
                     }
                 });
@@ -1453,7 +1356,7 @@
                 const card = document.createElement('div');
                 card.className = 'w-full h-full flex-shrink-0 snap-start relative bg-black flex items-center justify-center border-b border-gray-900';
                 card.innerHTML = `
-                    <video src="${item.url}" loop playsinline class="w-full h-full object-cover"></video>
+                    <video src="${item.url}" loop autoplay muted playsinline class="w-full h-full object-cover"></video>
                     <div class="absolute bottom-6 left-4 z-10 text-white drop-shadow-md">
                         <div class="font-bold text-lg">${item.author}</div>
                         <div class="text-sm opacity-90">${item.desc}</div>
@@ -1461,7 +1364,6 @@
                     <div class="absolute right-4 bottom-12 flex flex-col items-center space-y-4 z-10 text-white">
                         <button onclick="this.classList.toggle('text-red-500')" class="text-2xl hover:scale-125 transition">❤️</button>
                         <button class="text-2xl hover:scale-125 transition">💬</button>
-                        <button class="text-2xl hover:scale-125 transition">↪</button>
                     </div>
                 `;
                 feed.appendChild(card);
@@ -1469,7 +1371,7 @@
             }
         }
 
-        // ИНТЕГРАЦИЯ МУЗЫКИ (ПОИСК, ОБЛОЖКИ, ПРЕВЬЮ)
+        // РАБОЧИЙ ПОИСК МУЗЫКИ
         async function searchMusicTracks() {
             const query = document.getElementById('music-search-input').value.trim();
             const list = document.getElementById('music-results-list');
@@ -1485,7 +1387,7 @@
                         div.className = 'bg-gray-900 border border-gray-800 p-4 rounded-2xl flex items-center justify-between shadow-xl';
                         div.innerHTML = `
                             <div class="flex items-center space-x-3">
-                                <img src="${track.cover || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150'}" class="w-12 h-12 rounded-xl object-cover shadow border border-purple-500/30">
+                                <img src="${track.artwork || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150'}" class="w-12 h-12 rounded-xl object-cover">
                                 <div>
                                     <div class="font-bold text-white">${track.title}</div>
                                     <div class="text-xs text-gray-400">${track.artist}</div>
@@ -1503,7 +1405,7 @@
             }
         }
 
-        // ЗВОНКИ И WEBRTC
+        // ЗВОНКИ И УВЕДОМЛЕНИЯ О ВХОДЯЩЕМ ЗВОНКЕ
         function startDirectCallTo(targetLogin) {
             openUserChat(targetLogin);
             startDirectCall();
@@ -1543,10 +1445,10 @@
         socket.on('incoming-call', async ({ from, offer }) => {
             incomingCallerLogin = from;
             incomingOffer = offer;
-            
+            playNotificationSound();
+
             document.getElementById('incoming-caller-title').textContent = `Входящий вызов от @${from}`;
             document.getElementById('incoming-call-modal').classList.remove('hidden');
-            showNeonNotification('Входящий вызов', `Вам звонит @${from}`);
         });
 
         function acceptIncomingCall() {
@@ -1757,8 +1659,14 @@
             const bio = document.getElementById('profile-bio-input').value;
             const email = document.getElementById('profile-email-input').value;
             const password = document.getElementById('profile-password-input').value;
-            const fileInput = document.getElementById('profile-avatar-file');
+            const confirmPass = document.getElementById('profile-password-confirm').value;
 
+            if (password && password !== confirmPass) {
+                alert('Пароли не совпадают!');
+                return;
+            }
+
+            const fileInput = document.getElementById('profile-avatar-file');
             let avatar = currentUser.avatar;
             if (fileInput.files && fileInput.files[0]) {
                 avatar = await readFileAsDataURL(fileInput.files[0]);
@@ -1767,7 +1675,7 @@
             const res = await fetch('/api/update-profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, name, avatar, bio, email, password })
+                body: JSON.stringify({ login: currentUser.login, name, avatar, bio, email, password: password || undefined })
             });
             const data = await res.json();
             if (data.success) {
@@ -1775,6 +1683,7 @@
                 currentUser = data.user;
                 db = data.db;
                 initApp();
+                switchTab('chats');
             } else {
                 alert(data.error);
             }
