@@ -16,6 +16,19 @@
 
         .mobile-back-btn { display: none; }
 
+        @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .verified-gradient-name {
+            background: linear-gradient(270deg, #38bdf8, #a855f7, #ec4899, #38bdf8);
+            background-size: 300% 300%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: gradientShift 6s ease infinite;
+        }
+
         @media (max-width: 768px) {
             body { overflow: hidden; height: 100dvh; }
             #main-app { flex-direction: row !important; height: 100dvh !important; }
@@ -78,6 +91,37 @@
         </div>
     </div>
 
+    <!-- МОДАЛЬНОЕ ОКНО РЕДАКТИРОВАНИЯ НАРУШЕНИЯ -->
+    <div id="violation-edit-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+        <div class="bg-gray-900 border border-purple-500/50 p-5 rounded-3xl w-[92%] max-w-md shadow-2xl space-y-4">
+            <h3 class="text-lg font-bold text-white">Редактировать и отправить в новости</h3>
+            <textarea id="violation-edit-textarea" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-3 text-white h-28 resize-none focus:outline-none focus:border-purple-500"></textarea>
+            <div class="flex justify-end space-x-2 pt-2">
+                <button onclick="document.getElementById('violation-edit-modal').classList.add('hidden')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-xl text-xs font-bold">Отмена</button>
+                <button onclick="submitViolationEdit()" class="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2 rounded-xl text-xs font-bold shadow">Опубликовать</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО ВЫБОРА МУТА -->
+    <div id="violation-mute-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+        <div class="bg-gray-900 border border-red-500/50 p-5 rounded-3xl w-[92%] max-w-sm shadow-2xl space-y-4 text-center">
+            <h3 class="text-lg font-bold text-red-400">🔇 Выдача мута пользователю</h3>
+            <p class="text-xs text-gray-300">Выберите или введите длительность запрета на отправку сообщений (от 10 минут до 7 суток):</p>
+            <select id="violation-mute-select" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-sm text-white">
+                <option value="10">10 минут</option>
+                <option value="60">1 час</option>
+                <option value="360">6 часов</option>
+                <option value="1440">24 часа (1 сутки)</option>
+                <option value="10080">10080 минут (7 суток)</option>
+            </select>
+            <div class="flex justify-end space-x-2 pt-2">
+                <button onclick="document.getElementById('violation-mute-modal').classList.add('hidden')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-xl text-xs font-bold">Отмена</button>
+                <button onclick="submitViolationMute()" class="bg-red-600 hover:bg-red-500 text-white px-5 py-2 rounded-xl text-xs font-bold shadow">Замутить</button>
+            </div>
+        </div>
+    </div>
+
     <!-- МОДАЛЬНОЕ ОКНО ЗАПРОСОВ В СООБЩЕСТВО -->
     <div id="group-requests-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
         <div class="bg-gray-900 border border-purple-500/50 p-5 sm:p-6 rounded-3xl w-[92%] max-w-md shadow-[0_0_35px_rgba(168,85,247,0.3)] space-y-4 relative">
@@ -92,7 +136,7 @@
         </div>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО НАЗНАЧЕНИЯ РОЛИ ЧЕРЕЗ ПРОФИЛЬ ДРУГА -->
+    <!-- МОДАЛЬНОЕ ОКНО НАЗНАЧЕНИЯ РОЛИ -->
     <div id="role-assign-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
         <div class="bg-gray-900 border border-purple-500/50 p-5 sm:p-6 rounded-3xl w-[92%] max-w-sm shadow-[0_0_35px_rgba(168,85,247,0.3)] space-y-4 relative">
             <button onclick="closeRoleAssignModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-lg font-bold">✕</button>
@@ -384,12 +428,10 @@
                             <span id="ws-group-sidebar-name" class="font-bold text-white truncate text-xs">Группа</span>
                             
                             <div class="flex items-center space-x-1">
-                                <!-- Кнопка запросов на вступление -->
                                 <button onclick="openGroupRequestsModal()" class="relative p-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-xs text-white" title="Запросы на вступление">
                                     📥
                                     <span id="ws-requests-badge-dot" class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-gray-900 hidden shadow-[0_0_6px_rgba(239,68,68,0.8)]"></span>
                                 </button>
-                                <!-- Кнопка верификации группы -->
                                 <div id="ws-verification-btn-container">
                                     <button id="ws-verification-action-btn" onclick="requestGroupVerification()" class="p-1.5 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 rounded-lg text-xs" title="Запросить верификацию">🛡️</button>
                                 </div>
@@ -502,12 +544,11 @@
             <div id="tab-content-moderation" class="flex-1 p-4 sm:p-6 overflow-y-auto hidden space-y-6">
                 <div class="max-w-4xl mx-auto space-y-6">
                     <h2 class="text-xl sm:text-2xl font-bold text-purple-400 flex items-center space-x-2">
-                        <span>🛡️ Отдел Модерации</span>
+                        <span>🛡️️ Отдел Модерации</span>
                     </h2>
 
-                    <!-- Подвкладки модерации -->
                     <div class="flex border-b border-gray-800 space-x-4">
-                        <button onclick="switchModTab('chats')" id="mod-tab-btn-chats" class="pb-2 font-bold text-sm border-b-2 border-purple-500 text-purple-400 transition">Чаты и каналы</button>
+                        <button onclick="switchModTab('chats')" id="mod-tab-btn-chats" class="pb-2 font-bold text-sm border-b-2 border-purple-500 text-purple-400 transition">Общение</button>
                         <button onclick="switchModTab('requests')" id="mod-tab-btn-requests" class="pb-2 font-bold text-sm text-gray-400 hover:text-white transition flex items-center space-x-1">
                             <span>Запросы верификации</span>
                             <span id="verif-count-badge" class="bg-blue-500 text-white text-[10px] px-1.5 py-0.2 rounded-full hidden">0</span>
@@ -518,15 +559,26 @@
                         </button>
                     </div>
 
-                    <!-- 1. Вкладка Чаты -->
+                    <!-- 1. Вкладка Общение -->
                     <div id="mod-section-chats" class="space-y-4">
                         <div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl space-y-3">
-                            <h3 class="text-sm font-bold text-gray-300">💬 Мониторинг и контроль активных чатов</h3>
+                            <h3 class="text-sm font-bold text-gray-300">💬 Создание и управление каналами общения</h3>
+                            <div id="warren-channel-creator" class="bg-gray-950 p-4 rounded-xl border border-purple-500/30 space-y-2">
+                                <span class="text-xs text-purple-300 font-bold block">Создать новый глобальный канал ( Warren / Главный модератор )</span>
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                    <input type="text" id="new-global-channel-name" placeholder="Название канала..." class="bg-gray-800 border border-gray-700 rounded-xl p-2 text-xs text-white">
+                                    <select id="new-global-channel-type" class="bg-gray-800 border border-gray-700 rounded-xl p-2 text-xs text-white">
+                                        <option value="text">💬 Текстовый</option>
+                                        <option value="voice">🎙 Голосовой</option>
+                                    </select>
+                                    <button onclick="createGlobalChannel()" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-xl text-xs font-bold">Создать канал</button>
+                                </div>
+                            </div>
                             <div id="mod-chats-monitor-list" class="space-y-2 max-h-96 overflow-y-auto"></div>
                         </div>
                     </div>
 
-                    <!-- 2. Вкладка Запросы верификации сообществ -->
+                    <!-- 2. Вкладка Запросы верификации -->
                     <div id="mod-section-requests" class="space-y-4 hidden">
                         <div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl space-y-3">
                             <h3 class="text-sm font-bold text-gray-300">🛡️ Запросы на верификацию сообществ</h3>
@@ -539,7 +591,7 @@
                     <!-- 3. Вкладка Нарушения -->
                     <div id="mod-section-violations" class="space-y-4 hidden">
                         <div class="bg-gray-900 border border-red-500/30 p-4 rounded-2xl space-y-3">
-                            <h3 class="text-sm font-bold text-red-400">🚨 Зафиксированные нарушения (Нецензурная лексика)</h3>
+                            <h3 class="text-sm font-bold text-red-400">🚨 Зафиксированные нарушения (Русские маты)</h3>
                             <div id="mod-violations-list" class="space-y-3 max-h-[500px] overflow-y-auto"></div>
                         </div>
                     </div>
@@ -682,7 +734,7 @@
                 </div>
 
                 <div id="leader-roles-manager" class="hidden bg-gray-950 p-4 rounded-2xl border border-purple-500/30 space-y-3">
-                    <h4 class="text-xs font-bold text-purple-300 uppercase">🛡 Управление и настройка ролей и прав</h4>
+                    <h4 class="text-xs font-bold text-purple-300 uppercase">🛡 Управление ролями и правами</h4>
                     <div id="role-permissions-editor-list" class="space-y-2 max-h-48 overflow-y-auto mb-2"></div>
                     <div class="border-t border-gray-800 pt-3">
                         <span class="text-xs text-gray-400 uppercase block mb-1">Создать новую роль</span>
@@ -793,7 +845,7 @@
         const socket = io();
 
         let currentUser = null;
-        let db = { users: {}, messagesStore: {}, friendRequests: {}, outgoingRequests: {}, friends: [], news: [], customNicknames: {}, groups: {}, lastSeen: {}, pinnedMessages: {}, globalRoles: {}, violations: [], groupPostRequests: {}, verificationRequests: [] };
+        let db = { users: {}, messagesStore: {}, friendRequests: {}, outgoingRequests: {}, friends: [], news: [], customNicknames: {}, groups: {}, lastSeen: {}, pinnedMessages: {}, globalRoles: {}, violations: [], groupPostRequests: {}, verificationRequests: [], mutedUsers: {} };
         let activeChat = null;
         let activeGroupWorkspaceId = null;
         let currentUploadedMedia = null;
@@ -824,6 +876,7 @@
 
         let editingMessageId = null;
         let editingPostId = null;
+        let selectedViolationIdForAction = null;
 
         const radioStations = [
             { name: 'Европа Плюс', genre: 'Поп / Хит', url: 'https://ep256.europaplus.ru/ep256_aac', logo: '🌐' },
@@ -1109,7 +1162,7 @@
                 newsPublishCard.innerHTML = `
                     <div class="text-xs text-gray-400 p-3 bg-gray-950 rounded-xl border border-gray-800 text-center">
                         🔒 Публиковать записи напрямую в ленту новостей могут только Warren, Главный модератор и Модератор.<br>
-                        Вы можете дублировать посты через свои сообщества с галочкой <span class="text-purple-300 font-semibold">«Дублировать как объявление в ленту новостей»</span>.
+                        Вы можете дублировать посты через свои верифицированные сообщества с галочкой <span class="text-purple-300 font-semibold">«Дублировать как объявление в ленту новостей»</span>.
                     </div>
                 `;
             }
@@ -1243,6 +1296,16 @@
                 }
             }
 
+            // Доступ к созданию каналов в разделе Общение только для warren и main_moderator
+            const warrenCreator = document.getElementById('warren-channel-creator');
+            if (warrenCreator) {
+                if (currentUser && hasFullAccess(currentUser.login)) {
+                    warrenCreator.classList.remove('hidden');
+                } else {
+                    warrenCreator.classList.add('hidden');
+                }
+            }
+
             if (violList) {
                 violList.innerHTML = '';
                 if (violations.length === 0) {
@@ -1258,8 +1321,11 @@
                             </div>
                             <div class="font-bold text-white">Автор: @${v.author}</div>
                             <div class="text-gray-200 bg-gray-900 p-2 rounded-lg break-words">${v.text}</div>
-                            <div class="flex justify-end space-x-2 pt-1">
-                                <button onclick="resolveViolation('${v.id}')" class="bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded-lg text-white font-bold transition">Очистить / Одобрить</button>
+                            <div class="flex justify-end space-x-2 pt-1 flex-wrap gap-1">
+                                <button onclick="resolveViolationAction('${v.id}', 'approve')" class="bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded-lg text-white font-bold transition">✅ Одобрить</button>
+                                <button onclick="openViolationEditModal('${v.id}', \`${v.text || ''}\`)" class="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-lg text-white font-bold transition">✏️ Редактировать</button>
+                                <button onclick="resolveViolationAction('${v.id}', 'delete')" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg text-gray-200 font-bold transition">🗑 Удалить</button>
+                                <button onclick="openViolationMuteModal('${v.id}')" class="bg-red-600 hover:bg-red-500 px-3 py-1.5 rounded-lg text-white font-bold transition">🔇 Mute</button>
                             </div>
                         `;
                         violList.appendChild(div);
@@ -1316,16 +1382,90 @@
             }
         }
 
-        async function resolveViolation(violId) {
-            const res = await fetch('/api/resolve-violation', {
+        async function createGlobalChannel() {
+            const nameInput = document.getElementById('new-global-channel-name');
+            const typeSelect = document.getElementById('new-global-channel-type');
+            const name = nameInput.value.trim();
+            if (!name) return;
+
+            const res = await fetch('/api/create-global-channel', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, violId })
+                body: JSON.stringify({ login: currentUser.login, name, type: typeSelect.value })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                nameInput.value = '';
+                renderModerationPanel();
+                renderGroups();
+                showCustomModal('Успех', 'Новый канал успешно создан!', false, null, '✨');
+                socket.emit('refresh-db');
+            } else {
+                showCustomModal('Ошибка', data.error, false, null, '⚠️');
+            }
+        }
+
+        function openViolationEditModal(violId, text) {
+            selectedViolationIdForAction = violId;
+            document.getElementById('violation-edit-textarea').value = text;
+            document.getElementById('violation-edit-modal').classList.remove('hidden');
+        }
+
+        async function submitViolationEdit() {
+            if (!selectedViolationIdForAction) return;
+            const newText = document.getElementById('violation-edit-textarea').value.trim();
+            const res = await fetch('/api/resolve-violation-action', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, violId: selectedViolationIdForAction, action: 'edit', newText })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                document.getElementById('violation-edit-modal').classList.add('hidden');
+                selectedViolationIdForAction = null;
+                renderModerationPanel();
+                renderNewsFeed();
+                socket.emit('refresh-db');
+            }
+        }
+
+        function openViolationMuteModal(violId) {
+            selectedViolationIdForAction = violId;
+            document.getElementById('violation-mute-modal').classList.remove('hidden');
+        }
+
+        async function submitViolationMute() {
+            if (!selectedViolationIdForAction) return;
+            const muteMinutes = document.getElementById('violation-mute-select').value;
+            const res = await fetch('/api/resolve-violation-action', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, violId: selectedViolationIdForAction, action: 'mute', muteMinutes })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                document.getElementById('violation-mute-modal').classList.add('hidden');
+                selectedViolationIdForAction = null;
+                renderModerationPanel();
+                showCustomModal('Мут выдан', 'Пользователь временно заблокирован в отправке сообщений.', false, null, '🔇');
+                socket.emit('refresh-db');
+            }
+        }
+
+        async function resolveViolationAction(violId, action) {
+            const res = await fetch('/api/resolve-violation-action', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, violId, action })
             });
             const data = await res.json();
             if (data.success) {
                 db = data.db;
                 renderModerationPanel();
+                renderNewsFeed();
                 socket.emit('refresh-db');
             }
         }
@@ -1771,6 +1911,11 @@
         });
 
         socket.on('receive-group-message', ({ groupId, msg, subgroup }) => {
+            if (msg.sender !== currentUser.login) {
+                unreadGroupsCount++;
+                updateGroupsBadge();
+                playNotificationSound();
+            }
             renderMessages();
             renderModerationPanel();
         });
@@ -1978,8 +2123,8 @@
 
             if (group.isVerified) {
                 verifContainer.innerHTML = `<span class="text-blue-400 text-sm font-bold" title="Сообщество верифицировано">✅</span>`;
-                nameEl.innerHTML = `${group.name} <span class="text-blue-400">✓</span>`;
-                activeNameEl.innerHTML = `${group.name} <span class="text-blue-400" title="Верифицировано">✅</span> (# общий)`;
+                nameEl.innerHTML = `<span class="verified-gradient-name">${group.name}</span> <span class="text-blue-400">✓</span>`;
+                activeNameEl.innerHTML = `<span class="verified-gradient-name font-extrabold">${group.name}</span> <span class="text-blue-400" title="Верифицировано">✅</span> (# общий)`;
             } else if (group.verificationPending) {
                 verifContainer.innerHTML = `<span class="text-yellow-400 text-[10px]" title="На проверке">⏳ На проверке</span>`;
                 nameEl.textContent = group.name;
@@ -2266,7 +2411,7 @@
             if (group.subgroups) {
                 group.subgroups.forEach(sub => {
                     const hasAccess = sub.allowedRole === 'all' || userRole === sub.allowedRole || isLeader || hasFullAccess(currentUser.login);
-                    if (!hasAccess) return; // Скрываем каналы, к которым у роли нет доступа
+                    if (!hasAccess) return;
 
                     const div = document.createElement('div');
                     div.className = `p-2 rounded-xl text-xs font-bold cursor-pointer transition flex items-center justify-between ${activeSubgroup === sub.id ? 'bg-purple-600/30 text-purple-300' : 'text-gray-300 hover:bg-gray-800'}`;
@@ -2593,13 +2738,16 @@
                     actionBtnHTML = `<button onclick="joinGroup('${group.id}')" class="bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white">Вступить</button>`;
                 }
 
+                const nameDisplay = group.isVerified 
+                    ? `<span class="verified-gradient-name font-bold">${group.name}</span> <span class="text-blue-400" title="Верифицировано">✅</span>` 
+                    : `<span class="font-bold text-white">${group.name}</span>`;
+
                 item.innerHTML = `
                     <div class="flex items-center space-x-3">
                         <img src="${getAvatar(group.avatar)}" class="w-10 h-10 rounded-xl object-cover">
                         <div>
-                            <div class="font-bold text-white flex items-center space-x-1">
-                                <span>${group.name}</span>
-                                ${group.isVerified ? '<span class="text-blue-400 text-xs" title="Верифицировано">✅</span>' : ''}
+                            <div class="flex items-center space-x-1">
+                                ${nameDisplay}
                                 ${group.isClosed ? '<span class="text-xs" title="Закрытая">🔒</span>' : ''}
                             </div>
                             <div class="text-xs text-gray-400">${group.members.length} участников</div>
@@ -2612,7 +2760,7 @@
                 if (isMember) {
                     const opt = document.createElement('option');
                     opt.value = group.id;
-                    opt.textContent = group.name;
+                    opt.textContent = group.name + (group.isVerified ? ' (✅ Верифицировано)' : '');
                     select.appendChild(opt);
                 }
             });
@@ -2627,7 +2775,7 @@
             });
             const data = await res.json();
             if (data.success) { db = data.db; renderGroups(); socket.emit('refresh-db'); }
-            else { showCustomModal('Информация', data.error, false, null, '⚠️'); }
+            else { showCustomModal('Информация', data.error, false, null, '⚠️️'); }
         }
 
         async function requestJoinGroup(groupId) {
@@ -2654,6 +2802,12 @@
             const announcement = document.getElementById('group-post-announcement').checked;
 
             if (!groupId || !text) return;
+
+            const group = db.groups[groupId];
+            if (announcement && group && !group.isVerified) {
+                showCustomModal('Верификация не пройдена', 'Без верификации сообщества кнопка «Дублировать в ленте новостей» не работает! Пройдите верификацию в настройках группы.', false, null, '🛡️');
+                return;
+            }
 
             const res = await fetch('/api/publish-group-post', {
                 method: 'POST',
