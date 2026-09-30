@@ -159,7 +159,6 @@
                 <button onclick="removeGlobalMutedUser()" class="w-full bg-green-600 hover:bg-green-500 text-white py-1.5 rounded-lg font-bold">Снять глобальный мут</button>
             </div>
 
-            <!-- КНОПКИ ВЫДАЧИ / СНЯТИЯ МУТА ИЗ ПРОФИЛЯ -->
             <div id="profile-mute-manage-box" class="bg-gray-950 p-3 rounded-xl border border-purple-500/30 text-xs space-y-2">
                 <div class="font-bold text-purple-300">🔇 Управление мутом игрока</div>
                 <div class="space-y-2">
@@ -209,7 +208,6 @@
                     <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Пароль</label>
                     <input type="password" id="password-input" required class="w-full bg-gray-800 border border-gray-700 rounded-xl p-3 text-white focus:outline-none focus:border-purple-500 transition">
                 </div>
-                <!-- ГАЛОЧКА СОХРАНЕНИЯ СЕССИИ -->
                 <div class="flex items-center space-x-2">
                     <input type="checkbox" id="remember-session-checkbox" checked class="accent-purple-500 w-4 h-4 rounded cursor-pointer">
                     <label for="remember-session-checkbox" class="text-xs text-gray-300 cursor-pointer select-none">Сохранить сессию (не спрашивать вход при обновлении)</label>
@@ -288,7 +286,6 @@
                     <span class="text-[10px] font-medium tracking-tight">Радио</span>
                 </button>
 
-                <!-- ВКЛАДКА МОДЕРАЦИИ -->
                 <button onclick="switchTab('moderation')" id="nav-moderation" title="Модерация" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition relative hidden">
                     <span class="text-lg mb-0.5">🛡</span>
                     <span class="text-[10px] font-medium tracking-tight">Мод-ция</span>
@@ -413,7 +410,6 @@
                 <div id="groups-main-view" class="flex-1 p-4 sm:p-6 overflow-y-auto space-y-6 h-full pb-12">
                     <h2 class="text-xl sm:text-2xl font-bold text-purple-400">Сообщества и Группы</h2>
                     
-                    <!-- ПОИСК ГРУПП ПО НАЗВАНИЮ -->
                     <div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl shadow-xl max-w-7xl mb-4">
                         <input type="text" id="group-search-input" oninput="filterGroupsList()" placeholder="🔍 Поиск групп по названию..." class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500 transition">
                     </div>
@@ -1941,6 +1937,32 @@
             } catch (e) {}
         }
 
+        function playPhoneRing() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc1 = ctx.createOscillator();
+                const osc2 = ctx.createOscillator();
+                const gain = ctx.createGain();
+
+                osc1.type = 'sine';
+                osc2.type = 'sine';
+                osc1.frequency.setValueAtTime(440, ctx.currentTime);
+                osc2.frequency.setValueAtTime(480, ctx.currentTime);
+
+                gain.gain.setValueAtTime(0.15, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.2);
+
+                osc1.connect(gain);
+                osc2.connect(gain);
+                gain.connect(ctx.destination);
+
+                osc1.start();
+                osc2.start();
+                osc1.stop(ctx.currentTime + 1.2);
+                osc2.stop(ctx.currentTime + 1.2);
+            } catch (e) {}
+        }
+
         function renderRadioStations() {
             const list = document.getElementById('radio-stations-list');
             if (!list) return;
@@ -2917,6 +2939,13 @@
                 socket.emit('join-voice-channel', { roomKey: activeVoiceRoomKey, login: currentUser.login });
                 showCustomModal('Голосовой канал', `Вы вошли в голосовой канал: ${subName}`, false, null, '🎙️');
 
+                // Очищаем старые слушатели во избежание утечек и дублирования
+                socket.off('user-joined-voice');
+                socket.off('voice-offer');
+                socket.off('voice-answer');
+                socket.off('voice-candidate');
+                socket.off('user-left-voice');
+
                 socket.on('user-joined-voice', async ({ socketId, login }) => {
                     const pc = createVoicePeerConnection(socketId, login);
                     localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
@@ -2958,11 +2987,14 @@
                 });
 
             } catch (e) {
-                showCustomModal('Ошибка', 'Не удалось подключиться к голосовому каналу (проверьте микрофон).', false, null, '⚠️️');
+                showCustomModal('Ошибка', 'Не удалось подключиться к голосовому каналу (проверьте микрофон).', false, null, '⚠');
             }
         }
 
         function createVoicePeerConnection(socketId, login) {
+            if (voicePeerConnections[socketId]) {
+                voicePeerConnections[socketId].close();
+            }
             const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
             const pc = new RTCPeerConnection(config);
             voicePeerConnections[socketId] = pc;
@@ -3731,7 +3763,7 @@
                 await pc.setLocalDescription(offer);
                 socket.emit('call-offer', { targetLogin, offer, callerLogin: currentUser.login });
 
-                outgoingRingtoneInterval = setInterval(() => playNotificationSound(), 1500);
+                outgoingRingtoneInterval = setInterval(() => playPhoneRing(), 1500);
             }).catch(() => {
                 showCustomModal('Ошибка', 'Нет доступа к микрофону для звонка', false, null, '⚠️');
                 hangUpCall();
@@ -3781,7 +3813,7 @@
             document.getElementById('incoming-caller-title').textContent = `Входящий вызов от @${callerLogin}`;
             document.getElementById('incoming-call-modal').classList.remove('hidden');
 
-            incomingRingtoneInterval = setInterval(() => playNotificationSound(), 1200);
+            incomingRingtoneInterval = setInterval(() => playPhoneRing(), 1500);
         });
 
         async function acceptIncomingCall() {
