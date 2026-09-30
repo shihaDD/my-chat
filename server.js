@@ -45,6 +45,8 @@ if (fs.existsSync(DB_FILE)) {
             if (!db.groups[gId].posts) db.groups[gId].posts = [];
             if (!db.groups[gId].messages) db.groups[gId].messages = [];
             if (!db.groups[gId].avatar) db.groups[gId].avatar = 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150';
+            if (db.groups[gId].isClosed === undefined) db.groups[gId].isClosed = false;
+            if (!db.groups[gId].joinRequests) db.groups[gId].joinRequests = [];
         }
     } catch (e) {
         console.error('Ошибка чтения database.json:', e);
@@ -57,6 +59,20 @@ function saveDb() {
     } catch (e) {
         console.error('Ошибка сохранения базы данных:', e);
     }
+}
+
+function getUserGlobalRole(login) {
+    if (!login) return 'user';
+    const l = login.toLowerCase();
+    if (l === 'warren') return 'warren';
+    return db.globalRoles?.[l] || 'user';
+}
+
+function hasFullAccess(login) {
+    if (!login) return false;
+    const l = login.toLowerCase();
+    const role = getUserGlobalRole(login);
+    return l === 'warren' || role === 'main_moderator' || role === 'moderator';
 }
 
 app.get('/api/internet-news', async (req, res) => {
@@ -142,7 +158,7 @@ app.post('/api/update-profile', (req, res) => {
 app.post('/api/set-global-role', (req, res) => {
     const { login, targetLogin, newRole } = req.body;
     const cleanLogin = login ? login.trim().toLowerCase() : '';
-    if (cleanLogin !== 'warren' && db.globalRoles?.[cleanLogin] !== 'main_moderator') {
+    if (cleanLogin !== 'warren' && getUserGlobalRole(cleanLogin) !== 'main_moderator') {
         return res.json({ success: false, error: 'Недостаточно прав!' });
     }
     if (!db.globalRoles) db.globalRoles = {};
@@ -228,7 +244,7 @@ app.post('/api/remove-friend', (req, res) => {
 });
 
 app.post('/api/create-group', (req, res) => {
-    const { name } = req.body;
+    const { name, isClosed } = req.body;
     const creator = req.body.creator || req.body.login;
     if (!name || !creator) return res.json({ success: false, error: 'Недостаточно данных' });
 
@@ -244,6 +260,8 @@ app.post('/api/create-group', (req, res) => {
             'Админ': { canPost: true, canDelete: true, canVoice: true },
             'Участник': { canPost: false, canDelete: false, canVoice: true }
         },
+        isClosed: !!isClosed,
+        joinRequests: [],
         messages: [],
         posts: [],
         subgroups: [],
@@ -259,7 +277,7 @@ app.post('/api/delete-group', (req, res) => {
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
     const isLeader = group.creator === login;
-    if (!isLeader && login.toLowerCase() !== 'warren' && getUserGlobalRole(login) !== 'main_moderator') {
+    if (!isLeader && !hasFullAccess(login)) {
         return res.json({ success: false, error: 'Недостаточно прав!' });
     }
     delete db.groups[groupId];
@@ -269,14 +287,15 @@ app.post('/api/delete-group', (req, res) => {
 });
 
 app.post('/api/update-group', (req, res) => {
-    const { groupId, name, avatar, login } = req.body;
+    const { groupId, name, avatar, isClosed, login } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
-    if (group.creator !== login && group.roles?.[login] !== 'Админ' && login.toLowerCase() !== 'warren') {
+    if (group.creator !== login && group.roles?.[login] !== 'Админ' && !hasFullAccess(login)) {
         return res.json({ success: false, error: 'Недостаточно прав!' });
     }
     if (name) group.name = name.trim();
     if (avatar) group.avatar = avatar;
+    if (isClosed !== undefined) group.isClosed = !!isClosed;
     saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db, group });
@@ -287,6 +306,10 @@ app.post('/api/join-group', (req, res) => {
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
 
+    if (group.isClosed) {
+        return res.json({ success: false, error: 'Эта группа закрытая. Подайте заявку на вступление.' });
+    }
+
     if (!group.members.includes(login)) {
         group.members.push(login);
         group.roles[login] = 'Участник';
@@ -296,13 +319,53 @@ app.post('/api/join-group', (req, res) => {
     res.json({ success: true, db });
 });
 
+app.post('/api/request-join-group', (req, res) => {
+    const { groupId, login } = req.body;
+    const group = db.groups[groupId];
+    if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
+    if (group.members.includes(login)) return res.json({ success: false, error: 'Вы уже участник группы' });
+
+    if (!group.joinRequests) group.joinRequests = [];
+    if (!group.joinRequests.includes(login)) {
+        group.joinRequests.push(login);
+        saveDb();
+        io.emit('update-db', db);
+    }
+    res.json({ success: true, db });
+});
+
+app.post('/api/respond-join-request', (req, res) => {
+    const { groupId, login, targetLogin, accept } = req.body;
+    const group = db.groups[groupId];
+    if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
+
+    const isLeader = group.creator === login;
+    const myRole = group.roles?.[login];
+    if (!isLeader && myRole !== 'Админ' && !hasFullAccess(login)) {
+        return res.json({ success: false, error: 'Недостаточно прав!' });
+    }
+
+    if (group.joinRequests) {
+        group.joinRequests = group.joinRequests.filter(l => l !== targetLogin);
+    }
+    if (accept) {
+        if (!group.members.includes(targetLogin)) {
+            group.members.push(targetLogin);
+            group.roles[targetLogin] = 'Участник';
+        }
+    }
+    saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
 app.post('/api/set-group-role', (req, res) => {
     const { groupId, login, targetLogin, newRole } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
 
     const isLeader = group.creator === login;
-    if (!isLeader && group.roles?.[login] !== 'Админ' && login.toLowerCase() !== 'warren') {
+    if (!isLeader && group.roles?.[login] !== 'Админ' && !hasFullAccess(login)) {
         return res.json({ success: false, error: 'Недостаточно прав для изменения ролей!' });
     }
     if (!group.roles) group.roles = {};
@@ -316,7 +379,7 @@ app.post('/api/create-custom-role', (req, res) => {
     const { groupId, login, roleName, permissions } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
-    if (group.creator !== login && login.toLowerCase() !== 'warren') {
+    if (group.creator !== login && !hasFullAccess(login)) {
         return res.json({ success: false, error: 'Только лидер группы может создавать роли!' });
     }
     if (!group.customRoles) group.customRoles = {};
@@ -329,11 +392,25 @@ app.post('/api/create-custom-role', (req, res) => {
     res.json({ success: true, db });
 });
 
+app.post('/api/update-role-permissions', (req, res) => {
+    const { groupId, login, roleName, permissions } = req.body;
+    const group = db.groups[groupId];
+    if (!group) return res.json({ success: false, error: 'Группа не найдена' });
+    if (group.creator !== login && group.roles?.[login] !== 'Админ' && !hasFullAccess(login)) {
+        return res.json({ success: false, error: 'Недостаточно прав!' });
+    }
+    if (!group.customRoles) group.customRoles = {};
+    group.customRoles[roleName] = permissions;
+    saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
 app.post('/api/delete-custom-role', (req, res) => {
     const { groupId, login, roleName } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
-    if (group.creator !== login && login.toLowerCase() !== 'warren') {
+    if (group.creator !== login && !hasFullAccess(login)) {
         return res.json({ success: false, error: 'Только лидер группы может удалять роли!' });
     }
     if (roleName === 'Лидер' || roleName === 'Админ' || roleName === 'Участник') {
@@ -354,7 +431,7 @@ app.post('/api/kick-group-member', (req, res) => {
 
     const isLeader = group.creator === login;
     const myRole = group.roles?.[login];
-    if (!isLeader && myRole !== 'Админ' && login.toLowerCase() !== 'warren') {
+    if (!isLeader && myRole !== 'Админ' && !hasFullAccess(login)) {
         return res.json({ success: false, error: 'Только лидер и админы могут исключать участников!' });
     }
     if (group.creator === targetLogin) {
@@ -375,7 +452,7 @@ app.post('/api/create-subgroup', (req, res) => {
 
     const isLeader = group.creator === login;
     const myRole = group.roles?.[login] || (isLeader ? 'Лидер' : 'Участник');
-    if (!isLeader && myRole !== 'Админ' && login.toLowerCase() !== 'warren') {
+    if (!isLeader && myRole !== 'Админ' && !hasFullAccess(login)) {
         return res.json({ success: false, error: 'Недостаточно прав для создания канала!' });
     }
 
@@ -391,7 +468,7 @@ app.post('/api/delete-subgroup', (req, res) => {
     const { groupId, subId, login } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
-    if (group.creator !== login && group.roles?.[login] !== 'Админ' && login.toLowerCase() !== 'warren') {
+    if (group.creator !== login && group.roles?.[login] !== 'Админ' && !hasFullAccess(login)) {
         return res.json({ success: false, error: 'Недостаточно прав!' });
     }
     group.subgroups = (group.subgroups || []).filter(s => s.id !== subId);
@@ -404,6 +481,14 @@ app.post('/api/publish-group-post', (req, res) => {
     const { groupId, login, text, media, announcement } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
+
+    const isLeader = group.creator === login;
+    const userRole = isLeader ? 'Лидер' : (group.roles?.[login] || 'Участник');
+    const rolePerms = group.customRoles?.[userRole] || { canPost: userRole !== 'Участник', canDelete: false, canVoice: true };
+
+    if (!rolePerms.canPost && !isLeader && !hasFullAccess(login)) {
+        return res.json({ success: false, error: 'У вашей роли нет прав на публикацию постов в этой группе!' });
+    }
 
     if (!group.posts) group.posts = [];
     const postId = 'gpost_' + Date.now();
@@ -434,6 +519,16 @@ app.post('/api/delete-group-post', (req, res) => {
     const group = db.groups[groupId];
     if (!group || !group.posts) return res.json({ success: false, error: 'Пост не найден' });
 
+    const post = group.posts.find(p => p.id === postId);
+    if (!post) return res.json({ success: false, error: 'Пост не найден' });
+
+    const isLeader = group.creator === login;
+    const userRole = group.roles?.[login];
+    const canDelByRole = group.customRoles?.[userRole]?.canDelete;
+    if (post.author !== login && !isLeader && !canDelByRole && !hasFullAccess(login)) {
+        return res.json({ success: false, error: 'Недостаточно прав для удаления поста!' });
+    }
+
     group.posts = group.posts.filter(p => p.id !== postId);
     saveDb();
     io.emit('update-db', db);
@@ -447,6 +542,15 @@ app.post('/api/send-message', (req, res) => {
     const msgObj = { id: messageId || 'msg_' + Date.now() + '_' + Math.random(), sender, text: text || '', media: media || null, time, timestamp, edited: false, read: false };
 
     if (chatType === 'group' && chatId) {
+        const group = db.groups[chatId];
+        if (group) {
+            const isLeader = group.creator === sender;
+            const userRole = isLeader ? 'Лидер' : (group.roles?.[sender] || 'Участник');
+            const rolePerms = group.customRoles?.[userRole] || { canPost: userRole !== 'Участник', canDelete: false, canVoice: true };
+            if (!rolePerms.canPost && !isLeader && !hasFullAccess(sender)) {
+                return res.json({ success: false, error: 'У вашей роли нет прав на отправку сообщений в этом канале!' });
+            }
+        }
         const key = `group_${chatId}_${subgroup || 'main'}`;
         if (!db.messagesStore[key]) db.messagesStore[key] = [];
         db.messagesStore[key].push(msgObj);
@@ -474,7 +578,7 @@ app.post('/api/edit-message', (req, res) => {
     let found = false;
     for (let key in db.messagesStore) {
         db.messagesStore[key].forEach(m => {
-            if (m.id === messageId && m.sender === login) {
+            if (m.id === messageId && (m.sender === login || hasFullAccess(login))) {
                 m.text = newText;
                 m.edited = true;
                 found = true;
@@ -486,7 +590,7 @@ app.post('/api/edit-message', (req, res) => {
         io.emit('update-db', db);
         res.json({ success: true, db });
     } else {
-        res.json({ success: false, error: 'Сообщение не найдено' });
+        res.json({ success: false, error: 'Сообщение не найдено или нет прав' });
     }
 });
 
@@ -495,7 +599,7 @@ app.post('/api/delete-message', (req, res) => {
     let found = false;
     for (let key in db.messagesStore) {
         const beforeLen = db.messagesStore[key].length;
-        db.messagesStore[key] = db.messagesStore[key].filter(m => !(m.id === messageId && (m.sender === login || login.toLowerCase() === 'warren')));
+        db.messagesStore[key] = db.messagesStore[key].filter(m => !(m.id === messageId && (m.sender === login || hasFullAccess(login))));
         if (db.messagesStore[key].length < beforeLen) found = true;
     }
     if (found) {
@@ -542,7 +646,7 @@ app.post('/api/edit-news', (req, res) => {
     const { login, postId, newText } = req.body;
     const post = db.news.find(p => p.id === postId);
     if (!post) return res.json({ success: false, error: 'Новость не найдена' });
-    if (post.author !== login && login.toLowerCase() !== 'warren') {
+    if (post.author !== login && !hasFullAccess(login)) {
         return res.json({ success: false, error: 'Недостаточно прав' });
     }
     post.text = newText;
@@ -555,7 +659,7 @@ app.post('/api/delete-news', (req, res) => {
     const { login, postId } = req.body;
     const post = db.news.find(p => p.id === postId);
     if (!post) return res.json({ success: false, error: 'Новость не найдена' });
-    if (post.author !== login && login.toLowerCase() !== 'warren') {
+    if (post.author !== login && !hasFullAccess(login)) {
         return res.json({ success: false, error: 'Недостаточно прав' });
     }
     db.news = db.news.filter(p => p.id !== postId);
