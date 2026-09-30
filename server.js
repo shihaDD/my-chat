@@ -248,6 +248,24 @@ app.post('/api/set-global-role', async (req, res) => {
     res.json({ success: true, db });
 });
 
+app.post('/api/set-global-mute', async (req, res) => {
+    const { login, targetLogin, muteMinutes, reason } = req.body;
+    const cleanLogin = login ? login.trim().toLowerCase() : '';
+    if (!hasFullAccess(cleanLogin)) {
+        return res.json({ success: false, error: 'Недостаточно прав!' });
+    }
+    if (!db.mutedUsers) db.mutedUsers = {};
+    const mins = parseInt(muteMinutes) || 60;
+    const clampedMins = Math.min(Math.max(mins, 1), 9999);
+    db.mutedUsers[targetLogin.trim().toLowerCase()] = {
+        expires: Date.now() + (clampedMins * 60 * 1000),
+        reason: reason || 'Нарушение правил'
+    };
+    await saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
 app.post('/api/remove-global-mute', async (req, res) => {
     const { login, targetLogin } = req.body;
     const cleanLogin = login ? login.trim().toLowerCase() : '';
