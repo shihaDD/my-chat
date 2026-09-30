@@ -261,7 +261,7 @@
                             <button onclick="cancelEditing()" class="text-xs text-gray-400 hover:text-white font-bold">✕ Отмена</button>
                         </div>
 
-                        <!-- ПАНЕЛЬ ВВОДА С ИСПРАВЛЕННОЙ МОБИЛЬНОЙ КНОПКОЙ ОТПРАВКИ И РАЦИЕЙ -->
+                        <!-- ПАНЕЛЬ ВВОДА (БЕЗ ПОДСКАЗОК РАЦИИ) -->
                         <div id="chat-input-wrapper" class="p-3 md:p-4 bg-gray-900 border-t border-gray-800 flex items-center space-x-2 flex-shrink-0">
                             <label class="cursor-pointer p-2 text-gray-400 hover:text-white transition flex-shrink-0" title="Прикрепить файл">
                                 📎
@@ -274,15 +274,8 @@
 
                             <canvas id="voice-waveform" class="w-16 md:w-24 h-6 hidden bg-gray-950 rounded border border-purple-500/30 flex-shrink-0"></canvas>
 
-                            <!-- ПОДСКАЗКА И МЕРЦАЮЩИЙ ИНДИКАТОР РАЦИИ -->
-                            <div class="flex items-center space-x-1 overflow-hidden flex-shrink-0">
-                                <div id="ptt-chat-hint" class="text-[10px] text-purple-400 font-mono hidden truncate">Рация: <span id="ptt-hint-key-name">Space</span></div>
-                                <div id="ptt-talking-indicator" class="bg-green-600 text-white text-[11px] font-bold px-2 py-1 rounded-xl shadow-[0_0_20px_rgba(34,197,94,0.8)] hidden animate-pulse flex-shrink-0">🟢 Говорите</div>
-                            </div>
-
                             <input type="text" id="message-input" oninput="handleTyping()" onkeydown="if(event.key==='Enter') sendMessage()" placeholder="Сообщение..." class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 md:px-4 py-2 text-sm text-white focus:outline-none focus:border-purple-500 transition min-w-[60px]">
                             
-                            <!-- КНОПКА ОТПРАВКИ (ГАРАНТИРОВАННО ВИДИМА В МОБИЛЬНОЙ ВЕРСИИ) -->
                             <button onclick="sendMessage()" class="bg-purple-600 hover:bg-purple-500 text-white px-3 md:px-5 py-2 rounded-xl font-bold transition shadow-[0_0_15px_rgba(168,85,247,0.3)] flex items-center justify-center flex-shrink-0">
                                 <span class="md:hidden text-base">📤</span>
                                 <span class="hidden md:inline text-xs md:text-sm">Отправить</span>
@@ -539,7 +532,7 @@
                 </div>
 
                 <div id="leader-delete-section" class="hidden pt-2 border-t border-gray-800">
-                    <button onclick="deleteCurrentGroupModal()" class="w-full bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white py-2.5 rounded-xl font-bold transition text-xs">🗑️ Удалить группу</button>
+                    <button onclick="deleteCurrentGroupModal()" class="w-full bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white py-2.5 rounded-xl font-bold transition text-xs">🗑️️ Удалить группу</button>
                 </div>
             </div>
             <div class="flex justify-end pt-2">
@@ -715,6 +708,7 @@
         let isPttPressed = false;
         let capturingKey = false;
         let videoObserver = null;
+        let isInCallOrConference = false;
 
         const funnyVideosPool = [
             { url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4', author: '@meme_lord', desc: 'Когда пытаешься починить код в 3 часа ночи 💻😂 #dev #it' },
@@ -1015,19 +1009,14 @@
         }
 
         function updatePttUIState() {
-            const hint = document.getElementById('ptt-chat-hint');
             const callPtt = document.getElementById('call-ptt-status');
-            const hintKeyName = document.getElementById('ptt-hint-key-name');
             const callKey = document.getElementById('call-ptt-key');
 
-            if (hintKeyName) hintKeyName.textContent = appSettings.pttKey;
             if (callKey) callKey.textContent = appSettings.pttKey;
 
             if (appSettings.pttMode === 'ptt') {
-                if (hint) hint.classList.remove('hidden');
                 if (callPtt) callPtt.classList.remove('hidden');
             } else {
-                if (hint) hint.classList.add('hidden');
                 if (callPtt) callPtt.classList.add('hidden');
             }
         }
@@ -1076,15 +1065,16 @@
             };
         }
 
+        // РАЦИЯ РАБОТАЕТ СТРОГО ВО ВРЕМЯ ЗВОНКОВ
         function setupPttListeners() {
             window.addEventListener('keydown', (e) => {
-                if (appSettings.pttMode === 'ptt' && e.code === appSettings.pttKey && !isPttPressed && !e.repeat) {
+                if (isInCallOrConference && appSettings.pttMode === 'ptt' && e.code === appSettings.pttKey && !isPttPressed && !e.repeat) {
                     isPttPressed = true;
                     applyPttAudioState(true);
                 }
             });
             window.addEventListener('keyup', (e) => {
-                if (appSettings.pttMode === 'ptt' && e.code === appSettings.pttKey && isPttPressed) {
+                if (isInCallOrConference && appSettings.pttMode === 'ptt' && e.code === appSettings.pttKey && isPttPressed) {
                     isPttPressed = false;
                     applyPttAudioState(false);
                 }
@@ -1095,14 +1085,9 @@
             if (localStream) {
                 localStream.getAudioTracks().forEach(track => { track.enabled = enabled; });
             }
-            const chatIndicator = document.getElementById('ptt-talking-indicator');
             const callIndicator = document.getElementById('call-ptt-talking-indicator');
             const callHintText = document.getElementById('call-ptt-hint-text');
 
-            if (chatIndicator) {
-                if (enabled) chatIndicator.classList.remove('hidden');
-                else chatIndicator.classList.add('hidden');
-            }
             if (callIndicator && callHintText) {
                 if (enabled) {
                     callHintText.classList.add('hidden');
@@ -2238,7 +2223,6 @@
             }
         }
 
-        // НАДЕЖНОЕ АВТОВОСПРОИЗВЕДЕНИЕ ВИДЕО ПРИ СКРОЛЛЕ
         function initVideoFeed() {
             const feed = document.getElementById('tiktok-feed');
             feed.innerHTML = '';
@@ -2304,6 +2288,7 @@
             if (!activeChat || activeChat.type !== 'user') return;
             callTargetUser = activeChat.id;
 
+            isInCallOrConference = true;
             document.getElementById('minimized-direct-call-widget').classList.add('hidden');
             document.getElementById('call-partner-name').textContent = `Аудиовызов @${callTargetUser}`;
             document.getElementById('minimized-call-partner').textContent = `@${callTargetUser}`;
@@ -2358,6 +2343,7 @@
             stopIncomingRingtone();
             document.getElementById('incoming-call-modal').classList.add('hidden');
             callTargetUser = incomingCallerLogin;
+            isInCallOrConference = true;
             document.getElementById('call-partner-name').textContent = `Аудиоразговор с @${callTargetUser}`;
             document.getElementById('minimized-call-partner').textContent = `@${callTargetUser}`;
             document.getElementById('call-status-text').textContent = 'Разговор';
@@ -2379,6 +2365,7 @@
         }
 
         async function acceptCallCore() {
+            isInCallOrConference = true;
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
             } catch (err) {
@@ -2429,6 +2416,7 @@
         function closeCallUI() {
             stopOutgoingRingtone();
             stopIncomingRingtone();
+            isInCallOrConference = false;
             if (localStream) localStream.getTracks().forEach(t => t.stop());
             if (peerConnection) peerConnection.close();
             peerConnection = null;
@@ -2463,6 +2451,7 @@
             currentCallGroupId = groupId;
             currentCallChannelId = channelId;
             conferenceParticipants = {};
+            isInCallOrConference = true;
             document.getElementById('group-audio-grid').innerHTML = '';
             document.getElementById('conference-participants-sidebar').innerHTML = '';
             document.getElementById('minimized-call-widget').classList.add('hidden');
@@ -2543,6 +2532,7 @@
             if (currentCallGroupId) socket.emit('leave-group-call', { groupId: currentCallGroupId, channelId: currentCallChannelId, login: currentUser.login });
             Object.values(groupPeerConnections).forEach(pc => pc.close());
             groupPeerConnections = {};
+            isInCallOrConference = false;
             if (localStream) localStream.getTracks().forEach(t => t.stop());
 
             document.getElementById('group-call-modal').classList.add('hidden');
