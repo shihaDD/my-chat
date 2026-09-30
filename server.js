@@ -34,6 +34,12 @@ if (fs.existsSync(DB_FILE)) {
         for (let gId in db.groups) {
             if (!db.groups[gId].subgroups) db.groups[gId].subgroups = [];
             if (!db.groups[gId].roles) db.groups[gId].roles = {};
+            if (!db.groups[gId].customRoles) {
+                db.groups[gId].customRoles = {
+                    'Админ': { canPost: true, canDelete: true, canVoice: true },
+                    'Участник': { canPost: false, canDelete: false, canVoice: true }
+                };
+            }
             if (!db.groups[gId].posts) db.groups[gId].posts = [];
             if (!db.groups[gId].messages) db.groups[gId].messages = [];
             if (!db.groups[gId].avatar) db.groups[gId].avatar = 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150';
@@ -207,6 +213,10 @@ app.post('/api/create-group', (req, res) => {
         avatar: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150',
         members: [creator],
         roles: { [creator]: 'Лидер' },
+        customRoles: {
+            'Админ': { canPost: true, canDelete: true, canVoice: true },
+            'Участник': { canPost: false, canDelete: false, canVoice: true }
+        },
         messages: [],
         posts: [],
         subgroups: [],
@@ -258,6 +268,41 @@ app.post('/api/set-group-role', (req, res) => {
     group.roles[targetLogin] = newRole;
     saveDb();
     io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
+app.post('/api/create-custom-role', (req, res) => {
+    const { groupId, login, roleName, permissions } = req.body;
+    const group = db.groups[groupId];
+    if (!group) return res.json({ success: false, error: 'Группа не найдена' });
+    if (group.creator !== login) {
+        return res.json({ success: false, error: 'Только лидер группы может создавать роли!' });
+    }
+    if (!group.customRoles) group.customRoles = {};
+    const cleanName = roleName.trim();
+    if (!cleanName) return res.json({ success: false, error: 'Введите название роли' });
+
+    group.customRoles[cleanName] = permissions || { canPost: true, canDelete: true, canVoice: true };
+    saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
+app.post('/api/delete-custom-role', (req, res) => {
+    const { groupId, login, roleName } = req.body;
+    const group = db.groups[groupId];
+    if (!group) return res.json({ success: false, error: 'Группа не найдена' });
+    if (group.creator !== login) {
+        return res.json({ success: false, error: 'Только лидер группы может удалять роли!' });
+    }
+    if (roleName === 'Лидер' || roleName === 'Админ' || roleName === 'Участник') {
+        return res.json({ success: false, error: 'Нельзя удалить системную роль!' });
+    }
+    if (group.customRoles && group.customRoles[roleName]) {
+        delete group.customRoles[roleName];
+        saveDb();
+        io.emit('update-db', db);
+    }
     res.json({ success: true, db });
 });
 
@@ -321,8 +366,10 @@ app.post('/api/create-group-post', (req, res) => {
 
     const isLeader = group.creator === author;
     const myRole = group.roles?.[author] || (isLeader ? 'Лидер' : 'Участник');
-    if (!isLeader && myRole !== 'Админ') {
-        return res.json({ success: false, error: 'Только лидер и админы могут публиковать посты!' });
+    const rolePermissions = group.customRoles?.[myRole] || { canPost: myRole === 'Лидер' || myRole === 'Админ' };
+    
+    if (!isLeader && myRole !== 'Админ' && !rolePermissions.canPost) {
+        return res.json({ success: false, error: 'Ваша роль не имеет прав на публикацию постов!' });
     }
 
     if (!group.posts) group.posts = [];
@@ -341,8 +388,9 @@ app.post('/api/delete-group-post', (req, res) => {
     const post = group.posts[postIndex];
     const isLeader = group.creator === login;
     const myRole = group.roles?.[login] || (isLeader ? 'Лидер' : 'Участник');
+    const rolePermissions = group.customRoles?.[myRole] || {};
 
-    if (!isLeader && myRole !== 'Админ' && post.author !== login) {
+    if (!isLeader && myRole !== 'Админ' && !rolePermissions.canDelete && post.author !== login) {
         return res.json({ success: false, error: 'Недостаточно прав для удаления поста!' });
     }
 
@@ -492,6 +540,10 @@ io.on('connection', (socket) => {
     socket.on('register', (login) => {
         socket.login = login;
         socket.join(login);
+    });
+
+    socket.on('join-group-room', (groupId) => {
+        socket.join(groupId);
     });
 
     socket.on('refresh-db', () => {
