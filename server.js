@@ -25,7 +25,9 @@ let db = {
     news: [],
     lastSeen: {},
     pinnedMessages: {},
-    globalRoles: {}
+    globalRoles: {},
+    violations: [],
+    groupPostRequests: {}
 };
 
 if (fs.existsSync(DB_FILE)) {
@@ -33,6 +35,8 @@ if (fs.existsSync(DB_FILE)) {
         const data = fs.readFileSync(DB_FILE, 'utf8');
         const parsed = JSON.parse(data);
         db = { ...db, ...parsed };
+        if (!db.violations) db.violations = [];
+        if (!db.groupPostRequests) db.groupPostRequests = {};
         for (let gId in db.groups) {
             if (!db.groups[gId].subgroups) db.groups[gId].subgroups = [];
             if (!db.groups[gId].roles) db.groups[gId].roles = {};
@@ -73,6 +77,12 @@ function hasFullAccess(login) {
     const l = login.toLowerCase();
     const role = getUserGlobalRole(login);
     return l === 'warren' || role === 'main_moderator' || role === 'moderator';
+}
+
+function containsMat(text) {
+    if (!text) return false;
+    const matRegex = /(ху[йяёеи]|пизд|бля[дт]|ебат|ебал|ебну|сука|сучк|мразь|уёб|выёб|заёб|поёб|наёб|отёб|гандон|мондавош)/i;
+    return matRegex.test(text);
 }
 
 app.get('/api/internet-news', async (req, res) => {
@@ -490,6 +500,20 @@ app.post('/api/publish-group-post', (req, res) => {
         return res.json({ success: false, error: 'У вашей роли нет прав на публикацию постов в этой группе!' });
     }
 
+    if (!db.violations) db.violations = [];
+    if (containsMat(text)) {
+        db.violations.push({
+            id: 'viol_' + Date.now(),
+            author: login,
+            source: 'group_post',
+            groupId,
+            groupName: group.name,
+            text: text || '',
+            media: media || null,
+            timestamp: Date.now()
+        });
+    }
+
     if (!group.posts) group.posts = [];
     const postId = 'gpost_' + Date.now();
     const postObj = { id: postId, author: login, text: text || '', media: media || null, timestamp: Date.now(), likes: 0 };
@@ -634,6 +658,23 @@ app.post(['/api/news', '/api/publish-news'], (req, res) => {
     const { login, author, text, media } = req.body;
     const postAuthor = author || login;
     if (!postAuthor) return res.json({ success: false, error: 'Автор не указан' });
+
+    if (!hasFullAccess(postAuthor)) {
+        return res.json({ success: false, error: 'Публиковать новости могут только модераторы и Warren!' });
+    }
+
+    if (!db.violations) db.violations = [];
+    if (containsMat(text)) {
+        db.violations.push({
+            id: 'viol_' + Date.now(),
+            author: postAuthor,
+            source: 'news',
+            text: text || '',
+            media: media || null,
+            timestamp: Date.now()
+        });
+    }
+
     const time = new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const postId = 'post_' + Date.now();
     db.news.unshift({ id: postId, author: postAuthor, text: text || '', media: media || null, time, timestamp: Date.now(), likes: 0, dislikes: 0, comments: [] });
@@ -663,6 +704,16 @@ app.post('/api/delete-news', (req, res) => {
         return res.json({ success: false, error: 'Недостаточно прав' });
     }
     db.news = db.news.filter(p => p.id !== postId);
+    saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
+app.post('/api/resolve-violation', (req, res) => {
+    const { login, violId } = req.body;
+    if (!hasFullAccess(login)) return res.json({ success: false, error: 'Недостаточно прав' });
+    if (!db.violations) db.violations = [];
+    db.violations = db.violations.filter(v => v.id !== violId);
     saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
