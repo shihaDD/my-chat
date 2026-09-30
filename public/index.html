@@ -28,7 +28,7 @@
                 flex-direction: row !important;
                 height: 100dvh !important;
             }
-            /* Левый вертикальный столбик навигации на смартфонах */
+            /* Левый вертикальный столбик навигации на смартфонах (только иконки) */
             .nav-sidebar {
                 width: 56px !important;
                 height: 100dvh !important;
@@ -172,9 +172,11 @@
                     <img id="my-avatar-icon" src="" class="w-full h-full rounded-[14px] object-cover">
                 </button>
 
-                <button onclick="switchTab('chats')" id="nav-chats" title="Чаты" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
+                <button onclick="switchTab('chats')" id="nav-chats" title="Чаты" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition relative">
                     <span class="text-lg mb-0.5">💬</span>
                     <span class="text-[10px] font-medium tracking-tight">Чаты</span>
+                    <!-- Значок уведомлений на вкладке чатов -->
+                    <span id="chats-badge" class="absolute top-1 right-3 w-3 h-3 bg-red-500 rounded-full border-2 border-gray-900 hidden shadow-[0_0_8px_rgba(239,68,68,0.8)]"></span>
                 </button>
                 <button onclick="switchTab('friends')" id="nav-friends" title="Друзья" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
                     <span class="text-lg mb-0.5">👥</span>
@@ -284,6 +286,9 @@
                             <button id="btn-voice" onclick="toggleVoiceRecord()" title="Голосовое сообщение" class="p-2 text-gray-400 hover:text-red-500 transition flex items-center space-x-1">
                                 🎙 <span id="voice-timer" class="text-xs text-red-500 font-mono hidden">00:00</span>
                             </button>
+
+                            <!-- Подсказка режима Рации (PTT) в чате -->
+                            <div id="ptt-chat-hint" class="text-[10px] text-purple-400 font-mono px-2 hidden">Рация: зажмите <span id="ptt-hint-key-name">Space</span></div>
 
                             <input type="text" id="message-input" oninput="handleTyping()" onkeydown="if(event.key==='Enter') sendMessage()" placeholder="Напишите сообщение..." class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-purple-500 transition">
                             
@@ -587,12 +592,20 @@
         </div>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО ГОЛОСОВОГО ЗВОНКА -->
+    <!-- МОДАЛЬНОЕ ОКНО ГОЛОСОВОГО ЗВОНКА С ДРУГОМ -->
     <div id="single-call-modal" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col items-center justify-between p-8 hidden">
-        <div class="text-center text-white space-y-2 pt-10">
+        <div class="w-full flex justify-between items-center z-10">
+            <div class="flex items-center space-x-3">
+                <button onclick="toggleMyCallMute()" id="btn-call-mute" class="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition">🎙 Выключить микрофон</button>
+            </div>
+            <button onclick="minimizeDirectCall()" class="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition">📉 Свернуть</button>
+        </div>
+
+        <div class="text-center text-white space-y-2">
             <div class="w-24 h-24 rounded-full bg-purple-600/30 border-2 border-purple-500 flex items-center justify-center mx-auto text-4xl shadow-[0_0_30px_rgba(168,85,247,0.4)] animate-bounce">🎙️</div>
             <h2 id="call-partner-name" class="text-3xl font-bold">Голосовой вызов...</h2>
             <p id="call-status-text" class="text-gray-400 text-sm animate-pulse">Установление аудиосоединения</p>
+            <div id="call-ptt-status" class="text-xs text-purple-400 font-mono hidden pt-1">Рация: Нажмите и удерживайте <span id="call-ptt-key">Space</span> для разговора</div>
         </div>
         <audio id="remote-audio" autoplay></audio>
         <div class="flex space-x-4 pb-10">
@@ -602,6 +615,19 @@
             <button onclick="hangUpCall()" class="bg-red-600 hover:bg-red-500 text-white px-8 py-3 rounded-full font-bold transition shadow-[0_0_15px_rgba(239,68,68,0.4)]">
                 ❌ Завершить
             </button>
+        </div>
+    </div>
+
+    <!-- ПЛАВАЮЩЕЕ МИНИ-ОКОШКО СВЕРНУТОГО ЛИЧНОГО ЗВОНКА -->
+    <div id="minimized-direct-call-widget" class="fixed bottom-6 right-6 z-50 bg-gray-900 border border-purple-500/60 p-4 rounded-2xl shadow-[0_0_25px_rgba(168,85,247,0.4)] flex items-center space-x-4 hidden backdrop-blur-md">
+        <div class="w-10 h-10 rounded-full bg-purple-600/30 border border-purple-500 flex items-center justify-center text-xl animate-pulse">🎙</div>
+        <div>
+            <div class="font-bold text-white text-xs">Аудиозвонок</div>
+            <div id="minimized-call-partner" class="text-[10px] text-purple-400">Активен</div>
+        </div>
+        <div class="flex space-x-2">
+            <button onclick="restoreDirectCall()" class="bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-[0_0_10px_rgba(168,85,247,0.3)]">Развернуть</button>
+            <button onclick="hangUpCall()" class="bg-red-600 hover:bg-red-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition">Завершить</button>
         </div>
     </div>
 
@@ -678,6 +704,7 @@
         let conferenceParticipants = {};
         let mutedByAdmin = false;
         let outgoingRingtoneInterval = null;
+        let unreadMessagesMap = {}; // Учет непрочитанных по чатам
 
         let appSettings = { audioDevice: '', audioOutput: '', pttMode: 'voice', pttKey: 'Space', micVolume: 80 };
         let isPttPressed = false;
@@ -946,10 +973,25 @@
             document.getElementById(`nav-${tab}`)?.classList.add('bg-gray-800', 'text-purple-400');
             document.getElementById(`nav-${tab}`)?.classList.remove('text-gray-400');
 
+            if (tab === 'chats') {
+                // При открытии вкладки чатов сбрасываем уведомления
+                unreadMessagesMap = {};
+                updateChatsBadge();
+            }
             if (tab === 'friends') renderFriends();
             if (tab === 'groups') renderGroups();
             if (tab === 'news') { renderNewsFeed(); loadInternetNews(); }
             if (tab === 'music') renderRadioStations();
+        }
+
+        function updateChatsBadge() {
+            const badge = document.getElementById('chats-badge');
+            const totalUnread = Object.values(unreadMessagesMap).reduce((a, b) => a + b, 0);
+            if (totalUnread > 0) {
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
         }
 
         function openSettingsModal() {
@@ -962,6 +1004,22 @@
             appSettings.audioDevice = document.getElementById('audio-device-select').value;
             appSettings.audioOutput = document.getElementById('audio-output-select').value;
             appSettings.micVolume = document.getElementById('mic-volume-range').value;
+            updatePttUIState();
+        }
+
+        function updatePttUIState() {
+            const hint = document.getElementById('ptt-chat-hint');
+            const callPtt = document.getElementById('call-ptt-status');
+            document.getElementById('ptt-hint-key-name').textContent = appSettings.pttKey;
+            document.getElementById('call-ptt-key').textContent = appSettings.pttKey;
+
+            if (appSettings.pttMode === 'ptt') {
+                hint.classList.remove('hidden');
+                callPtt.classList.remove('hidden');
+            } else {
+                hint.classList.add('hidden');
+                callPtt.classList.add('hidden');
+            }
         }
 
         async function loadAudioDevices() {
@@ -1013,17 +1071,28 @@
             };
         }
 
+        // РАБОЧИЙ РЕЖИМ РАЦИИ (PTT)
         function setupPttListeners() {
             window.addEventListener('keydown', (e) => {
                 if (appSettings.pttMode === 'ptt' && e.code === appSettings.pttKey && !isPttPressed) {
                     isPttPressed = true;
+                    applyPttAudioState(true);
                 }
             });
             window.addEventListener('keyup', (e) => {
                 if (appSettings.pttMode === 'ptt' && e.code === appSettings.pttKey) {
                     isPttPressed = false;
+                    applyPttAudioState(false);
                 }
             });
+        }
+
+        function applyPttAudioState(enabled) {
+            if (localStream) {
+                localStream.getAudioTracks().forEach(track => {
+                    track.enabled = enabled;
+                });
+            }
         }
 
         function playNotificationSound() {
@@ -1319,16 +1388,20 @@
             myFriends.forEach(friendLogin => {
                 const friendObj = db.users[friendLogin] || { avatar: 'https://via.placeholder.com/150', name: friendLogin };
                 const displayName = db.customNicknames[currentUser.login]?.[friendLogin] || friendObj.name;
+                const unreadCount = unreadMessagesMap[friendLogin] || 0;
 
                 const item = document.createElement('div');
-                item.className = `p-3 rounded-2xl cursor-pointer flex items-center space-x-3 hover:bg-gray-800 transition ${activeChat?.type === 'user' && activeChat?.id === friendLogin ? 'bg-gray-800' : ''}`;
+                item.className = `p-3 rounded-2xl cursor-pointer flex items-center justify-between hover:bg-gray-800 transition ${activeChat?.type === 'user' && activeChat?.id === friendLogin ? 'bg-gray-800' : ''}`;
                 item.onclick = () => selectChat({ type: 'user', id: friendLogin });
                 item.innerHTML = `
-                    <img src="${friendObj.avatar}" class="w-10 h-10 rounded-full object-cover flex-shrink-0">
-                    <div class="overflow-hidden">
-                        <div class="font-bold text-white truncate">${displayName}</div>
-                        <div class="text-xs text-gray-400 truncate">@${friendLogin}</div>
+                    <div class="flex items-center space-x-3 overflow-hidden">
+                        <img src="${friendObj.avatar}" class="w-10 h-10 rounded-full object-cover flex-shrink-0">
+                        <div class="overflow-hidden">
+                            <div class="font-bold text-white truncate">${displayName}</div>
+                            <div class="text-xs text-gray-400 truncate">@${friendLogin}</div>
+                        </div>
                     </div>
+                    ${unreadCount > 0 ? `<span class="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">${unreadCount}</span>` : ''}
                 `;
                 list.appendChild(item);
             });
@@ -1613,6 +1686,12 @@
         function selectChat(chat) {
             activeChat = chat;
             activeSubgroup = 'main';
+
+            if (chat.type === 'user') {
+                delete unreadMessagesMap[chat.id];
+                updateChatsBadge();
+                markMessagesAsRead(chat.id);
+            }
             renderChatsList();
 
             document.getElementById('no-chat-selected').classList.add('hidden');
@@ -1634,7 +1713,6 @@
                 btnCall.classList.add('hidden');
                 sidebar.classList.add('hidden');
             } else if (chat.type === 'user') {
-                markMessagesAsRead(chat.id);
                 const friendObj = db.users[chat.id] || {};
                 const displayName = db.customNicknames[currentUser.login]?.[chat.id] || friendObj.name || chat.id;
                 document.getElementById('active-chat-name').textContent = displayName;
@@ -1655,6 +1733,7 @@
             }
 
             renderMessages();
+            updatePttUIState();
         }
 
         function backToChatList() {
@@ -1853,7 +1932,12 @@
             playNotificationSound();
             showWebNotification(`Новое сообщение от @${sender}`, msg.text || 'Медиа файл');
 
-            if (activeChat && activeChat.type === 'user' && activeChat.id === peer) {
+            // Увеличиваем счетчик непрочитанных, если этот чат сейчас не открыт
+            if (!activeChat || activeChat.type !== 'user' || activeChat.id !== peer) {
+                unreadMessagesMap[peer] = (unreadMessagesMap[peer] || 0) + 1;
+                updateChatsBadge();
+                renderChatsList();
+            } else {
                 renderMessages();
                 markMessagesAsRead(peer);
             }
@@ -2075,7 +2159,7 @@
                     openGroupSettings(groupId);
                     renderGroups();
                 } else {
-                    showCustomModal('Ошибка', data.error, false, null, '⚠️');
+                    showCustomModal('Ошибка', data.error, false, null, '⚠️️');
                 }
             }, '⚠️');
         }
@@ -2324,7 +2408,7 @@
                         <div class="text-sm opacity-90">${item.desc}</div>
                     </div>
                     <div class="absolute right-4 bottom-12 flex flex-col items-center space-y-4 z-10 text-white">
-                        <button onclick="this.classList.toggle('text-red-500')" class="text-2xl hover:scale-125 transition">❤️</button>
+                        <button onclick="this.classList.toggle('text-red-500')" class="text-2xl hover:scale-125 transition">❤️️</button>
                         <button class="text-2xl hover:scale-125 transition">💬</button>
                     </div>
                 `;
@@ -2333,7 +2417,7 @@
             }
         }
 
-        // ЗВОНКИ И КОНФЕРЕНЦИИ
+        // ЗВОНКИ С ДРУГОМ (МЬЮТ И СВОРАЧИВАНИЕ)
         function startDirectCallTo(targetLogin) {
             openUserChat(targetLogin);
             startDirectCall();
@@ -2343,12 +2427,13 @@
             if (!activeChat || activeChat.type !== 'user') return;
             callTargetUser = activeChat.id;
 
+            document.getElementById('minimized-direct-call-widget').classList.add('hidden');
             document.getElementById('call-partner-name').textContent = `Аудиовызов @${callTargetUser}`;
+            document.getElementById('minimized-call-partner').textContent = `@${callTargetUser}`;
             document.getElementById('call-status-text').textContent = 'Вызов...';
             document.getElementById('btn-accept-call').classList.add('hidden');
             document.getElementById('single-call-modal').classList.remove('hidden');
 
-            // Запускаем звук исходящего вызова (гудки КПВ)
             startOutgoingRingtone();
 
             try {
@@ -2378,14 +2463,15 @@
             await peerConnection.setLocalDescription(offer);
 
             socket.emit('call-user', { to: callTargetUser, offer, from: currentUser.login });
+            updatePttUIState();
         }
 
-        socket.on('incoming-call', async ({ from, offer, isGroup, groupId, channelId }) => {
+        socket.on('incoming-call', async ({ from, offer }) => {
             incomingCallerLogin = from;
             incomingOffer = offer;
             playNotificationSound();
 
-            document.getElementById('incoming-caller-title').textContent = isGroup ? `Входящая конференция от @${from}` : `Входящий аудиовызов от @${from}`;
+            document.getElementById('incoming-caller-title').textContent = `Входящий аудиозвонок от @${from}`;
             document.getElementById('incoming-call-modal').classList.remove('hidden');
         });
 
@@ -2393,6 +2479,7 @@
             document.getElementById('incoming-call-modal').classList.add('hidden');
             callTargetUser = incomingCallerLogin;
             document.getElementById('call-partner-name').textContent = `Аудиоразговор с @${callTargetUser}`;
+            document.getElementById('minimized-call-partner').textContent = `@${callTargetUser}`;
             document.getElementById('call-status-text').textContent = 'Разговор';
             document.getElementById('btn-accept-call').classList.add('hidden');
             document.getElementById('single-call-modal').classList.remove('hidden');
@@ -2415,7 +2502,7 @@
             try {
                 localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
             } catch (err) {
-                showCustomModal('Ошибка', 'Нет доступа к микрофону!', false, null, '⚠️');
+                showCustomModal('Ошибка', 'Нет доступа к микрофону!', false, null, '⚠️️');
                 return;
             }
 
@@ -2439,10 +2526,11 @@
             await peerConnection.setLocalDescription(answer);
 
             socket.emit('call-accepted', { to: callTargetUser, answer });
+            updatePttUIState();
         }
 
         socket.on('call-answered', async ({ answer }) => {
-            stopOutgoingRingtone(); // Останавливаем гудки при ответе
+            stopOutgoingRingtone();
             document.getElementById('call-status-text').textContent = 'Разговор';
             await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
         });
@@ -2473,7 +2561,34 @@
             peerConnection = null;
             localStream = null;
             document.getElementById('single-call-modal').classList.add('hidden');
+            document.getElementById('minimized-direct-call-widget').classList.add('hidden');
             document.getElementById('incoming-call-modal').classList.add('hidden');
+        }
+
+        function minimizeDirectCall() {
+            document.getElementById('single-call-modal').classList.add('hidden');
+            document.getElementById('minimized-direct-call-widget').classList.remove('hidden');
+        }
+
+        function restoreDirectCall() {
+            document.getElementById('minimized-direct-call-widget').classList.add('hidden');
+            document.getElementById('single-call-modal').classList.remove('hidden');
+        }
+
+        function toggleMyCallMute() {
+            if (!localStream) return;
+            const audioTrack = localStream.getAudioTracks()[0];
+            if (audioTrack) {
+                audioTrack.enabled = !audioTrack.enabled;
+                const btn = document.getElementById('btn-call-mute');
+                if (audioTrack.enabled) {
+                    btn.textContent = '🎙 Выключить микрофон';
+                    btn.className = 'bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition';
+                } else {
+                    btn.textContent = '🔇 Включить микрофон';
+                    btn.className = 'bg-red-600/80 hover:bg-red-600 text-white px-4 py-2 rounded-xl text-xs font-bold transition';
+                }
+            }
         }
 
         async function joinGroupVoiceChannel(groupId, channelId) {
@@ -2639,7 +2754,7 @@
 
         socket.on('mod-kick-action', () => {
             leaveGroupCall();
-            showCustomModal('Модерация', 'Вас отключили от голосового канала', false, null, '⚠️️');
+            showCustomModal('Модерация', 'Вас отключили от голосового канала', false, null, '⚠️');
         });
 
         function leaveGroupCall() {
