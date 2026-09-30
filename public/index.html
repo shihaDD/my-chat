@@ -78,6 +78,7 @@
                 Добро пожаловать
             </h1>
 
+            <!-- АКТУАЛЬНЫЕ ПОДСКАЗКИ И ОШИБКИ АВТОРИЗАЦИИ -->
             <div id="auth-alert" class="mb-4 p-3 rounded-xl text-xs font-semibold hidden transition-all"></div>
 
             <div class="flex border-b border-gray-800 mb-6 relative z-10">
@@ -263,7 +264,6 @@
                                 🎙 <span id="voice-timer" class="text-xs text-red-500 font-mono hidden">00:00</span>
                             </button>
 
-                            <!-- Волновой визуализатор звука при записи -->
                             <canvas id="voice-waveform" class="w-24 h-6 hidden bg-gray-950 rounded border border-purple-500/30"></canvas>
 
                             <div class="flex items-center space-x-2">
@@ -273,8 +273,10 @@
 
                             <input type="text" id="message-input" oninput="handleTyping()" onkeydown="if(event.key==='Enter') sendMessage()" placeholder="Напишите сообщение..." class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-purple-500 transition">
                             
-                            <button onclick="sendMessage()" class="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2 rounded-xl font-bold transition shadow-[0_0_15px_rgba(168,85,247,0.3)]">
-                                Отправить
+                            <!-- АДАПТИВНАЯ КНОПКА ОТПРАВКИ (ИКОНКА НА МОБИЛЬНЫХ, ТЕКСТ НА ПК) -->
+                            <button onclick="sendMessage()" class="bg-purple-600 hover:bg-purple-500 text-white px-3 md:px-5 py-2 rounded-xl font-bold transition shadow-[0_0_15px_rgba(168,85,247,0.3)] flex items-center justify-center flex-shrink-0">
+                                <span class="md:hidden text-base">📤</span>
+                                <span class="hidden md:inline">Отправить</span>
                             </button>
                         </div>
                     </div>
@@ -744,14 +746,19 @@
             }
         }
 
-        function showAuthAlert(message, type = 'success') {
+        // ОБНОВЛЕННАЯ СИСТЕМА ПОДСКАЗОК И ОШИБОК АВТОРИЗАЦИИ
+        function showAuthAlert(message, type = 'error') {
             const alertEl = document.getElementById('auth-alert');
             alertEl.textContent = message;
             alertEl.classList.remove('hidden', 'bg-green-600/20', 'text-green-400', 'border-green-500/30', 'bg-red-600/20', 'text-red-400', 'border-red-500/30', 'bg-yellow-600/20', 'text-yellow-400', 'border-yellow-500/30');
             
-            if (type === 'success') alertEl.classList.add('bg-green-600/20', 'text-green-400', 'border', 'border-green-500/30');
-            else if (type === 'error') alertEl.classList.add('bg-red-600/20', 'text-red-400', 'border', 'border-red-500/30');
-            else alertEl.classList.add('bg-yellow-600/20', 'text-yellow-400', 'border', 'border-yellow-500/30');
+            if (type === 'success') {
+                alertEl.classList.add('bg-green-600/20', 'text-green-400', 'border', 'border-green-500/30');
+            } else if (type === 'error') {
+                alertEl.classList.add('bg-red-600/20', 'text-red-400', 'border', 'border-red-500/30');
+            } else {
+                alertEl.classList.add('bg-yellow-600/20', 'text-yellow-400', 'border', 'border-yellow-500/30');
+            }
         }
 
         function switchAuthTab(tab) {
@@ -810,7 +817,6 @@
             currentUser.avatar = url;
         }
 
-        // ВОССТАНОВЛЕНИЕ СЕССИИ ПРИ ЗАГРУЗКЕ
         window.addEventListener('DOMContentLoaded', async () => {
             const savedLogin = localStorage.getItem('currentUserLogin');
             if (savedLogin) {
@@ -836,6 +842,8 @@
             const login = document.getElementById('login-input').value.trim();
             const password = document.getElementById('password-input').value;
 
+            showAuthAlert('Выполняется вход...', 'info');
+
             const res = await fetch('/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -848,7 +856,7 @@
                 localStorage.setItem('currentUserLogin', currentUser.login);
                 initApp();
             } else {
-                showCustomModal('Ошибка входа', data.error || 'Неверные данные', false, null, '⚠️');
+                showAuthAlert(data.error || 'Неверный логин или пароль!', 'error');
             }
         }
 
@@ -860,9 +868,11 @@
             const confirm = document.getElementById('reg-password-confirm').value;
 
             if (password !== confirm) {
-                showCustomModal('Ошибка', 'Пароли не совпадают!', false, null, '⚠️️');
+                showAuthAlert('Пароли не совпадают!', 'error');
                 return;
             }
+
+            showAuthAlert('Регистрация аккаунта...', 'info');
 
             const fileInput = document.getElementById('reg-avatar-file');
             let avatar = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150';
@@ -877,9 +887,10 @@
             });
             const data = await res.json();
             if (data.success) {
-                showCustomModal('Успех', 'Регистрация успешна! Войдите в систему.', false, () => switchAuthTab('login'), '🎉');
+                showAuthAlert('Регистрация успешна! Теперь вы можете войти.', 'success');
+                setTimeout(() => switchAuthTab('login'), 1200);
             } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠️');
+                showAuthAlert(data.error || 'Ошибка регистрации!', 'error');
             }
         }
 
@@ -1288,7 +1299,7 @@
                 });
                 const data = await res.json();
                 if (data.success) { db = data.db; renderFriends(); renderChatsList(); socket.emit('refresh-db'); }
-            }, '⚠️');
+            }, '⚠️️');
         }
 
         socket.on('update-db', (updatedDb) => {
@@ -1684,7 +1695,6 @@
             socket.emit('refresh-db');
         }
 
-        // ЗАКРЕПЛЕННЫЕ СООБЩЕНИЯ И РЕАКЦИИ
         function renderPinnedMessageBanner() {
             const banner = document.getElementById('pinned-message-banner');
             const textSpan = document.getElementById('pinned-message-text');
@@ -1693,10 +1703,7 @@
             const key = activeChat.type === 'group' ? `group_${activeChat.id}_${activeSubgroup}` : [currentUser.login, activeChat.id].sort().join('_');
             const pinnedId = db.pinnedMessages?.[key];
 
-            if (!pinnedId) {
-                banner.classList.add('hidden');
-                return;
-            }
+            if (!pinnedId) { banner.classList.add('hidden'); return; }
 
             let msgs = [];
             if (activeChat.type === 'saved') msgs = db.messagesStore[currentUser.login]?.[currentUser.login] || [];
@@ -1904,7 +1911,6 @@
             sendMessage();
         }
 
-        // ВОЛНОВОЙ ВИЗУАЛИЗАТОР ПРИ ЗАПИСИ ГОЛОСОВОГО
         async function toggleVoiceRecord() {
             const timerEl = document.getElementById('voice-timer');
             const canvas = document.getElementById('voice-waveform');
@@ -1938,7 +1944,6 @@
                 canvas.classList.remove('hidden');
                 timerEl.textContent = '00:00';
 
-                // Инициализация Web Audio API для Waveform
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 const source = audioCtx.createMediaStreamSource(stream);
                 analyser = audioCtx.createAnalyser();
@@ -2096,7 +2101,7 @@
         function renderNewsFeed() {
             const list = document.getElementById('news-feed-list');
             list.innerHTML = '';
-            (db.news || []).forEach((post, pIdx) => {
+            (db.news || []).forEach((post) => {
                 const authorObj = db.users[post.author] || { avatar: 'https://via.placeholder.com/150', name: post.author };
                 const card = document.createElement('div');
                 card.className = 'bg-gray-900 border border-gray-800 p-5 rounded-2xl space-y-2 shadow-xl';
@@ -2195,7 +2200,6 @@
             }
         }
 
-        // НАДЕЖНЫЙ ВХОДЯЩИЙ ВЫЗОВ И ЗВОНИЛКА
         function startDirectCallTo(targetLogin) {
             openUserChat(targetLogin);
             startDirectCall();
