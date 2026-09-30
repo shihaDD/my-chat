@@ -154,6 +154,8 @@ app.post('/api/add-friend', (req, res) => {
     db.friendRequests[cleanTarget].push(login);
     db.outgoingRequests[login].push(cleanTarget);
     saveDb();
+    io.to(cleanTarget).emit('update-db', db);
+    io.to(login).emit('update-db', db);
     res.json({ success: true, db });
 });
 
@@ -166,6 +168,8 @@ app.post('/api/cancel-friend-request', (req, res) => {
         db.friendRequests[targetLogin] = db.friendRequests[targetLogin].filter(l => l !== login);
     }
     saveDb();
+    io.to(targetLogin).emit('update-db', db);
+    io.to(login).emit('update-db', db);
     res.json({ success: true, db });
 });
 
@@ -186,6 +190,8 @@ app.post('/api/respond-friend-request', (req, res) => {
         if (!db.friends[requesterLogin].includes(login)) db.friends[requesterLogin].push(login);
     }
     saveDb();
+    io.to(login).emit('update-db', db);
+    io.to(requesterLogin).emit('update-db', db);
     res.json({ success: true, db });
 });
 
@@ -194,6 +200,8 @@ app.post('/api/remove-friend', (req, res) => {
     if (db.friends[login]) db.friends[login] = db.friends[login].filter(l => l !== targetLogin);
     if (db.friends[targetLogin]) db.friends[targetLogin] = db.friends[targetLogin].filter(l => l !== login);
     saveDb();
+    io.to(login).emit('update-db', db);
+    io.to(targetLogin).emit('update-db', db);
     res.json({ success: true, db });
 });
 
@@ -210,9 +218,11 @@ app.post('/api/create-group', (req, res) => {
         roles: { [creator]: 'Лидер' },
         messages: [],
         posts: [],
+        subgroups: [],
         likes: Math.floor(Math.random() * 20)
     };
     saveDb();
+    io.emit('update-db', db);
     res.json({ success: true, db });
 });
 
@@ -225,7 +235,58 @@ app.post('/api/join-group', (req, res) => {
         group.members.push(login);
         group.roles[login] = 'Участник';
         saveDb();
+        io.emit('update-db', db);
     }
+    res.json({ success: true, db });
+});
+
+app.post('/api/set-group-role', (req, res) => {
+    const { groupId, login, targetLogin, newRole } = req.body;
+    const group = db.groups[groupId];
+    if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
+
+    if (group.creator !== login) {
+        return res.json({ success: false, error: 'Только лидер может назначать роли!' });
+    }
+    if (!group.roles) group.roles = {};
+    group.roles[targetLogin] = newRole;
+    saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
+app.post('/api/kick-group-member', (req, res) => {
+    const { groupId, login, targetLogin } = req.body;
+    const group = db.groups[groupId];
+    if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
+
+    if (group.creator !== login) {
+        return res.json({ success: false, error: 'Только лидер может выгонять участников!' });
+    }
+
+    group.members = group.members.filter(m => m !== targetLogin);
+    if (group.roles) delete group.roles[targetLogin];
+    saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
+app.post('/api/create-subgroup', (req, res) => {
+    const { groupId, name, permission, login } = req.body;
+    const group = db.groups[groupId];
+    if (!group) return res.json({ success: false, error: 'Группа не найдена' });
+
+    const isLeader = group.creator === login;
+    const myRole = group.roles?.[login] || (isLeader ? 'Лидер' : 'Участник');
+    if (!isLeader && myRole !== 'Админ') {
+        return res.json({ success: false, error: 'Недостаточно прав для создания подгруппы!' });
+    }
+
+    if (!group.subgroups) group.subgroups = [];
+    const subId = 'sub_' + Date.now();
+    group.subgroups.push({ id: subId, name: name.trim(), permission, messages: [] });
+    saveDb();
+    io.emit('update-db', db);
     res.json({ success: true, db });
 });
 
@@ -234,10 +295,36 @@ app.post('/api/create-group-post', (req, res) => {
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
 
+    const isLeader = group.creator === author;
+    const myRole = group.roles?.[author] || (isLeader ? 'Лидер' : 'Участник');
+    if (!isLeader && myRole !== 'Админ') {
+        return res.json({ success: false, error: 'Только лидер и админы могут публиковать посты!' });
+    }
+
     if (!group.posts) group.posts = [];
     const time = new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     group.posts.unshift({ author, text: text || '', media: media || null, time, likes: 0, comments: [] });
     saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
+app.post('/api/delete-group-post', (req, res) => {
+    const { groupId, login, postIndex } = req.body;
+    const group = db.groups[groupId];
+    if (!group || !group.posts?.[postIndex]) return res.json({ success: false, error: 'Пост не найден' });
+
+    const post = group.posts[postIndex];
+    const isLeader = group.creator === login;
+    const myRole = group.roles?.[login] || (isLeader ? 'Лидер' : 'Участник');
+
+    if (!isLeader && myRole !== 'Админ' && post.author !== login) {
+        return res.json({ success: false, error: 'Недостаточно прав для удаления поста!' });
+    }
+
+    group.posts.splice(postIndex, 1);
+    saveDb();
+    io.emit('update-db', db);
     res.json({ success: true, db });
 });
 
@@ -262,16 +349,25 @@ app.post('/api/send-message', (req, res) => {
 });
 
 app.post('/api/send-group-message', (req, res) => {
-    const { groupId, sender, text, media } = req.body;
+    const { groupId, sender, text, media, subgroup } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
 
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const msgObj = { sender, text: text || '', media: media || null, time, edited: false };
-    group.messages.push(msgObj);
+
+    if (!subgroup || subgroup === 'main') {
+        group.messages.push(msgObj);
+    } else {
+        const sub = group.subgroups?.find(s => s.id === subgroup);
+        if (sub) {
+            if (!sub.messages) sub.messages = [];
+            sub.messages.push(msgObj);
+        }
+    }
 
     saveDb();
-    io.to(groupId).emit('receive-group-message', { groupId, msg: msgObj });
+    io.to(groupId).emit('receive-group-message', { groupId, msg: msgObj, subgroup: subgroup || 'main' });
     res.json({ success: true, db });
 });
 
@@ -280,6 +376,7 @@ app.post('/api/news', (req, res) => {
     const time = new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     db.news.unshift({ author, text: text || '', media: media || null, time, likes: 0, dislikes: 0, comments: [] });
     saveDb();
+    io.emit('update-db', db);
     res.json({ success: true, db });
 });
 
@@ -288,6 +385,7 @@ app.post('/api/news-like', (req, res) => {
     if (db.news[index]) {
         db.news[index].likes = (db.news[index].likes || 0) + 1;
         saveDb();
+        io.emit('update-db', db);
     }
     res.json({ success: true, db });
 });
@@ -297,6 +395,7 @@ app.post('/api/news-dislike', (req, res) => {
     if (db.news[index]) {
         db.news[index].dislikes = (db.news[index].dislikes || 0) + 1;
         saveDb();
+        io.emit('update-db', db);
     }
     res.json({ success: true, db });
 });
@@ -305,6 +404,10 @@ io.on('connection', (socket) => {
     socket.on('register', (login) => {
         socket.login = login;
         socket.join(login);
+    });
+
+    socket.on('refresh-db', () => {
+        socket.emit('update-db', db);
     });
 
     socket.on('call-user', ({ to, offer, from }) => {
