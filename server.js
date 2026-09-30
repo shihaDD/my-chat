@@ -234,6 +234,26 @@ app.post('/api/set-global-role', async (req, res) => {
     res.json({ success: true, db });
 });
 
+app.post('/api/issue-global-mute', async (req, res) => {
+    const { login, targetLogin, muteMinutes, reason } = req.body;
+    const cleanLogin = login ? login.trim().toLowerCase() : '';
+    if (!hasFullAccess(cleanLogin)) {
+        return res.json({ success: false, error: 'Недостаточно прав!' });
+    }
+    if (!db.mutedUsers) db.mutedUsers = {};
+    const cleanTarget = targetLogin.trim().toLowerCase();
+    const mins = parseInt(muteMinutes) || 60;
+    const clampedMins = Math.min(Math.max(mins, 1), 9999);
+    
+    db.mutedUsers[cleanTarget] = {
+        expires: Date.now() + (clampedMins * 60 * 1000),
+        reason: reason || 'Нарушение правил'
+    };
+    await saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
 app.post('/api/remove-global-mute', async (req, res) => {
     const { login, targetLogin } = req.body;
     const cleanLogin = login ? login.trim().toLowerCase() : '';
@@ -884,7 +904,7 @@ app.post('/api/delete-news', async (req, res) => {
 });
 
 app.post('/api/publish-group-post', async (req, res) => {
-    const { groupId, login, text, announcement } = req.body;
+    const { groupId, login, text, media, announcement } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
 
@@ -906,6 +926,7 @@ app.post('/api/publish-group-post', async (req, res) => {
         id: postId,
         author: login,
         text: text || '',
+        media: media || null,
         timestamp: Date.now()
     };
     if (!group.posts) group.posts = [];
@@ -918,7 +939,8 @@ app.post('/api/publish-group-post', async (req, res) => {
             author: login,
             groupName: group.name,
             groupVerified: true,
-            text: text,
+            text: text || '',
+            media: media || null,
             timestamp: Date.now()
         });
     }
@@ -1040,7 +1062,6 @@ io.on('connection', (socket) => {
         socket.join(`group_${groupId}`);
     });
 
-    // Обработчики прямых WebRTC-вызовов
     socket.on('direct-call-offer', ({ callerLogin, targetLogin, offer }) => {
         io.to(targetLogin.toLowerCase()).emit('incoming-call', { callerLogin, offer });
     });
@@ -1092,6 +1113,12 @@ io.on('connection', (socket) => {
         }
         socket.roomKey = null;
         socket.voiceLogin = null;
+    });
+
+    socket.on('voice-speaking', ({ roomKey, login, isSpeaking }) => {
+        if (roomKey) {
+            socket.to(roomKey).emit('user-speaking', { login, isSpeaking });
+        }
     });
 
     socket.on('admin-voice-action', ({ groupId, subId, targetLogin, action, adminLogin }) => {
