@@ -155,17 +155,6 @@ function containsMat(text) {
     return matRegex.test(text);
 }
 
-app.get('/api/internet-news', async (req, res) => {
-    const internetNews = [
-        { title: 'Искусственный интеллект совершил прорыв в квантовых вычислениях', url: '#', score: 1250, by: 'TechNews', time: new Date().toLocaleString() },
-        { title: 'Запущен новый стандарт сверхбыстрой беспроводной связи 6G', url: '#', score: 980, by: 'FutureNet', time: new Date().toLocaleString() },
-        { title: 'Космический телескоп обнаружил экзопланету с признаками воды', url: '#', score: 850, by: 'SpaceObserver', time: new Date().toLocaleString() },
-        { title: 'Релиз революционного движка для веб-разработки и 3D графики', url: '#', score: 720, by: 'DevDaily', time: new Date().toLocaleString() },
-        { title: 'Тренды кибербезопасности и защиты данных в 2026 году', url: '#', score: 640, by: 'SecurityHub', time: new Date().toLocaleString() }
-    ];
-    res.json({ success: true, news: internetNews });
-});
-
 app.post('/api/register', async (req, res) => {
     const { login, name, password, email, avatar } = req.body;
     if (!login || !name || !password) {
@@ -200,9 +189,6 @@ app.post('/api/login', async (req, res) => {
     if (user.password !== password) {
         return res.json({ success: false, error: 'Неверный пароль!' });
     }
-
-    if (!db.outgoingRequests) db.outgoingRequests = {};
-    if (!db.outgoingRequests[cleanLogin]) db.outgoingRequests[cleanLogin] = [];
 
     db.lastSeen[cleanLogin] = Date.now();
     await saveDb();
@@ -278,10 +264,6 @@ app.post('/api/add-friend', async (req, res) => {
     if (!db.friendRequests[cleanTarget]) db.friendRequests[cleanTarget] = [];
     if (!db.outgoingRequests) db.outgoingRequests = {};
     if (!db.outgoingRequests[login]) db.outgoingRequests[login] = [];
-
-    if (db.friendRequests[cleanTarget].includes(login) || db.outgoingRequests[login].includes(cleanTarget)) {
-        return res.json({ success: false, error: 'Заявка уже отправлена!' });
-    }
 
     db.friendRequests[cleanTarget].push(login);
     db.outgoingRequests[login].push(cleanTarget);
@@ -405,7 +387,6 @@ app.post('/api/leave-group', async (req, res) => {
     if (!group.members.includes(login)) return res.json({ success: false, error: 'Вы не участник группы' });
 
     if (group.creator === login) {
-        // Лидер покидает группу: передаем лидерство ближайшему админу или первому участнику
         const otherMembers = group.members.filter(m => m !== login);
         if (otherMembers.length === 0) {
             delete db.groups[groupId];
@@ -413,10 +394,7 @@ app.post('/api/leave-group', async (req, res) => {
             io.emit('update-db', db);
             return res.json({ success: true, db });
         }
-        let nextLeader = otherMembers.find(m => group.roles?.[m] === 'Админ');
-        if (!nextLeader) {
-            nextLeader = otherMembers[0];
-        }
+        let nextLeader = otherMembers.find(m => group.roles?.[m] === 'Админ') || otherMembers[0];
         group.creator = nextLeader;
         group.roles[nextLeader] = 'Лидер';
     }
@@ -443,14 +421,15 @@ app.post('/api/group-mute-member', async (req, res) => {
     }
 
     if (!group.groupMutedUsers) group.groupMutedUsers = {};
+    const cleanTarget = targetLogin.trim().toLowerCase();
     const mins = parseInt(muteMinutes) || 0;
     if (mins <= 0) {
-        delete group.groupMutedUsers[targetLogin];
+        delete group.groupMutedUsers[cleanTarget];
     } else {
         const clampedMins = Math.min(Math.max(mins, 1), 9999);
-        group.groupMutedUsers[targetLogin] = {
+        group.groupMutedUsers[cleanTarget] = {
             expires: Date.now() + (clampedMins * 60 * 1000),
-            reason: reason || 'Нарушение правил'
+            reason: reason || 'Нарушение правил группы'
         };
     }
 
@@ -476,9 +455,9 @@ app.post('/api/group-set-nickname', async (req, res) => {
     if (!group.groupNicknames) group.groupNicknames = {};
     const cleanNick = nickname ? nickname.trim() : '';
     if (!cleanNick) {
-        delete group.groupNicknames[targetLogin];
+        delete group.groupNicknames[targetLogin.toLowerCase()];
     } else {
-        group.groupNicknames[targetLogin] = cleanNick;
+        group.groupNicknames[targetLogin.toLowerCase()] = cleanNick;
     }
 
     await saveDb();
@@ -722,13 +701,13 @@ app.post('/api/send-message', async (req, res) => {
     const { sender, text, media, chatType, chatId, subgroup } = req.body;
     if (!sender) return res.json({ success: false, error: 'Не авторизован' });
 
-    if (db.mutedUsers?.[sender] && db.mutedUsers[sender].expires > Date.now()) {
+    if (db.mutedUsers?.[sender.toLowerCase()] && db.mutedUsers[sender.toLowerCase()].expires > Date.now()) {
         return res.json({ success: false, error: 'Вы находитесь в глобальном муте!' });
     }
 
     if (chatType === 'group') {
         const group = db.groups[chatId];
-        if (group && group.groupMutedUsers?.[sender] && group.groupMutedUsers[sender].expires > Date.now()) {
+        if (group && group.groupMutedUsers?.[sender.toLowerCase()] && group.groupMutedUsers[sender.toLowerCase()].expires > Date.now()) {
             return res.json({ success: false, error: 'Вы замучены в этой группе!' });
         }
     }
@@ -891,19 +870,6 @@ app.post('/api/publish-news', async (req, res) => {
     res.json({ success: true, db });
 });
 
-app.post('/api/edit-news', async (req, res) => {
-    const { login, postId, newText } = req.body;
-    const post = (db.news || []).find(p => p.id === postId);
-    if (!post) return res.json({ success: false, error: 'Новость не найдена' });
-    if (post.author !== login && !hasFullAccess(login)) {
-        return res.json({ success: false, error: 'Недостаточно прав' });
-    }
-    post.text = newText;
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
-});
-
 app.post('/api/delete-news', async (req, res) => {
     const { login, postId } = req.body;
     const post = (db.news || []).find(p => p.id === postId);
@@ -1048,9 +1014,6 @@ app.post('/api/resolve-violation-action', async (req, res) => {
             if (grp.posts) {
                 grp.posts = grp.posts.filter(p => p.id !== viol.groupPostId);
             }
-        }
-        if (viol.text && db.news) {
-            db.news = db.news.filter(n => n.text !== viol.text);
         }
     }
 
