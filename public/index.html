@@ -138,6 +138,7 @@
                     <img id="my-avatar-icon" src="" class="w-full h-full rounded-[14px] object-cover">
                 </button>
 
+                <!-- ВКЛАДКА ЧАТОВ СО ЗНАЧКОМ УВЕДОМЛЕНИЯ -->
                 <button onclick="switchTab('chats')" id="nav-chats" title="Чаты" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition relative">
                     <span class="text-lg mb-0.5">💬</span>
                     <span class="text-[10px] font-medium tracking-tight">Чаты</span>
@@ -254,30 +255,31 @@
                             <button onclick="cancelEditing()" class="text-xs text-gray-400 hover:text-white font-bold">✕ Отмена</button>
                         </div>
 
-                        <div id="chat-input-wrapper" class="p-4 bg-gray-900 border-t border-gray-800 flex items-center space-x-2">
-                            <label class="cursor-pointer p-2 text-gray-400 hover:text-white transition" title="Прикрепить файл">
+                        <!-- ПАНЕЛЬ ВВОДА С ИСПРАВЛЕННОЙ МОБИЛЬНОЙ КНОПКОЙ ОТПРАВКИ И РАЦИЕЙ -->
+                        <div id="chat-input-wrapper" class="p-3 md:p-4 bg-gray-900 border-t border-gray-800 flex items-center space-x-2 flex-shrink-0">
+                            <label class="cursor-pointer p-2 text-gray-400 hover:text-white transition flex-shrink-0" title="Прикрепить файл">
                                 📎
                                 <input type="file" id="media-file-input" onchange="handleFileUpload(event)" class="hidden">
                             </label>
                             
-                            <button id="btn-voice" onclick="toggleVoiceRecord()" title="Голосовое сообщение" class="p-2 text-gray-400 hover:text-red-500 transition flex items-center space-x-1 relative">
+                            <button id="btn-voice" onclick="toggleVoiceRecord()" title="Голосовое сообщение" class="p-2 text-gray-400 hover:text-red-500 transition flex items-center space-x-1 relative flex-shrink-0">
                                 🎙 <span id="voice-timer" class="text-xs text-red-500 font-mono hidden">00:00</span>
                             </button>
 
-                            <canvas id="voice-waveform" class="w-24 h-6 hidden bg-gray-950 rounded border border-purple-500/30"></canvas>
+                            <canvas id="voice-waveform" class="w-16 md:w-24 h-6 hidden bg-gray-950 rounded border border-purple-500/30 flex-shrink-0"></canvas>
 
-                            <div class="flex items-center space-x-2">
-                                <div id="ptt-chat-hint" class="text-[10px] text-purple-400 font-mono hidden">Рация: <span id="ptt-hint-key-name">Space</span></div>
-                                <!-- МЕРЦАЮЩАЯ КНОПКА РАЦИИ ПРИ АКТИВАЦИИ МИКРОФОНА -->
-                                <div id="ptt-talking-indicator" class="bg-green-600 text-white text-[11px] font-bold px-3 py-1 rounded-xl shadow-[0_0_20px_rgba(34,197,94,0.8)] hidden animate-ping">🟢 Говорите</div>
+                            <!-- ПОДСКАЗКА И МЕРЦАЮЩИЙ ИНДИКАТОР РАЦИИ -->
+                            <div class="flex items-center space-x-1 overflow-hidden flex-shrink-0">
+                                <div id="ptt-chat-hint" class="text-[10px] text-purple-400 font-mono hidden truncate">Рация: <span id="ptt-hint-key-name">Space</span></div>
+                                <div id="ptt-talking-indicator" class="bg-green-600 text-white text-[11px] font-bold px-2 py-1 rounded-xl shadow-[0_0_20px_rgba(34,197,94,0.8)] hidden animate-pulse flex-shrink-0">🟢 Говорите</div>
                             </div>
 
-                            <input type="text" id="message-input" oninput="handleTyping()" onkeydown="if(event.key==='Enter') sendMessage()" placeholder="Напишите сообщение..." class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2 text-white focus:outline-none focus:border-purple-500 transition">
+                            <input type="text" id="message-input" oninput="handleTyping()" onkeydown="if(event.key==='Enter') sendMessage()" placeholder="Сообщение..." class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 md:px-4 py-2 text-sm text-white focus:outline-none focus:border-purple-500 transition min-w-[60px]">
                             
-                            <!-- КНОПКА ОТПРАВКИ ДЛЯ МОБИЛЬНЫХ И ПК -->
+                            <!-- КНОПКА ОТПРАВКИ (ГАРАНТИРОВАННО ВИДИМА В МОБИЛЬНОЙ ВЕРСИИ) -->
                             <button onclick="sendMessage()" class="bg-purple-600 hover:bg-purple-500 text-white px-3 md:px-5 py-2 rounded-xl font-bold transition shadow-[0_0_15px_rgba(168,85,247,0.3)] flex items-center justify-center flex-shrink-0">
                                 <span class="md:hidden text-base">📤</span>
-                                <span class="hidden md:inline">Отправить</span>
+                                <span class="hidden md:inline text-xs md:text-sm">Отправить</span>
                             </button>
                         </div>
                     </div>
@@ -590,11 +592,16 @@
             <button onclick="minimizeDirectCall()" class="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition">📉 Свернуть</button>
         </div>
 
-        <div class="text-center text-white space-y-2">
+        <div class="text-center text-white space-y-3">
             <div class="w-24 h-24 rounded-full bg-purple-600/30 border-2 border-purple-500 flex items-center justify-center mx-auto text-4xl shadow-[0_0_30px_rgba(168,85,247,0.4)] animate-bounce">🎙️</div>
             <h2 id="call-partner-name" class="text-3xl font-bold">Голосовой вызов...</h2>
             <p id="call-status-text" class="text-gray-400 text-sm animate-pulse">Установление аудиосоединения</p>
-            <div id="call-ptt-status" class="text-xs text-purple-400 font-mono hidden pt-1">Рация: Нажмите и удерживайте <span id="call-ptt-key">Space</span> для разговора</div>
+            
+            <!-- ИНДИКАТОР РАЦИИ В ЗВОНКЕ (ЗЕЛЕНЫЙ ПРИ АКТИВАЦИИ) -->
+            <div id="call-ptt-status" class="text-xs font-mono hidden pt-1">
+                <span id="call-ptt-hint-text">Рация: Нажмите и удерживайте <span id="call-ptt-key">Space</span> для разговора</span>
+                <div id="call-ptt-talking-indicator" class="bg-green-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-[0_0_20px_rgba(34,197,94,0.8)] hidden animate-pulse inline-block mt-1">🟢 Говорите</div>
+            </div>
         </div>
         <audio id="remote-audio" autoplay></audio>
         <div class="flex space-x-4 pb-10">
@@ -973,28 +980,38 @@
             }
         }
 
-        function openSettingsModal() { document.getElementById('settings-modal').classList.remove('hidden'); }
+        function openSettingsModal() {
+            document.getElementById('ptt-mode-select').value = appSettings.pttMode;
+            document.getElementById('ptt-key-input').value = appSettings.pttKey;
+            document.getElementById('mic-volume-range').value = appSettings.micVolume;
+            togglePttMode();
+            document.getElementById('settings-modal').classList.remove('hidden');
+        }
+
         function closeSettingsModal() {
-            document.getElementById('settings-modal').classList.add('hidden');
             appSettings.pttMode = document.getElementById('ptt-mode-select').value;
             appSettings.audioDevice = document.getElementById('audio-device-select').value;
             appSettings.audioOutput = document.getElementById('audio-output-select').value;
             appSettings.micVolume = document.getElementById('mic-volume-range').value;
+            document.getElementById('settings-modal').classList.add('hidden');
             updatePttUIState();
         }
 
         function updatePttUIState() {
             const hint = document.getElementById('ptt-chat-hint');
             const callPtt = document.getElementById('call-ptt-status');
-            document.getElementById('ptt-hint-key-name').textContent = appSettings.pttKey;
-            document.getElementById('call-ptt-key').textContent = appSettings.pttKey;
+            const hintKeyName = document.getElementById('ptt-hint-key-name');
+            const callKey = document.getElementById('call-ptt-key');
+
+            if (hintKeyName) hintKeyName.textContent = appSettings.pttKey;
+            if (callKey) callKey.textContent = appSettings.pttKey;
 
             if (appSettings.pttMode === 'ptt') {
-                hint.classList.remove('hidden');
-                callPtt.classList.remove('hidden');
+                if (hint) hint.classList.remove('hidden');
+                if (callPtt) callPtt.classList.remove('hidden');
             } else {
-                hint.classList.add('hidden');
-                callPtt.classList.add('hidden');
+                if (hint) hint.classList.add('hidden');
+                if (callPtt) callPtt.classList.add('hidden');
             }
         }
 
@@ -1042,7 +1059,7 @@
             };
         }
 
-        // БЕСПЕРЕБОЙНАЯ ЛОГИКА РАЦИИ (PTT) БЕЗ СБОЕВ
+        // БЕСПЕРЕБОЙНАЯ ЛОГИКА РАЦИИ (PTT) С ЗЕЛЕНЫМ ИНДИКАТОРОМ "ГОВОРИТЕ"
         function setupPttListeners() {
             window.addEventListener('keydown', (e) => {
                 if (appSettings.pttMode === 'ptt' && e.code === appSettings.pttKey && !isPttPressed && !e.repeat) {
@@ -1062,10 +1079,22 @@
             if (localStream) {
                 localStream.getAudioTracks().forEach(track => { track.enabled = enabled; });
             }
-            const indicator = document.getElementById('ptt-talking-indicator');
-            if (indicator) {
-                if (enabled) indicator.classList.remove('hidden');
-                else indicator.classList.add('hidden');
+            const chatIndicator = document.getElementById('ptt-talking-indicator');
+            const callIndicator = document.getElementById('call-ptt-talking-indicator');
+            const callHintText = document.getElementById('call-ptt-hint-text');
+
+            if (chatIndicator) {
+                if (enabled) chatIndicator.classList.remove('hidden');
+                else chatIndicator.classList.add('hidden');
+            }
+            if (callIndicator && callHintText) {
+                if (enabled) {
+                    callHintText.classList.add('hidden');
+                    callIndicator.classList.remove('hidden');
+                } else {
+                    callHintText.classList.remove('hidden');
+                    callIndicator.classList.add('hidden');
+                }
             }
         }
 
@@ -1115,7 +1144,6 @@
             } catch (e) {}
         }
 
-        // ТЕЛЕФОННЫЙ ЗВОНОК НА ВХОДЯЩИЙ ВЫЗОВ (РИНГТОН)
         function startIncomingRingtone() {
             stopIncomingRingtone();
             playIncomingRingPattern();
@@ -1350,7 +1378,6 @@
             db = updatedDb;
             const newRequestsCount = (db.friendRequests && db.friendRequests[currentUser.login]) ? db.friendRequests[currentUser.login].length : 0;
 
-            // ОПОВЕЩЕНИЕ НА ВХОДЯЩИЙ ЗАПРОС ДРУЖБЫ
             if (newRequestsCount > oldRequestsCount) {
                 playNotificationSound();
                 showWebNotification('Новая заявка в друзья', 'У вас появился новый запрос на добавление в друзья!');
@@ -2286,7 +2313,6 @@
             incomingCallerLogin = from;
             incomingOffer = offer;
             
-            // ЗАПУСК РИНГТОНА ВХОДЯЩЕГО ТЕЛЕФОННОГО ЗВОНКА
             startIncomingRingtone();
             playNotificationSound();
 
@@ -2510,7 +2536,7 @@
                 tile.id = `audio-tile-${id}`;
                 tile.className = 'relative bg-gray-900 border border-purple-500/30 rounded-2xl p-6 flex flex-col items-center justify-center space-y-3 shadow-xl';
                 tile.innerHTML = `
-                    <div class="w-20 h-20 rounded-full bg-purple-600/30 border-2 border-purple-500 flex items-center justify-center text-3xl animate-pulse">🎙️</div>
+                    <div class="w-20 h-20 rounded-full bg-purple-600/30 border-2 border-purple-500 flex items-center justify-center text-3xl animate-pulse">🎙️️</div>
                     <div class="text-white font-bold text-sm">${label}</div>
                     <audio autoplay playsinline ${id === 'local' ? 'muted' : ''}></audio>
                 `;
