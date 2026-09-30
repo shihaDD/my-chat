@@ -39,7 +39,6 @@
                 Добро пожаловать
             </h1>
 
-            <!-- БЛОК УВЕДОМЛЕНИЙ И ПОДСКАЗОК ДЛЯ АВТОРИЗАЦИИ -->
             <div id="auth-alert" class="mb-4 p-3 rounded-xl text-xs font-semibold hidden transition-all"></div>
 
             <div class="flex border-b border-gray-800 mb-6 relative z-10">
@@ -118,9 +117,9 @@
                     <span class="text-lg mb-0.5">📰</span>
                     <span class="text-[10px] font-medium tracking-tight">Новости</span>
                 </button>
-                <button onclick="switchTab('tiktok')" id="nav-tiktok" title="TikTok / Reels" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
-                    <span class="text-lg mb-0.5">🎵</span>
-                    <span class="text-[10px] font-medium tracking-tight">TikTok</span>
+                <button onclick="switchTab('tiktok')" id="nav-tiktok" title="Видео-Приколы" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
+                    <span class="text-lg mb-0.5">🎬</span>
+                    <span class="text-[10px] font-medium tracking-tight">Приколы</span>
                 </button>
                 <button onclick="switchTab('music')" id="nav-music" title="Онлайн Радио" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
                     <span class="text-lg mb-0.5">📻</span>
@@ -316,7 +315,7 @@
                 </div>
             </div>
 
-            <!-- Вкладка: TIKTOK / REELS -->
+            <!-- Вкладка: ВИДЕО-ПРИКОЛЫ (ЗАМЕНА TIKTOK БЕЗ ПОВТОРОВ) -->
             <div id="tab-content-tiktok" class="flex-1 bg-black hidden flex justify-center items-center relative overflow-hidden">
                 <div id="tiktok-feed" class="w-full max-w-sm h-full overflow-y-scroll snap-y-mandatory no-scrollbar relative"></div>
             </div>
@@ -429,11 +428,11 @@
         </div>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО НАСТРОЕК ГРУППЫ -->
+    <!-- МОДАЛЬНОЕ ОКНО НАСТРОЕК ГРУППЫ (С УПРАВЛЕНИЕМ РОЛЯМИ И ПРАВАМИ) -->
     <div id="group-settings-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
         <div class="bg-gray-900 border border-purple-500/50 p-6 rounded-3xl w-full max-w-xl shadow-[0_0_35px_rgba(168,85,247,0.3)] space-y-4 max-h-[90vh] overflow-y-auto">
             <div class="flex justify-between items-center border-b border-gray-800 pb-3">
-                <h3 class="text-xl font-bold text-white">⚙️️ Настройки группы</h3>
+                <h3 class="text-xl font-bold text-white">⚙ Настройки группы</h3>
                 <button onclick="document.getElementById('group-settings-modal').classList.add('hidden')" class="text-gray-400 hover:text-white text-lg font-bold">✕</button>
             </div>
             <div class="space-y-4">
@@ -449,6 +448,20 @@
                     <input type="text" id="edit-group-name-input" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-purple-500">
                 </div>
                 
+                <!-- УПРАВЛЕНИЕ КАСТОМНЫМИ РОЛЯМИ И ПРАВАМИ (ТОЛЬКО ДЛЯ ЛИДЕРА) -->
+                <div id="leader-roles-manager" class="hidden bg-gray-950 p-4 rounded-2xl border border-purple-500/30 space-y-3">
+                    <h4 class="text-xs font-bold text-purple-300 uppercase">🛡 Создание и настройка ролей</h4>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <input type="text" id="new-role-name-input" placeholder="Название роли (например, Модер)..." class="bg-gray-800 border border-gray-700 rounded-xl p-2 text-xs text-white">
+                        <div class="flex items-center space-x-2">
+                            <label class="text-[11px] text-gray-300 flex items-center space-x-1"><input type="checkbox" id="role-perm-post" checked class="accent-purple-500"> <span>Посты</span></label>
+                            <label class="text-[11px] text-gray-300 flex items-center space-x-1"><input type="checkbox" id="role-perm-del" class="accent-purple-500"> <span>Удаление</span></label>
+                        </div>
+                    </div>
+                    <button onclick="createCustomRole()" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition shadow">Добавить роль</button>
+                    <div id="custom-roles-list" class="space-y-1 pt-2"></div>
+                </div>
+
                 <div>
                     <h4 class="text-xs font-bold text-purple-300 uppercase mb-2">📢 Каналы группы</h4>
                     <div id="group-channels-list" class="space-y-2 max-h-36 overflow-y-auto mb-2"></div>
@@ -538,18 +551,16 @@
         </div>
 
         <div class="flex-1 flex overflow-hidden">
-            <!-- Слева список участников конференции -->
             <div class="w-80 bg-gray-900/70 border-r border-gray-800 p-4 flex flex-col space-y-3 overflow-y-auto">
                 <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Участники в эфире</h3>
                 <div id="conference-participants-sidebar" class="space-y-2"></div>
             </div>
-            <!-- Справа сетка звуковых потоков -->
             <div class="flex-1 p-6 grid grid-cols-2 md:grid-cols-3 gap-4 overflow-y-auto items-center justify-center" id="group-audio-grid"></div>
         </div>
     </div>
 
     <!-- ПЛАВАЮЩЕЕ МИНИ-ОКОШКО СВЕРНУТОЙ КОНФЕРЕНЦИИ -->
-    <div id="minimized-call-widget" class="fixed bottom-6 right-6 z-50 bg-gray-900 border border-purple-500/60 p-4 rounded-2xl shadow-[0_0_25px_rgba(168,85,247,0.4)] flex items-center space-x-4 hidden backdrop-blur-md animate-bounce-short">
+    <div id="minimized-call-widget" class="fixed bottom-6 right-6 z-50 bg-gray-900 border border-purple-500/60 p-4 rounded-2xl shadow-[0_0_25px_rgba(168,85,247,0.4)] flex items-center space-x-4 hidden backdrop-blur-md">
         <div class="w-10 h-10 rounded-full bg-purple-600/30 border border-purple-500 flex items-center justify-center text-xl animate-pulse">🎙️</div>
         <div>
             <div class="font-bold text-white text-xs">Голосовая конференция</div>
@@ -593,14 +604,20 @@
         let appSettings = { audioDevice: '', audioOutput: '', pttMode: 'voice', pttKey: 'Space', micVolume: 80 };
         let isPttPressed = false;
         let capturingKey = false;
-        let tiktokObserver = null;
+        let videoObserver = null;
 
-        const sampleVideos = [
-            { url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4', author: '@neon_vibes', desc: 'Атмосфера ночного города 🌌 #cyberpunk' },
-            { url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4', author: '@nature_go', desc: 'Утренний релакс 🌲 #nature' },
-            { url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4', author: '@tech_master', desc: 'Новый обзор скоро! 📱 #tech' },
-            { url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4', author: '@cat_lover', desc: 'Милота дня 🐾 #cats' }
+        // БАЗА ВИДЕО-ПРИКОЛОВ С ЗАЩИТОЙ ОТ ПОВТОРОВ
+        const funnyVideosPool = [
+            { url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4', author: '@meme_lord', desc: 'Когда пытаешься починить код в 3 часа ночи 💻😂 #dev #it' },
+            { url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4', author: '@fail_army', desc: 'Утренняя бодрость пошла не по плану 🐱🐾 #fails' },
+            { url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4', author: '@funny_cats', desc: 'Кот объясняет почему он главный в доме 🐈👑 #cats' },
+            { url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4', author: '@speed_runner', desc: 'Пятница перед отпуском! 🚀 #weekend' },
+            { url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/SubaruOutbackSeeTheWorld.mp4', author: '@travel_jokes', desc: 'Поездка за хлебом в соседний город 🚙💨 #trip' },
+            { url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/WeAreGoingOnBullrun.mp4', author: '@bullrun_fun', desc: 'Гонка за последней скидкой в магазине 🛒🏃‍♂️ #sale' },
+            { url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4', author: '@sci_fi_memes', desc: 'Спецэффекты ожидания зарплаты 💸🎬 #memes' },
+            { url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4', author: '@dragon_tales', desc: 'Питомцы дома, когда ты ушел на 5 минут 🐉🏠 #pets' }
         ];
+        let shownVideoIndices = new Set();
 
         const radioStations = [
             { name: 'Европа Плюс', genre: 'Поп / Хит', url: 'https://ep256.europaplus.ru/ep256_aac', logo: '🌐' },
@@ -637,7 +654,6 @@
             }
         }
 
-        // ФУНКЦИЯ ОТОБРАЖЕНИЯ ПОДСКАЗОК И УВЕДОМЛЕНИЙ В ОКНЕ АВТОРИЗАЦИИ
         function showAuthAlert(message, type = 'success') {
             const alertEl = document.getElementById('auth-alert');
             alertEl.textContent = message;
@@ -735,7 +751,8 @@
             });
             const data = await res.json();
             if (data.success) {
-                showAuthAlert(`Успешный вход! Добро пожаловать, ${data.user.name}!`, 'success');
+                showAuthAlert(`Вход выполнен успешно! Добро пожаловать, ${data.user.name}!`, 'success');
+                showCustomModal('Успешный вход', `С возвращением, ${data.user.name}!`, false, null, '🎉');
                 setTimeout(() => {
                     currentUser = data.user;
                     db = data.db;
@@ -784,7 +801,7 @@
             const data = await res.json();
             if (data.success) {
                 showAuthAlert('Регистрация успешна! Теперь вы можете войти.', 'success');
-                showCustomModal('Успех', 'Регистрация успешна! Перейдите во вкладку входа и войдите.', false, () => switchAuthTab('login'), '🎉');
+                showCustomModal('Регистрация успешна', 'Аккаунт создан! Перейдите во вкладку входа и авторизуйтесь.', false, () => switchAuthTab('login'), '🎉');
             } else {
                 let errReg = data.error || 'Ошибка регистрации!';
                 if (errReg.includes('существует')) {
@@ -816,7 +833,7 @@
             renderGroups();
             renderNewsFeed();
             loadInternetNews();
-            initTikTokFeed();
+            initVideoFeed();
             fillProfileData();
             loadAudioDevices();
             renderRadioStations();
@@ -947,7 +964,6 @@
             } catch (e) {}
         }
 
-        // РАДИО СТАНЦИИ РОССИИ
         function renderRadioStations() {
             const list = document.getElementById('radio-stations-list');
             list.innerHTML = '';
@@ -1001,7 +1017,6 @@
             if (audio) audio.volume = val;
         }
 
-        // ДРУЗЬЯ
         function renderFriends() {
             const friendsListEl = document.getElementById('friends-list');
             friendsListEl.innerHTML = '';
@@ -1159,7 +1174,6 @@
             }
         });
 
-        // ЧАТЫ И КАНАЛЫ ГРУПП
         function renderChatsList() {
             const list = document.getElementById('chats-list');
             list.innerHTML = '';
@@ -1238,6 +1252,15 @@
             const group = db.groups[groupId];
             document.getElementById('edit-group-name-input').value = group.name;
             document.getElementById('edit-group-avatar-preview').src = group.avatar || 'https://via.placeholder.com/150';
+
+            const isLeader = group.creator === currentUser.login;
+            const rolesManagerBox = document.getElementById('leader-roles-manager');
+            if (isLeader) {
+                rolesManagerBox.classList.remove('hidden');
+                renderCustomRolesManager(group);
+            } else {
+                rolesManagerBox.classList.add('hidden');
+            }
             
             const channelsList = document.getElementById('group-channels-list');
             channelsList.innerHTML = '';
@@ -1257,32 +1280,102 @@
 
             const membersList = document.getElementById('group-members-column-list');
             membersList.innerHTML = '';
-            const isLeader = group.creator === currentUser.login;
             const myRole = group.roles?.[currentUser.login] || (isLeader ? 'Лидер' : 'Участник');
             const canManage = isLeader || myRole === 'Админ';
+
+            // Собираем все доступные роли (стандартные + кастомные)
+            const availableRoles = ['Лидер', 'Админ', 'Участник', ...Object.keys(group.customRoles || {})];
 
             group.members.forEach(m => {
                 const mLeader = group.creator === m;
                 const mRole = group.roles?.[m] || (mLeader ? 'Лидер' : 'Участник');
                 const row = document.createElement('div');
                 row.className = 'flex justify-between items-center bg-gray-950 p-2.5 rounded-xl text-xs border border-gray-800';
+                
+                let roleSelectorHTML = `<span class="text-purple-400">[${mRole}]</span>`;
+                if (canManage && !mLeader && m !== currentUser.login) {
+                    let options = availableRoles.map(r => `<option value="${r}" ${mRole === r ? 'selected' : ''}>${r}</option>`).join('');
+                    roleSelectorHTML = `<select onchange="changeMemberRole('${groupId}', '${m}', this.value)" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-purple-300">${options}</select>`;
+                }
+
                 row.innerHTML = `
                     <div class="flex items-center space-x-2">
                         <span class="text-white font-bold">@${m} ${mLeader ? '⭐' : ''}</span>
-                        <span class="text-purple-400">[${mRole}]</span>
+                        ${roleSelectorHTML}
                     </div>
                     ${(canManage && !mLeader && m !== currentUser.login) ? `
-                        <div class="space-x-1">
-                            ${isLeader && mRole !== 'Админ' ? `<button onclick="setGroupRole('${groupId}', '${m}', 'Админ')" class="bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-[10px] font-bold text-white">Админ</button>` : ''}
-                            ${isLeader && mRole === 'Админ' ? `<button onclick="setGroupRole('${groupId}', '${m}', 'Участник')" class="bg-gray-700 hover:bg-gray-600 px-2 py-1 rounded text-[10px] font-bold text-white">Убрать</button>` : ''}
-                            <button onclick="kickGroupMember('${groupId}', '${m}')" class="bg-red-600 hover:bg-red-500 px-2 py-1 rounded text-[10px] font-bold text-white">Исключить</button>
-                        </div>
+                        <button onclick="kickGroupMember('${groupId}', '${m}')" class="bg-red-600 hover:bg-red-500 px-2 py-1 rounded text-[10px] font-bold text-white">Исключить</button>
                     ` : ''}
                 `;
                 membersList.appendChild(row);
             });
 
             document.getElementById('group-settings-modal').classList.remove('hidden');
+        }
+
+        function renderCustomRolesManager(group) {
+            const listEl = document.getElementById('custom-roles-list');
+            listEl.innerHTML = '';
+            if (!group.customRoles) group.customRoles = {};
+
+            Object.entries(group.customRoles).forEach(([roleName, perms]) => {
+                const item = document.createElement('div');
+                item.className = 'flex justify-between items-center bg-gray-900 p-2 rounded-xl text-xs';
+                item.innerHTML = `
+                    <span class="text-white font-bold">${roleName} <span class="text-[10px] text-gray-400">(Посты: ${perms.canPost ? '✓' : '✕'}, Удаление: ${perms.canDelete ? '✓' : '✕'})</span></span>
+                    ${roleName !== 'Админ' && roleName !== 'Участник' ? `<button onclick="deleteCustomRole('${group.id}', '${roleName}')" class="text-red-400 hover:text-red-300 font-bold px-2 py-0.5 bg-red-600/20 rounded">Удалить</button>` : ''}
+                `;
+                listEl.appendChild(item);
+            });
+        }
+
+        async function createCustomRole() {
+            const nameInput = document.getElementById('new-role-name-input');
+            const roleName = nameInput.value.trim();
+            if (!roleName || !editingGroupId) return;
+
+            const canPost = document.getElementById('role-perm-post').checked;
+            const canDelete = document.getElementById('role-perm-del').checked;
+
+            const res = await fetch('/api/create-custom-role', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId: editingGroupId, login: currentUser.login, roleName, permissions: { canPost, canDelete, canVoice: true } })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                nameInput.value = '';
+                openGroupSettings(editingGroupId);
+            } else {
+                showCustomModal('Ошибка', data.error, false, null, '⚠️');
+            }
+        }
+
+        async function deleteCustomRole(groupId, roleName) {
+            const res = await fetch('/api/delete-custom-role', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, login: currentUser.login, roleName })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                openGroupSettings(groupId);
+            }
+        }
+
+        async function changeMemberRole(groupId, targetLogin, newRole) {
+            const res = await fetch('/api/set-group-role', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, login: currentUser.login, targetLogin, newRole })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                renderGroups();
+            }
         }
 
         async function saveGroupSettings() {
@@ -1395,6 +1488,8 @@
                 btnCall.classList.add('hidden');
                 sidebar.classList.remove('hidden');
 
+                // Подключаемся к сокет-комнате группы для мгновенного получения сообщений
+                socket.emit('join-group-room', chat.id);
                 renderGroupSidebar(group);
             }
 
@@ -1722,7 +1817,6 @@
             document.getElementById('typing-indicator').textContent = '';
         });
 
-        // СООБЩЕСТВА
         function renderGroups() {
             const list = document.getElementById('groups-list');
             const select = document.getElementById('group-post-select');
@@ -1734,9 +1828,9 @@
                 const isMember = group.members.includes(currentUser.login);
                 const isLeader = group.creator === currentUser.login;
                 const myRole = group.roles?.[currentUser.login] || (isLeader ? 'Лидер' : 'Участник');
-                const canPost = isLeader || myRole === 'Админ';
+                const rolePerms = group.customRoles?.[myRole] || { canPost: isLeader || myRole === 'Админ' };
 
-                if (isMember && canPost) {
+                if (isMember && (isLeader || myRole === 'Админ' || rolePerms.canPost)) {
                     const opt = document.createElement('option');
                     opt.value = group.id;
                     opt.textContent = group.name;
@@ -1802,22 +1896,6 @@
             }
         }
 
-        async function setGroupRole(groupId, targetLogin, newRole) {
-            const res = await fetch('/api/set-group-role', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ groupId, login: currentUser.login, targetLogin, newRole })
-            });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                openGroupSettings(groupId);
-                renderGroups();
-            } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠');
-            }
-        }
-
         async function kickGroupMember(groupId, targetLogin) {
             showCustomModal('Подтверждение', `Исключить пользователя @${targetLogin} из группы?`, true, async (confirmed) => {
                 if (!confirmed) return;
@@ -1856,6 +1934,8 @@
                 db = data.db;
                 textInput.value = '';
                 renderGroupsFeed();
+            } else {
+                showCustomModal('Ошибка', data.error, false, null, '⚠️');
             }
         }
 
@@ -1886,7 +1966,8 @@
                     group.posts.forEach((post, pIdx) => {
                         const isLeader = group.creator === currentUser.login;
                         const myRole = group.roles?.[currentUser.login] || (isLeader ? 'Лидер' : 'Участник');
-                        const canDelete = isLeader || myRole === 'Админ' || post.author === currentUser.login;
+                        const rolePerms = group.customRoles?.[myRole] || {};
+                        const canDelete = isLeader || myRole === 'Админ' || rolePerms.canDelete || post.author === currentUser.login;
 
                         const card = document.createElement('div');
                         card.className = 'bg-gray-800/80 border border-gray-700/50 p-3 rounded-xl space-y-1 relative group';
@@ -1906,7 +1987,6 @@
             });
         }
 
-        // НОВОСТИ ИНТЕРНЕТА
         function renderNewsFeed() {
             const list = document.getElementById('news-feed-list');
             list.innerHTML = '';
@@ -2021,14 +2101,15 @@
             }
         }
 
-        // TIKTOK
-        function initTikTokFeed() {
+        // РАНДОМНЫЕ ВИДЕО-ПРИКОЛЫ БЕЗ ПОВТОРОВ С СКРОЛЛОМ
+        function initVideoFeed() {
             const feed = document.getElementById('tiktok-feed');
             feed.innerHTML = '';
+            shownVideoIndices.clear();
 
-            if (tiktokObserver) tiktokObserver.disconnect();
+            if (videoObserver) videoObserver.disconnect();
 
-            tiktokObserver = new IntersectionObserver((entries) => {
+            videoObserver = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
                     const video = entry.target.querySelector('video');
                     if (video) {
@@ -2041,19 +2122,35 @@
                 });
             }, { threshold: 0.5 });
 
-            loadMoreTikToks(4);
+            loadMoreVideos(4);
 
             feed.onscroll = () => {
                 if (feed.scrollTop + feed.clientHeight >= feed.scrollHeight - 300) {
-                    loadMoreTikToks(2);
+                    loadMoreVideos(2);
                 }
             };
         }
 
-        function loadMoreTikToks(count) {
+        function loadMoreVideos(count) {
             const feed = document.getElementById('tiktok-feed');
+            
+            // Если показаны все видео из пула, сбрасываем историю для бесшовного бесконечного цикла без повторов подряд
+            if (shownVideoIndices.size >= funnyVideosPool.length) {
+                shownVideoIndices.clear();
+            }
+
             for (let i = 0; i < count; i++) {
-                const item = sampleVideos[Math.floor(Math.random() * sampleVideos.length)];
+                let availableIndices = [];
+                for (let idx = 0; idx < funnyVideosPool.length; idx++) {
+                    if (!shownVideoIndices.has(idx)) availableIndices.push(idx);
+                }
+
+                if (availableIndices.length === 0) break;
+
+                const randPoolIdx = availableIndices[Math.floor(Math.random() * availableIndices.length)];
+                shownVideoIndices.add(randPoolIdx);
+                const item = funnyVideosPool[randPoolIdx];
+
                 const card = document.createElement('div');
                 card.className = 'w-full h-full flex-shrink-0 snap-start relative bg-black flex items-center justify-center border-b border-gray-900';
                 card.innerHTML = `
@@ -2068,7 +2165,7 @@
                     </div>
                 `;
                 feed.appendChild(card);
-                tiktokObserver.observe(card);
+                videoObserver.observe(card);
             }
         }
 
@@ -2207,7 +2304,6 @@
             document.getElementById('incoming-call-modal').classList.add('hidden');
         }
 
-        // ГОЛОСОВЫЕ КАНАЛЫ И КОНФЕРЕНЦИИ С ВОЗМОЖНОСТЬЮ СВЕРНУТЬ
         async function joinGroupVoiceChannel(groupId, channelId) {
             currentCallGroupId = groupId;
             currentCallChannelId = channelId;
@@ -2449,7 +2545,6 @@
             }
         }
 
-        // ПРОФИЛЬ
         function fillProfileData() {
             document.getElementById('profile-avatar-preview').src = currentUser.avatar;
             document.getElementById('profile-username').textContent = currentUser.name;
@@ -2491,7 +2586,7 @@
                     switchTab('chats');
                 }, '🎉');
             } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠️️');
+                showCustomModal('Ошибка', data.error, false, null, '⚠️');
             }
         }
     </script>
