@@ -104,29 +104,21 @@
         </div>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО ВЫБОРА МУТА (РУЧНОЙ ВВОД ОТ 1 ДО 9999 МИНУТ) -->
+    <!-- МОДАЛЬНОЕ ОКНО ВЫБОРА МУТА -->
     <div id="violation-mute-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
         <div class="bg-gray-900 border border-red-500/50 p-5 rounded-3xl w-[92%] max-w-sm shadow-2xl space-y-4 text-center">
             <h3 class="text-lg font-bold text-red-400">🔇 Выдача мута пользователю</h3>
-            <p class="text-xs text-gray-300">Введите длительность запрета на отправку сообщений (от 1 до 9999 минут):</p>
-            <input type="number" id="violation-mute-input" min="1" max="9999" value="60" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-sm text-white text-center font-mono focus:outline-none focus:border-red-500">
+            <p class="text-xs text-gray-300">Выберите или введите длительность запрета на отправку сообщений (от 10 минут до 7 суток):</p>
+            <select id="violation-mute-select" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-sm text-white">
+                <option value="10">10 минут</option>
+                <option value="60">1 час</option>
+                <option value="360">6 часов</option>
+                <option value="1440">24 часа (1 сутки)</option>
+                <option value="10080">10080 минут (7 суток)</option>
+            </select>
             <div class="flex justify-end space-x-2 pt-2">
                 <button onclick="document.getElementById('violation-mute-modal').classList.add('hidden')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-xl text-xs font-bold">Отмена</button>
                 <button onclick="submitViolationMute()" class="bg-red-600 hover:bg-red-500 text-white px-5 py-2 rounded-xl text-xs font-bold shadow">Замутить</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- МОДАЛЬНОЕ ОКНО УЧАСТНИКОВ КОНФЕРЕНЦИИ -->
-    <div id="conference-participants-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
-        <div class="bg-gray-900 border border-purple-500/50 p-5 sm:p-6 rounded-3xl w-[92%] max-w-md shadow-2xl space-y-4 relative">
-            <button onclick="document.getElementById('conference-participants-modal').classList.add('hidden')" class="absolute top-4 right-4 text-gray-400 hover:text-white text-lg font-bold">✕</button>
-            <h3 class="text-lg font-bold text-white flex items-center space-x-2">
-                <span>🎙 Участники конференции</span>
-            </h3>
-            <div id="conference-participants-list" class="space-y-2 max-h-60 overflow-y-auto pr-1"></div>
-            <div class="flex justify-end pt-2">
-                <button onclick="document.getElementById('conference-participants-modal').classList.add('hidden')" class="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2 rounded-xl text-xs font-bold shadow">Закрыть</button>
             </div>
         </div>
     </div>
@@ -491,10 +483,6 @@
                                 <button id="btn-group-call" onclick="startGroupCallConference()" class="p-2 px-3 bg-green-600 hover:bg-green-500 rounded-xl text-white font-bold text-xs flex items-center space-x-1 transition shadow-[0_0_15px_rgba(34,197,94,0.3)]">
                                     <span>🎙 Конференция</span>
                                 </button>
-                                <!-- Кнопка активных участников конференции -->
-                                <button onclick="openConferenceParticipantsModal()" class="p-2 px-3 bg-purple-600 hover:bg-purple-500 rounded-xl text-white font-bold text-xs flex items-center space-x-1 transition shadow-[0_0_15px_rgba(168,85,247,0.3)]">
-                                    <span>👥 Участники</span>
-                                </button>
                             </div>
                         </div>
 
@@ -573,20 +561,15 @@
                         <span>🛡 Отдел Модерации</span>
                     </h2>
 
-                    <div class="flex border-b border-gray-800 space-x-4 overflow-x-auto">
-                        <button onclick="switchModTab('chats')" id="mod-tab-btn-chats" class="pb-2 font-bold text-sm border-b-2 border-purple-500 text-purple-400 transition whitespace-nowrap">Общение</button>
-                        <button onclick="switchModTab('requests')" id="mod-tab-btn-requests" class="pb-2 font-bold text-sm text-gray-400 hover:text-white transition flex items-center space-x-1 whitespace-nowrap">
+                    <div class="flex border-b border-gray-800 space-x-4">
+                        <button onclick="switchModTab('chats')" id="mod-tab-btn-chats" class="pb-2 font-bold text-sm border-b-2 border-purple-500 text-purple-400 transition">Общение</button>
+                        <button onclick="switchModTab('requests')" id="mod-tab-btn-requests" class="pb-2 font-bold text-sm text-gray-400 hover:text-white transition flex items-center space-x-1">
                             <span>Запросы верификации</span>
                             <span id="verif-count-badge" class="bg-blue-500 text-white text-[10px] px-1.5 py-0.2 rounded-full hidden">0</span>
                         </button>
-                        <button onclick="switchModTab('violations')" id="mod-tab-btn-violations" class="pb-2 font-bold text-sm text-gray-400 hover:text-white transition flex items-center space-x-1 whitespace-nowrap">
+                        <button onclick="switchModTab('violations')" id="mod-tab-btn-violations" class="pb-2 font-bold text-sm text-gray-400 hover:text-white transition flex items-center space-x-1">
                             <span>Нарушения</span>
                             <span id="violations-count-badge" class="bg-red-500 text-white text-[10px] px-1.5 py-0.2 rounded-full hidden">0</span>
-                        </button>
-                        <!-- Новая суб-вкладка: Список нарушителей (Замьюченные) -->
-                        <button onclick="switchModTab('muted')" id="mod-tab-btn-muted" class="pb-2 font-bold text-sm text-gray-400 hover:text-white transition flex items-center space-x-1 whitespace-nowrap">
-                            <span>🔇 Нарушители (Мут)</span>
-                            <span id="muted-count-badge" class="bg-red-500 text-white text-[10px] px-1.5 py-0.2 rounded-full hidden">0</span>
                         </button>
                     </div>
 
@@ -628,15 +611,6 @@
                         <div class="bg-gray-900 border border-red-500/30 p-4 rounded-2xl space-y-3">
                             <h3 class="text-sm font-bold text-red-400">🚨 Зафиксированные нарушения (Русские маты)</h3>
                             <div id="mod-violations-list" class="space-y-3 max-h-[500px] overflow-y-auto"></div>
-                        </div>
-                    </div>
-
-                    <!-- 4. Вкладка Список нарушителей (Замьюченные) -->
-                    <div id="mod-section-muted" class="space-y-4 hidden">
-                        <div class="bg-gray-900 border border-red-500/30 p-4 rounded-2xl space-y-3">
-                            <h3 class="text-sm font-bold text-red-400">🔇 Список замученных нарушителей</h3>
-                            <input type="text" id="muted-search-input" oninput="renderModerationMutedList()" placeholder="Поиск по имени или логину..." class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-red-500">
-                            <div id="mod-muted-users-list" class="space-y-2 max-h-[450px] overflow-y-auto"></div>
                         </div>
                     </div>
                 </div>
@@ -855,10 +829,10 @@
         </div>
     </div>
 
-    <!-- АКТИВНЫЙ ЗВОНОК (ПЕРЕТАСКИВАЕМЫЙ) -->
-    <div id="single-call-modal" class="fixed right-6 bottom-6 z-[9999] w-auto md:w-80 bg-gray-900 border border-purple-500/60 rounded-3xl shadow-[0_0_35px_rgba(168,85,247,0.4)] p-5 flex flex-col space-y-4 hidden cursor-move">
-        <div id="call-drag-header" class="flex justify-between items-center cursor-move select-none">
-            <span class="text-xs font-bold text-purple-400 uppercase">🎙 Аудиосвязь (Перетащите)</span>
+    <!-- АКТИВНЫЙ ЗВОНОК -->
+    <div id="single-call-modal" class="fixed inset-x-4 bottom-6 md:inset-x-auto md:right-6 z-[9999] w-auto md:w-80 bg-gray-900 border border-purple-500/60 rounded-3xl shadow-[0_0_35px_rgba(168,85,247,0.4)] p-5 flex flex-col space-y-4 hidden">
+        <div class="flex justify-between items-center">
+            <span class="text-xs font-bold text-purple-400 uppercase">🎙 Аудиосвязь</span>
             <button onclick="hangUpCall()" class="text-gray-400 hover:text-white font-bold text-sm">✕</button>
         </div>
         
@@ -921,7 +895,6 @@
         let editingMessageId = null;
         let editingPostId = null;
         let selectedViolationIdForAction = null;
-        let activeConferenceParticipants = []; // Участники текущей конференции
 
         const radioStations = [
             { name: 'Европа Плюс', genre: 'Поп / Хит', url: 'https://ep256.europaplus.ru/ep256_aac', logo: '🌐' },
@@ -965,7 +938,7 @@
             if (role === 'main_moderator') {
                 return { badge: '⭐', color: 'text-amber-400 font-bold', title: 'Главный модератор' };
             } else if (role === 'moderator') {
-                return { badge: '🛡️️', color: 'text-purple-400 font-bold', title: 'Модератор' };
+                return { badge: '🛡️', color: 'text-purple-400 font-bold', title: 'Модератор' };
             }
             return { badge: '', color: 'text-white', title: 'Пользователь' };
         }
@@ -1104,7 +1077,6 @@
         }
 
         window.addEventListener('DOMContentLoaded', async () => {
-            initDraggableCallWindow(); // Инициализация перетаскивания окна вызова
             const savedLogin = localStorage.getItem('currentUserLogin');
             if (savedLogin) {
                 try {
@@ -1123,42 +1095,6 @@
                 } catch (e) {}
             }
         });
-
-        // ПЕРЕТАСКИВАНИЕ ОКНА ВЫЗОВА
-        function initDraggableCallWindow() {
-            const modal = document.getElementById('single-call-modal');
-            const header = document.getElementById('call-drag-header');
-            if (!modal || !header) return;
-
-            let isDragging = false;
-            let startX, startY, initialX, initialY;
-
-            header.addEventListener('mousedown', (e) => {
-                isDragging = true;
-                startX = e.clientX;
-                startY = e.clientY;
-                const rect = modal.getBoundingClientRect();
-                initialX = rect.left;
-                initialY = rect.top;
-                modal.style.right = 'auto';
-                modal.style.bottom = 'auto';
-                modal.style.left = initialX + 'px';
-                modal.style.top = initialY + 'px';
-                e.preventDefault();
-            });
-
-            window.addEventListener('mousemove', (e) => {
-                if (!isDragging) return;
-                const dx = e.clientX - startX;
-                const dy = e.clientY - startY;
-                modal.style.left = (initialX + dx) + 'px';
-                modal.style.top = (initialY + dy) + 'px';
-            });
-
-            window.addEventListener('mouseup', () => {
-                isDragging = false;
-            });
-        }
 
         async function handleLogin(e) {
             e.preventDefault();
@@ -1337,12 +1273,12 @@
         }
 
         function switchModTab(subTab) {
-            ['chats', 'requests', 'violations', 'muted'].forEach(st => {
+            ['chats', 'requests', 'violations'].forEach(st => {
                 document.getElementById(`mod-section-${st}`).classList.add('hidden');
-                document.getElementById(`mod-tab-btn-${st}`).className = "pb-2 font-bold text-sm text-gray-400 hover:text-white transition whitespace-nowrap";
+                document.getElementById(`mod-tab-btn-${st}`).className = "pb-2 font-bold text-sm text-gray-400 hover:text-white transition";
             });
             document.getElementById(`mod-section-${subTab}`).classList.remove('hidden');
-            document.getElementById(`mod-tab-btn-${subTab}`).className = "pb-2 font-bold text-sm border-b-2 border-purple-500 text-purple-400 transition whitespace-nowrap";
+            document.getElementById(`mod-tab-btn-${subTab}`).className = "pb-2 font-bold text-sm border-b-2 border-purple-500 text-purple-400 transition";
             renderModerationPanel();
         }
 
@@ -1350,17 +1286,13 @@
             const violList = document.getElementById('mod-violations-list');
             const violBadge = document.getElementById('violations-count-badge');
             const verifBadge = document.getElementById('verif-count-badge');
-            const mutedBadge = document.getElementById('muted-count-badge');
             const navModBadge = document.getElementById('moderation-badge');
             const violations = db.violations || [];
             const verifRequests = db.verificationRequests || [];
-            const mutedUsers = db.mutedUsers || {};
 
-            let mutedCount = Object.keys(mutedUsers).filter(login => mutedUsers[login] > Date.now()).length;
             let totalAlerts = violations.length + verifRequests.length;
-            
             if (navModBadge) {
-                if (totalAlerts > 0 || mutedCount > 0) navModBadge.classList.remove('hidden');
+                if (totalAlerts > 0) navModBadge.classList.remove('hidden');
                 else navModBadge.classList.add('hidden');
             }
 
@@ -1382,15 +1314,6 @@
                 }
             }
 
-            if (mutedBadge) {
-                if (mutedCount > 0) {
-                    mutedBadge.textContent = mutedCount;
-                    mutedBadge.classList.remove('hidden');
-                } else {
-                    mutedBadge.classList.add('hidden');
-                }
-            }
-
             const warrenCreator = document.getElementById('warren-channel-creator');
             if (warrenCreator) {
                 if (currentUser && hasFullAccess(currentUser.login)) {
@@ -1400,6 +1323,7 @@
                 }
             }
 
+            // Рендер списка созданных глобальных каналов в разделе Модерация -> Общение
             const globalChannelsList = document.getElementById('global-channels-created-list');
             if (globalChannelsList) {
                 globalChannelsList.innerHTML = '';
@@ -1442,15 +1366,13 @@
                                 <button onclick="resolveViolationAction('${v.id}', 'approve')" class="bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded-lg text-white font-bold transition">✅ Одобрить</button>
                                 <button onclick="openViolationEditModal('${v.id}', \`${v.text || ''}\`)" class="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-lg text-white font-bold transition">✏️ Редактировать</button>
                                 <button onclick="resolveViolationAction('${v.id}', 'delete')" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg text-gray-200 font-bold transition">🗑 Удалить</button>
-                                <button onclick="openViolationMuteModal('${v.author}')" class="bg-red-600 hover:bg-red-500 px-3 py-1.5 rounded-lg text-white font-bold transition">🔇 Mute</button>
+                                <button onclick="openViolationMuteModal('${v.id}')" class="bg-red-600 hover:bg-red-500 px-3 py-1.5 rounded-lg text-white font-bold transition">🔇 Mute</button>
                             </div>
                         `;
                         violList.appendChild(div);
                     });
                 }
             }
-
-            renderModerationMutedList();
 
             const verifList = document.getElementById('mod-verif-requests-list');
             if (verifList) {
@@ -1475,64 +1397,29 @@
                     });
                 }
             }
-        }
 
-        // СПИСОК НАРУШИТЕЛЕЙ (МЮТ) С ПОИСКОМ И ДОСРОЧНЫМ СНЯТИЕМ
-        function renderModerationMutedList() {
-            const container = document.getElementById('mod-muted-users-list');
-            const searchInput = document.getElementById('muted-search-input');
-            if (!container) return;
-
-            const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
-            const mutedUsers = db.mutedUsers || {};
-            container.innerHTML = '';
-
-            let activeMutes = Object.entries(mutedUsers).filter(([login, expireTime]) => expireTime > Date.now());
-
-            if (query) {
-                activeMutes = activeMutes.filter(([login]) => {
-                    const userObj = db.users[login];
-                    const name = userObj ? userObj.name.toLowerCase() : '';
-                    return login.toLowerCase().includes(query) || name.includes(query);
+            const chatMonitor = document.getElementById('mod-chats-monitor-list');
+            if (chatMonitor) {
+                chatMonitor.innerHTML = '';
+                let allMsgsCount = 0;
+                Object.entries(db.messagesStore || {}).forEach(([chatKey, msgs]) => {
+                    msgs.forEach(m => {
+                        allMsgsCount++;
+                        const d = document.createElement('div');
+                        d.className = 'bg-gray-950 p-2.5 rounded-xl border border-gray-800 flex items-center justify-between text-xs';
+                        d.innerHTML = `
+                            <div class="overflow-hidden pr-2">
+                                <div class="font-bold text-purple-300">@${m.sender} <span class="text-[10px] text-gray-500">${m.time}</span></div>
+                                <div class="text-gray-300 truncate">${m.text || '[Медиафайл]'}</div>
+                            </div>
+                            <button onclick="deleteMessage('${m.id}')" class="bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white px-2.5 py-1 rounded-lg font-bold flex-shrink-0">Удалить</button>
+                        `;
+                        chatMonitor.appendChild(d);
+                    });
                 });
-            }
-
-            if (activeMutes.length === 0) {
-                container.innerHTML = '<div class="text-xs text-gray-500 text-center py-4">Нет замученных пользователей.</div>';
-                return;
-            }
-
-            activeMutes.forEach(([login, expireTime]) => {
-                const userObj = db.users[login] || {};
-                const timeLeft = Math.ceil((expireTime - Date.now()) / 60000);
-                const div = document.createElement('div');
-                div.className = 'bg-gray-950 border border-red-500/30 p-3 rounded-xl flex items-center justify-between text-xs';
-                div.innerHTML = `
-                    <div class="flex items-center space-x-3">
-                        <img src="${getAvatar(userObj.avatar)}" class="w-9 h-9 rounded-full object-cover border border-red-500">
-                        <div>
-                            <div class="font-bold text-white">${userObj.name || login} <span class="text-gray-400 font-mono">(@${login})</span></div>
-                            <div class="text-red-400">🔇 Мут активен. Осталось минут: <span class="font-bold">${timeLeft}</span></div>
-                        </div>
-                    </div>
-                    <button onclick="removeUserMute('${login}')" class="bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded-lg text-white font-bold transition">✅ Снять мут</button>
-                `;
-                container.appendChild(div);
-            });
-        }
-
-        async function removeUserMute(login) {
-            const res = await fetch('/api/remove-mute', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, targetLogin: login })
-            });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                renderModerationPanel();
-                showCustomModal('Успех', `Мут для пользователя @${login} успешно снят досрочно!`, false, null, '✨');
-                socket.emit('refresh-db');
+                if (allMsgsCount === 0) {
+                    chatMonitor.innerHTML = '<div class="text-xs text-gray-500 text-center py-2">Нет активных сообщений в чатах.</div>';
+                }
             }
         }
 
@@ -1585,33 +1472,26 @@
             }
         }
 
-        let targetMuteLogin = null;
-        function openViolationMuteModal(authorLogin) {
-            targetMuteLogin = authorLogin;
-            document.getElementById('violation-mute-input').value = 60;
+        function openViolationMuteModal(violId) {
+            selectedViolationIdForAction = violId;
             document.getElementById('violation-mute-modal').classList.remove('hidden');
         }
 
         async function submitViolationMute() {
-            if (!targetMuteLogin) return;
-            const muteMinutes = parseInt(document.getElementById('violation-mute-input').value) || 60;
-            if (muteMinutes < 1 || muteMinutes > 9999) {
-                showCustomModal('Ошибка', 'Длительность мута должна быть от 1 до 9999 минут!', false, null, '⚠️');
-                return;
-            }
-
-            const res = await fetch('/api/mute-user', {
+            if (!selectedViolationIdForAction) return;
+            const muteMinutes = document.getElementById('violation-mute-select').value;
+            const res = await fetch('/api/resolve-violation-action', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, targetLogin: targetMuteLogin, minutes: muteMinutes })
+                body: JSON.stringify({ login: currentUser.login, violId: selectedViolationIdForAction, action: 'mute', muteMinutes })
             });
             const data = await res.json();
             if (data.success) {
                 db = data.db;
                 document.getElementById('violation-mute-modal').classList.add('hidden');
-                targetMuteLogin = null;
+                selectedViolationIdForAction = null;
                 renderModerationPanel();
-                showCustomModal('Мут выдан', `Пользователь @${targetMuteLogin} успешно замучен на ${muteMinutes} минут.`, false, null, '🔇');
+                showCustomModal('Мут выдан', 'Пользователь заблокирован и получил запрет на дублирование в ленте новостей.', false, null, '🔇');
                 socket.emit('refresh-db');
             }
         }
@@ -1824,1009 +1704,730 @@
             } catch (e) {}
         }
 
-        // ---------- ИСПРАВЛЕННАЯ ГОЛОСОВАЯ СВЯЗЬ WEBRTC ----------
-        const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
-
-        async function createPeerConnection(targetLogin) {
-            if (peerConnection) {
-                peerConnection.close();
-                peerConnection = null;
-            }
-            peerConnection = new RTCPeerConnection(rtcConfig);
-
-            try {
-                const noiseSup = document.getElementById('noise-suppression-checkbox')?.checked ?? true;
-                localStream = await navigator.mediaDevices.getUserMedia({ audio: { noiseSuppression: noiseSup, echoCancellation: true } });
-                localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
-            } catch (e) {
-                showCustomModal('Ошибка микрофона', 'Не удалось получить доступ к микрофону для вызова!', false, null, '⚠️');
-                hangUpCall();
-                return null;
-            }
-
-            peerConnection.ontrack = (event) => {
-                const remoteAudio = document.getElementById('remote-audio');
-                if (remoteAudio && event.streams[0]) {
-                    remoteAudio.srcObject = event.streams[0];
-                    remoteAudio.play().catch(() => {});
-                }
-            };
-
-            peerConnection.onicecandidate = (event) => {
-                if (event.candidate) {
-                    socket.emit('webrtc-candidate', { target: targetLogin, candidate: event.candidate });
-                }
-            };
-
-            peerConnection.oniceconnectionstatechange = () => {
-                const statusText = document.getElementById('call-status-text');
-                if (!peerConnection) return;
-                if (peerConnection.iceConnectionState === 'connected') {
-                    if (statusText) statusText.textContent = 'Соединение установлено ✓';
-                    stopOutgoingRingtone();
-                    stopIncomingRingtone();
-                } else if (peerConnection.iceConnectionState === 'disconnected' || peerConnection.iceConnectionState === 'failed') {
-                    if (statusText) statusText.textContent = 'Переподключение...';
-                }
-            };
-
-            return peerConnection;
-        }
-
-        async function startDirectCall() {
-            if (!activeChat || activeChat.type !== 'direct') return;
-            callTargetUser = activeChat.login;
-            isInCallOrConference = true;
-
-            const modal = document.getElementById('single-call-modal');
-            modal.classList.remove('hidden');
-            document.getElementById('call-partner-name').textContent = activeChat.name;
-            document.getElementById('call-status-text').textContent = 'Вызов абонента...';
-            document.getElementById('btn-accept-call').classList.add('hidden');
-
-            startOutgoingRingtone();
-
-            const pc = await createPeerConnection(callTargetUser);
-            if (!pc) return;
-
-            try {
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                socket.emit('webrtc-offer', { target: callTargetUser, offer: pc.localDescription });
-            } catch (e) {
-                hangUpCall();
-            }
-        }
-
-        socket.on('webrtc-offer', async ({ sender, offer }) => {
-            incomingCallerLogin = sender;
-            incomingOffer = offer;
-            const callerObj = db.users[sender] || { name: sender };
-
-            const incModal = document.getElementById('incoming-call-modal');
-            document.getElementById('incoming-caller-title').textContent = `Входящий вызов от @${callerObj.name || sender}`;
-            document.getElementById('incoming-caller-avatar').src = getAvatar(callerObj.avatar);
-            incModal.classList.remove('hidden');
-            startIncomingRingtone();
-        });
-
-        async function acceptIncomingCall() {
-            document.getElementById('incoming-call-modal').classList.add('hidden');
-            stopIncomingRingtone();
-            callTargetUser = incomingCallerLogin;
-            isInCallOrConference = true;
-
-            const modal = document.getElementById('single-call-modal');
-            modal.classList.remove('hidden');
-            const callerObj = db.users[callTargetUser] || { name: callTargetUser };
-            document.getElementById('call-partner-name').textContent = callerObj.name || callTargetUser;
-            document.getElementById('call-status-text').textContent = 'Соединение...';
-            document.getElementById('btn-accept-call').classList.add('hidden');
-
-            const pc = await createPeerConnection(callTargetUser);
-            if (!pc) return;
-
-            try {
-                await pc.setRemoteDescription(new RTCSessionDescription(incomingOffer));
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                socket.emit('webrtc-answer', { target: callTargetUser, answer: pc.localDescription });
-            } catch (e) {
-                hangUpCall();
-            }
-        }
-
-        function rejectIncomingCall() {
-            document.getElementById('incoming-call-modal').classList.add('hidden');
-            stopIncomingRingtone();
-            if (incomingCallerLogin) {
-                socket.emit('webrtc-hangup', { target: incomingCallerLogin });
-            }
-            incomingCallerLogin = null;
-            incomingOffer = null;
-        }
-
-        socket.on('webrtc-answer', async ({ answer }) => {
-            if (peerConnection && peerConnection.signalingState !== 'stable') {
-                try {
-                    await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-                    stopOutgoingRingtone();
-                } catch (e) {}
-            }
-        });
-
-        socket.on('webrtc-candidate', async ({ candidate }) => {
-            if (peerConnection) {
-                try {
-                    await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-                } catch (e) {}
-            }
-        });
-
-        socket.on('webrtc-hangup', () => {
-            hangUpCall(true);
-        });
-
-        function hangUpCall(remote = false) {
-            stopOutgoingRingtone();
-            stopIncomingRingtone();
-            if (!remote && callTargetUser) {
-                socket.emit('webrtc-hangup', { target: callTargetUser });
-            }
-
-            if (localStream) {
-                localStream.getTracks().forEach(t => t.stop());
-                localStream = null;
-            }
-            if (peerConnection) {
-                peerConnection.close();
-                peerConnection = null;
-            }
-
-            callTargetUser = null;
-            incomingOffer = null;
-            incomingCallerLogin = null;
-            isInCallOrConference = false;
-
-            document.getElementById('single-call-modal').classList.add('hidden');
-            document.getElementById('incoming-call-modal').classList.add('hidden');
-        }
-
-        function toggleMyCallMute() {
-            if (localStream) {
-                const audioTrack = localStream.getAudioTracks()[0];
-                if (audioTrack) {
-                    audioTrack.enabled = !audioTrack.enabled;
-                    const btn = document.getElementById('btn-call-mute');
-                    if (audioTrack.enabled) {
-                        btn.className = "flex-1 bg-gray-800 hover:bg-gray-700 text-white py-2 rounded-xl text-xs font-bold transition";
-                        btn.textContent = "Микрофон";
-                    } else {
-                        btn.className = "flex-1 bg-red-600 text-white py-2 rounded-xl text-xs font-bold transition";
-                        btn.textContent = "Выключен";
-                    }
-                }
-            }
-        }
-
-        // КОНФЕРЕНЦИЯ В СООБЩЕСТВАХ И УПРАВЛЕНИЕ УЧАСТНИКАМИ
-        function startGroupCallConference() {
-            if (!activeGroupWorkspaceId) return;
-            isInCallOrConference = true;
-            activeConferenceParticipants = [
-                { login: currentUser.login, name: currentUser.name, muted: false },
-                { login: 'system_bot', name: 'Аудиобот Конференции', muted: false }
-            ];
-
-            const modal = document.getElementById('single-call-modal');
-            modal.classList.remove('hidden');
-            document.getElementById('call-partner-name').textContent = 'Групповая конференция';
-            document.getElementById('call-status-text').textContent = 'Подключено к конференции ✓';
-            document.getElementById('btn-accept-call').classList.add('hidden');
-            showCustomModal('Конференция', 'Вы успешно подключились к голосовой конференции сообщества!', false, null, '🎙️');
-        }
-
-        function openConferenceParticipantsModal() {
-            const listEl = document.getElementById('conference-participants-list');
-            if (!listEl) return;
-            listEl.innerHTML = '';
-
-            if (activeConferenceParticipants.length === 0) {
-                listEl.innerHTML = '<div class="text-xs text-gray-500 text-center py-2">Нет участников в конференции.</div>';
-            } else {
-                activeConferenceParticipants.forEach(p => {
-                    const div = document.createElement('div');
-                    div.className = 'bg-gray-950 p-2.5 rounded-xl border border-gray-800 flex items-center justify-between text-xs';
-                    div.innerHTML = `
-                        <div class="flex items-center space-x-2">
-                            <span class="font-bold text-white">${p.name} (@${p.login})</span>
-                            ${p.muted ? '<span class="text-red-400 font-bold">[Muted]</span>' : ''}
-                        </div>
-                        ${hasFullAccess(currentUser.login) || currentUser.login === activeGroupWorkspaceId ? `
-                            <div class="space-x-1">
-                                <button onclick="toggleParticipantMute('${p.login}')" class="bg-yellow-600/20 hover:bg-yellow-600 text-yellow-300 px-2 py-1 rounded-lg font-bold">${p.muted ? 'Включить звук' : 'Мут'}</button>
-                                <button onclick="kickParticipant('${p.login}')" class="bg-red-600/20 hover:bg-red-600 text-red-400 px-2 py-1 rounded-lg font-bold">Кик</button>
-                            </div>
-                        ` : ''}
-                    `;
-                    listEl.appendChild(div);
-                });
-            }
-            document.getElementById('conference-participants-modal').classList.remove('hidden');
-        }
-
-        function toggleParticipantMute(login) {
-            const p = activeConferenceParticipants.find(x => x.login === login);
-            if (p) {
-                p.muted = !p.muted;
-                openConferenceParticipantsModal();
-            }
-        }
-
-        function kickParticipant(login) {
-            activeConferenceParticipants = activeConferenceParticipants.filter(x => x.login !== login);
-            openConferenceParticipantsModal();
-            if (login === currentUser.login) {
-                hangUpCall();
-                showCustomModal('Кик', 'Вас исключили из конференции.', false, null, '⚠️');
-            }
-        }
-
-        // ЧАТЫ И СООБЩЕНИЯ
-        async function renderChatsList() {
-            const list = document.getElementById('chats-list');
+        function renderRadioStations() {
+            const list = document.getElementById('radio-stations-list');
+            if (!list) return;
             list.innerHTML = '';
-
-            const myFriends = db.friends[currentUser.login] || [];
-            if (myFriends.length === 0) {
-                list.innerHTML = '<div class="text-xs text-gray-500 text-center p-4">У вас пока нет друзей для общения. Добавьте друзей во вкладке «Друзья».</div>';
-                return;
-            }
-
-            myFriends.forEach(friendLogin => {
-                const friendObj = db.users[friendLogin] || { name: friendLogin };
-                const badgeInfo = getRoleBadgeAndColor(friendLogin);
-                const lastMsgObj = getLastMessageWithUser(friendLogin);
-                const unreadCount = unreadMessagesMap[friendLogin] || 0;
-
+            radioStations.forEach((station, idx) => {
                 const div = document.createElement('div');
-                div.className = `p-3 rounded-2xl cursor-pointer transition flex items-center justify-between ${activeChat && activeChat.login === friendLogin ? 'bg-purple-600/20 border border-purple-500/40' : 'hover:bg-gray-800/60'}`;
-                div.onclick = () => openDirectChat(friendLogin);
-
+                div.className = 'bg-gray-900 border border-gray-800 p-4 rounded-2xl flex items-center justify-between shadow-xl';
                 div.innerHTML = `
-                    <div class="flex items-center space-x-3 overflow-hidden">
-                        <div class="relative flex-shrink-0">
-                            <img src="${getAvatar(friendObj.avatar)}" class="w-11 h-11 rounded-full object-cover border border-purple-500/30">
-                        </div>
-                        <div class="overflow-hidden">
-                            <div class="font-bold text-sm text-white truncate flex items-center space-x-1">
-                                <span class="truncate">${friendObj.name || friendLogin}</span>
-                                ${badgeInfo.badge ? `<span title="${badgeInfo.title}">${badgeInfo.badge}</span>` : ''}
-                            </div>
-                            <div class="text-xs text-gray-400 truncate">${lastMsgObj ? lastMsgObj.text : 'Нет сообщений'}</div>
+                    <div class="flex items-center space-x-3">
+                        <div class="w-12 h-12 rounded-xl bg-purple-600/30 border border-purple-500/50 flex items-center justify-center text-2xl">${station.logo}</div>
+                        <div>
+                            <div class="font-bold text-white">${station.name}</div>
+                            <div class="text-xs text-gray-400">${station.genre}</div>
                         </div>
                     </div>
-                    ${unreadCount > 0 ? `<span class="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow">${unreadCount}</span>` : ''}
+                    <div class="flex items-center space-x-3">
+                        <audio id="radio-audio-${idx}" src="${station.url}"></audio>
+                        <button onclick="toggleRadio(${idx})" id="radio-btn-${idx}" class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-xl text-xs font-bold text-white transition shadow-[0_0_15px_rgba(168,85,247,0.3)]">▶ Плей</button>
+                        <input type="range" min="0" max="1" step="0.05" value="0.8" oninput="setRadioVolume(${idx}, this.value)" class="w-20 accent-purple-500" title="Громкость">
+                    </div>
                 `;
                 list.appendChild(div);
             });
         }
 
-        function getLastMessageWithUser(friendLogin) {
-            const chatKey = [currentUser.login.toLowerCase(), friendLogin.toLowerCase()].sort().join('_');
-            const msgs = db.messagesStore[chatKey] || [];
-            return msgs.length > 0 ? msgs[msgs.length - 1] : null;
-        }
-
-        function openDirectChat(friendLogin) {
-            const friendObj = db.users[friendLogin] || { name: friendLogin };
-            activeChat = { type: 'direct', login: friendLogin, name: friendObj.name || friendLogin, avatar: getAvatar(friendObj.avatar) };
-            
-            if (window.innerWidth <= 768) {
-                document.getElementById('chat-list-panel').classList.add('mobile-hidden');
-            }
-
-            document.getElementById('no-chat-selected').classList.add('hidden');
-            document.getElementById('chat-window').classList.remove('hidden');
-            document.getElementById('active-chat-avatar').src = activeChat.avatar;
-            document.getElementById('active-chat-name').innerHTML = `${activeChat.name} <span class="text-xs font-normal text-gray-400">@${friendLogin}</span>`;
-            document.getElementById('active-chat-status').textContent = 'онлайн';
-            document.getElementById('btn-call-user').classList.remove('hidden');
-
-            unreadMessagesMap[friendLogin] = 0;
-            updateChatsBadge();
-            renderActiveChatMessages();
-        }
-
-        function backToChatList() {
-            document.getElementById('chat-list-panel').classList.remove('mobile-hidden');
-            activeChat = null;
-            document.getElementById('chat-window').classList.add('hidden');
-            document.getElementById('no-chat-selected').classList.remove('hidden');
-        }
-
-        async function renderActiveChatMessages() {
-            if (!activeChat) return;
-            const container = document.getElementById('messages-container');
-            container.innerHTML = '';
-
-            let msgs = [];
-            let chatKey = '';
-            if (activeChat.type === 'direct') {
-                chatKey = [currentUser.login.toLowerCase(), activeChat.login.toLowerCase()].sort().join('_');
-                msgs = db.messagesStore[chatKey] || [];
-            } else if (activeChat.type === 'group_channel') {
-                chatKey = `group_${activeChat.groupId}_${activeChat.channelId}`;
-                msgs = db.messagesStore[chatKey] || [];
-            }
-
-            msgs.forEach(m => {
-                const isMe = m.sender.toLowerCase() === currentUser.login.toLowerCase();
-                const div = document.createElement('div');
-                div.className = `flex flex-col ${isMe ? 'items-end' : 'items-start'} space-y-1`;
-                
-                let contentHTML = '';
-                if (m.type === 'audio') {
-                    contentHTML = `<audio controls src="${m.mediaUrl}" class="max-w-[220px] h-10"></audio>`;
-                } else if (m.mediaUrl) {
-                    contentHTML = `<img src="${m.mediaUrl}" class="max-w-[200px] rounded-xl object-cover mb-1 border border-purple-500/30">`;
-                }
-                if (m.text) {
-                    contentHTML += `<div class="break-words text-sm">${escapeHtml(m.text)}</div>`;
-                }
-
-                div.innerHTML = `
-                    <div class="max-w-[80%] bg-${isMe ? 'purple-600' : 'gray-800'} text-white p-3 rounded-2xl shadow-lg relative group space-y-1">
-                        <div class="text-[10px] text-${isMe ? 'purple-200' : 'gray-400'} font-bold flex items-center justify-between space-x-2">
-                            <span>@${m.sender}</span>
-                            <span>${m.time}</span>
-                        </div>
-                        ${contentHTML}
-                        <div class="flex justify-end space-x-2 pt-1 opacity-0 group-hover:opacity-100 transition text-[11px]">
-                            <button onclick="pinMessage('${chatKey}', '${m.id}')" class="text-purple-300 hover:text-white" title="Закрепить">📌</button>
-                            ${isMe ? `<button onclick="startEditingMessage('${chatKey}', '${m.id}', \`${m.text || ''}\`)" class="text-blue-300 hover:text-white">✏️️</button>` : ''}
-                            ${isMe || hasFullAccess(currentUser.login) ? `<button onclick="deleteMessage('${chatKey}', '${m.id}')" class="text-red-300 hover:text-white">🗑</button>` : ''}
-                        </div>
-                    </div>
-                `;
-                container.appendChild(div);
+        function toggleRadio(idx) {
+            radioStations.forEach((_, i) => {
+                const a = document.getElementById(`radio-audio-${i}`);
+                const b = document.getElementById(`radio-btn-${i}`);
+                if (i !== idx && a) { a.pause(); if (b) b.textContent = '▶ Плей'; }
             });
-            container.scrollTop = container.scrollHeight;
-            renderPinnedBanner(chatKey);
-        }
-
-        function escapeHtml(text) {
-            if (!text) return '';
-            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-        }
-
-        async function sendMessage() {
-            if (!activeChat) return;
-            const input = document.getElementById('message-input');
-            const text = input.value.trim();
-            if (!text && !currentUploadedMedia) return;
-
-            let chatKey = '';
-            if (activeChat.type === 'direct') {
-                chatKey = [currentUser.login.toLowerCase(), activeChat.login.toLowerCase()].sort().join('_');
-            } else if (activeChat.type === 'group_channel') {
-                chatKey = `group_${activeChat.groupId}_${activeChat.channelId}`;
-            }
-
-            const msgData = {
-                id: 'msg_' + Date.now() + Math.random().toString(36).substr(2, 5),
-                sender: currentUser.login,
-                text: text,
-                mediaUrl: currentUploadedMedia,
-                type: currentUploadedMedia && currentUploadedMedia.startsWith('data:audio') ? 'audio' : 'text',
-                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                chatKey: chatKey
-            };
-
-            if (editingMessageId) {
-                // Редактирование сообщения
-                const msgs = db.messagesStore[chatKey] || [];
-                const msg = msgs.find(x => x.id === editingMessageId);
-                if (msg) msg.text = text;
-                cancelEditing();
+            const audio = document.getElementById(`radio-audio-${idx}`);
+            const btn = document.getElementById(`radio-btn-${idx}`);
+            if (audio.paused) {
+                audio.play().then(() => { btn.textContent = '⏸ Пауза'; }).catch(() => {});
             } else {
-                if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
-                db.messagesStore[chatKey].push(msgData);
-            }
-
-            input.value = '';
-            currentUploadedMedia = null;
-            document.getElementById('media-file-input').value = '';
-
-            socket.emit('send-message', { chatKey, msg: msgData, target: activeChat.type === 'direct' ? activeChat.login : null });
-            renderActiveChatMessages();
-            renderChatsList();
-        }
-
-        socket.on('receive-message', ({ chatKey, msg }) => {
-            if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
-            db.messagesStore[chatKey].push(msg);
-
-            if (activeChat && ((activeChat.type === 'direct' && chatKey.includes(currentUser.login.toLowerCase()) && chatKey.includes(activeChat.login.toLowerCase())))) {
-                renderActiveChatMessages();
-            } else {
-                playNotificationSound();
-                if (chatKey.includes('_')) {
-                    const parts = chatKey.split('_');
-                    const sender = parts[0] === currentUser.login.toLowerCase() ? parts[1] : parts[0];
-                    unreadMessagesMap[sender] = (unreadMessagesMap[sender] || 0) + 1;
-                    updateChatsBadge();
-                    showWebNotification(`Новое сообщение от @${sender}`, msg.text || '[Медиафайл]');
-                }
-            }
-            renderChatsList();
-        });
-
-        async function handleFileUpload(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            currentUploadedMedia = await readFileAsDataURL(file);
-            showCustomModal('Файл прикреплен', 'Медиафайл готов к отправке в чат.', false, null, '📎');
-        }
-
-        function startEditingMessage(chatKey, msgId, currentText) {
-            editingMessageId = msgId;
-            document.getElementById('message-input').value = currentText;
-            document.getElementById('editing-text-preview').textContent = currentText;
-            document.getElementById('editing-bar').classList.remove('hidden');
-        }
-
-        function cancelEditing() {
-            editingMessageId = null;
-            document.getElementById('message-input').value = '';
-            document.getElementById('editing-bar').classList.add('hidden');
-        }
-
-        async function deleteMessage(chatKey, msgId) {
-            if (!db.messagesStore[chatKey]) return;
-            db.messagesStore[chatKey] = db.messagesStore[chatKey].filter(x => x.id !== msgId);
-            renderActiveChatMessages();
-            socket.emit('refresh-db');
-        }
-
-        function pinMessage(chatKey, msgId) {
-            const msgs = db.messagesStore[chatKey] || [];
-            const msg = msgs.find(x => x.id === msgId);
-            if (msg) {
-                if (!db.pinnedMessages) db.pinnedMessages = {};
-                db.pinnedMessages[chatKey] = msg.text || '[Медиафайл]';
-                renderPinnedBanner(chatKey);
-                socket.emit('refresh-db');
+                audio.pause();
+                btn.textContent = '▶ Плей';
             }
         }
 
-        function unpinCurrentMessage() {
-            if (!activeChat) return;
-            let chatKey = activeChat.type === 'direct' ? [currentUser.login.toLowerCase(), activeChat.login.toLowerCase()].sort().join('_') : `group_${activeChat.groupId}_${activeChat.channelId}`;
-            if (db.pinnedMessages) {
-                delete db.pinnedMessages[chatKey];
-                renderPinnedBanner(chatKey);
-                socket.emit('refresh-db');
-            }
+        function setRadioVolume(idx, val) {
+            const audio = document.getElementById(`radio-audio-${idx}`);
+            if (audio) audio.volume = val;
         }
 
-        function renderPinnedBanner(chatKey) {
-            const banner = document.getElementById('pinned-message-banner');
-            const textEl = document.getElementById('pinned-message-text');
-            const pinnedText = db.pinnedMessages?.[chatKey];
-            if (pinnedText) {
-                textEl.textContent = pinnedText;
-                banner.classList.remove('hidden');
-            } else {
-                banner.classList.add('hidden');
-            }
-        }
-
-        // ГОЛОСОВЫЕ СООБЩЕНИЯ
-        async function toggleVoiceRecord() {
-            if (!mediaRecorder || mediaRecorder.state === 'inactive') {
-                try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                    mediaRecorder = new MediaRecorder(stream);
-                    audioChunks = [];
-                    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
-                    mediaRecorder.onstop = async () => {
-                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-                        currentUploadedMedia = await readFileAsDataURL(audioBlob);
-                        sendMessage();
-                        stream.getTracks().forEach(t => t.stop());
-                    };
-                    mediaRecorder.start();
-                    voiceSeconds = 0;
-                    document.getElementById('voice-timer').classList.remove('hidden');
-                    voiceTimerInterval = setInterval(() => {
-                        voiceSeconds++;
-                        const m = String(Math.floor(voiceSeconds / 60)).padStart(2, '0');
-                        const s = String(voiceSeconds % 60).padStart(2, '0');
-                        document.getElementById('voice-timer').textContent = `${m}:${s}`;
-                    }, 1000);
-                    document.getElementById('btn-voice').classList.add('text-red-500', 'animate-pulse');
-                } catch (e) {
-                    showCustomModal('Ошибка', 'Не удалось записать голосовое сообщение.', false, null, '⚠️');
-                }
-            } else {
-                mediaRecorder.stop();
-                clearInterval(voiceTimerInterval);
-                document.getElementById('voice-timer').classList.add('hidden');
-                document.getElementById('btn-voice').classList.remove('text-red-500', 'animate-pulse');
-            }
-        }
-
-        // ДРУЗЬЯ
-        async function renderFriends() {
-            const list = document.getElementById('friends-list');
+        function renderFriends() {
+            const friendsListEl = document.getElementById('friends-list');
+            if (!friendsListEl) return;
+            friendsListEl.innerHTML = '';
+            
+            const reqSection = document.getElementById('friend-requests-section');
             const reqList = document.getElementById('friend-requests-list');
-            const outList = document.getElementById('outgoing-requests-list');
-            list.innerHTML = '';
-            reqList.innerHTML = '';
-            outList.innerHTML = '';
-
-            const myFriends = db.friends[currentUser.login] || [];
             const myRequests = db.friendRequests[currentUser.login] || [];
-            const myOutgoing = db.outgoingRequests[currentUser.login] || [];
+
+            updateFriendsBadge();
 
             if (myRequests.length > 0) {
-                document.getElementById('friend-requests-section').classList.remove('hidden');
-                myRequests.forEach(fromLogin => {
-                    const userObj = db.users[fromLogin] || { name: fromLogin };
+                reqSection.classList.remove('hidden');
+                reqList.innerHTML = '';
+                myRequests.forEach(reqLogin => {
                     const div = document.createElement('div');
-                    div.className = 'bg-gray-900 border border-yellow-500/30 p-3 rounded-xl flex items-center justify-between text-xs';
+                    div.className = 'flex items-center justify-between p-3 bg-gray-800 rounded-xl border border-yellow-500/30';
                     div.innerHTML = `
-                        <div class="flex items-center space-x-2">
-                            <img src="${getAvatar(userObj.avatar)}" class="w-8 h-8 rounded-full object-cover">
-                            <span class="font-bold text-white">${userObj.name || fromLogin} <span class="text-gray-400">(@${fromLogin})</span></span>
-                        </div>
-                        <div class="space-x-1">
-                            <button onclick="acceptFriendRequest('${fromLogin}')" class="bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded-lg text-white font-bold">Принять</button>
-                            <button onclick="rejectFriendRequest('${fromLogin}')" class="bg-red-600 hover:bg-red-500 px-3 py-1.5 rounded-lg text-white font-bold">Отклонить</button>
+                        <span class="font-bold text-white">@${reqLogin}</span>
+                        <div class="space-x-2">
+                            <button onclick="respondFriendRequest('${reqLogin}', true)" class="bg-green-600 hover:bg-green-500 px-3 py-1 rounded-lg text-xs font-bold text-white transition">Принять</button>
+                            <button onclick="respondFriendRequest('${reqLogin}', false)" class="bg-red-600 hover:bg-red-500 px-3 py-1 rounded-lg text-xs font-bold text-white transition">Отклонить</button>
                         </div>
                     `;
                     reqList.appendChild(div);
                 });
             } else {
-                document.getElementById('friend-requests-section').classList.add('hidden');
+                reqSection.classList.add('hidden');
             }
 
+            const outSection = document.getElementById('outgoing-requests-section');
+            const outList = document.getElementById('outgoing-requests-list');
+            const myOutgoing = db.outgoingRequests?.[currentUser.login] || [];
+
             if (myOutgoing.length > 0) {
-                document.getElementById('outgoing-requests-section').classList.remove('hidden');
-                myOutgoing.forEach(toLogin => {
-                    const userObj = db.users[toLogin] || { name: toLogin };
+                outSection.classList.remove('hidden');
+                outList.innerHTML = '';
+                myOutgoing.forEach(targetLogin => {
                     const div = document.createElement('div');
-                    div.className = 'bg-gray-900 border border-blue-500/30 p-3 rounded-xl flex items-center justify-between text-xs';
+                    div.className = 'flex items-center justify-between p-3 bg-gray-800 rounded-xl border border-blue-500/30';
                     div.innerHTML = `
-                        <div class="flex items-center space-x-2">
-                            <img src="${getAvatar(userObj.avatar)}" class="w-8 h-8 rounded-full object-cover">
-                            <span class="font-bold text-white">${userObj.name || toLogin} <span class="text-gray-400">(@${toLogin})</span></span>
-                        </div>
-                        <span class="text-blue-400 italic">Ожидание ответа...</span>
+                        <span class="font-bold text-white">@${targetLogin}</span>
+                        <button onclick="cancelFriendRequest('${targetLogin}')" class="bg-gray-700 hover:bg-red-600 px-3 py-1 rounded-lg text-xs font-bold text-white transition">Отменить заявку</button>
                     `;
                     outList.appendChild(div);
                 });
             } else {
-                document.getElementById('outgoing-requests-section').classList.add('hidden');
+                outSection.classList.add('hidden');
             }
 
+            const myFriends = db.friends[currentUser.login] || [];
             if (myFriends.length === 0) {
-                list.innerHTML = '<div class="text-xs text-gray-500">У вас пока нет друзей.</div>';
-            } else {
-                myFriends.forEach(friendLogin => {
-                    const friendObj = db.users[friendLogin] || { name: friendLogin };
-                    const badgeInfo = getRoleBadgeAndColor(friendLogin);
-                    const myGlobalRole = getUserGlobalRole(currentUser.login);
-                    const canAssign = currentUser.login.toLowerCase() === 'warren' || myGlobalRole === 'main_moderator';
-
-                    const div = document.createElement('div');
-                    div.className = 'bg-gray-950 border border-gray-800 p-3 rounded-xl flex items-center justify-between text-xs';
-                    div.innerHTML = `
-                        <div class="flex items-center space-x-3">
-                            <img src="${getAvatar(friendObj.avatar)}" class="w-10 h-10 rounded-full object-cover border border-purple-500/40">
-                            <div>
-                                <div class="font-bold text-white text-sm flex items-center space-x-1">
-                                    <span>${friendObj.name || friendLogin}</span>
-                                    ${badgeInfo.badge ? `<span title="${badgeInfo.title}">${badgeInfo.badge}</span>` : ''}
-                                </div>
-                                <div class="text-gray-400 font-mono">@${friendLogin}</div>
-                            </div>
-                        </div>
-                        <div class="flex items-center space-x-2">
-                            ${canAssign ? `<button onclick="openRoleAssignModal('${friendLogin}')" class="bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 px-3 py-1.5 rounded-lg font-bold">Роль</button>` : ''}
-                            <button onclick="openDirectChat('${friendLogin}'); switchTab('chats');" class="bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded-lg text-white font-bold">Написать</button>
-                        </div>
-                    `;
-                    list.appendChild(div);
-                });
+                friendsListEl.innerHTML = '<div class="text-gray-500 text-sm py-2">У вас пока нет друзей.</div>';
+                return;
             }
-            updateFriendsBadge();
+
+            myFriends.forEach(friendLogin => {
+                const friendObj = db.users[friendLogin] || {};
+                const displayName = db.customNicknames[currentUser.login]?.[friendLogin] || friendObj.name || friendLogin;
+                const avatarUrl = getAvatar(friendObj.avatar);
+                const isOnline = isUserOnline(friendLogin);
+                const roleInfo = getRoleBadgeAndColor(friendLogin);
+                const statusText = isOnline ? '<span class="text-green-400">В сети</span>' : `<span class="text-gray-500">${formatLastSeen(db.lastSeen?.[friendLogin])}</span>`;
+
+                const card = document.createElement('div');
+                card.className = 'flex items-center justify-between p-3 bg-gray-900 border border-gray-800 rounded-2xl shadow-sm hover:border-gray-700 transition';
+                card.innerHTML = `
+                    <div class="flex items-center space-x-3 cursor-pointer">
+                        <div class="relative" onclick="openRoleAssignModal('${friendLogin}')" title="Нажмите для назначения роли">
+                            <img src="${avatarUrl}" class="w-10 h-10 rounded-full object-cover border-2 border-purple-500/40 hover:scale-105 transition">
+                            ${roleInfo.badge ? `<span class="absolute -bottom-1 -right-1 text-[10px] bg-purple-900 rounded-full px-1 border border-purple-500">${roleInfo.badge}</span>` : ''}
+                            ${isOnline ? '<span class="absolute top-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-gray-900"></span>' : ''}
+                        </div>
+                        <div onclick="openUserChat('${friendLogin}')">
+                            <div class="font-bold flex items-center space-x-2">
+                                <span class="${roleInfo.color}">${displayName}</span>
+                                ${roleInfo.badge ? `<span class="text-[10px] bg-purple-600/30 text-purple-300 px-1.5 py-0.5 rounded-md">${roleInfo.title}</span>` : ''}
+                            </div>
+                            <div class="text-xs text-gray-400">${statusText}</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <button onclick="openUserChat('${friendLogin}')" title="Написать" class="p-2 bg-purple-600 hover:bg-purple-500 rounded-xl text-white font-bold text-xs transition">💬</button>
+                        <button onclick="startDirectCallTo('${friendLogin}')" title="Аудиозвонок" class="p-2 bg-green-600 hover:bg-green-500 rounded-xl text-white font-bold text-xs transition">📞</button>
+                        <button onclick="removeFriend('${friendLogin}')" title="Удалить" class="p-2 bg-red-600/30 hover:bg-red-600 rounded-xl text-red-300 hover:text-white font-bold text-xs transition">❌</button>
+                    </div>
+                `;
+                friendsListEl.appendChild(card);
+            });
+        }
+
+        function isUserOnline(login) {
+            const last = db.lastSeen?.[login];
+            if (!last) return false;
+            return (Date.now() - last) < 35000;
+        }
+
+        function formatLastSeen(timestamp) {
+            if (!timestamp) return 'был(а) давно';
+            const diff = Math.floor((Date.now() - timestamp) / 1000);
+            if (diff < 60) return 'был(а) только что';
+            if (diff < 3600) return `был(а) ${Math.floor(diff/60)} мин. назад`;
+            return `был(а) ${new Date(timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}`;
         }
 
         async function sendFriendRequest() {
-            const login = document.getElementById('add-friend-login').value.trim().toLowerCase();
-            if (!login || login === currentUser.login.toLowerCase()) return;
+            const input = document.getElementById('add-friend-login');
+            const targetLogin = input.value.trim().toLowerCase();
+            if (!targetLogin) return;
 
-            const res = await fetch('/api/friend-request', {
+            const res = await fetch('/api/add-friend', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ sender: currentUser.login, target: login })
+                body: JSON.stringify({ login: currentUser.login, targetLogin })
             });
             const data = await res.json();
             if (data.success) {
+                showCustomModal('Успех', 'Заявка успешно отправлена!', false, null, '✨');
+                input.value = '';
                 db = data.db;
-                document.getElementById('add-friend-login').value = '';
                 renderFriends();
-                showCustomModal('Успех', 'Заявка в друзья успешно отправлена!', false, null, '✨');
                 socket.emit('refresh-db');
             } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠️');
+                showCustomModal('Ошибка', data.error, false, null, '⚠');
             }
         }
 
-        async function acceptFriendRequest(fromLogin) {
-            const res = await fetch('/api/accept-friend', {
+        async function cancelFriendRequest(targetLogin) {
+            const res = await fetch('/api/cancel-friend-request', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, friendLogin: fromLogin })
+                body: JSON.stringify({ login: currentUser.login, targetLogin })
             });
             const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                renderFriends();
-                renderChatsList();
-                socket.emit('refresh-db');
-            }
+            if (data.success) { db = data.db; renderFriends(); socket.emit('refresh-db'); }
         }
 
-        async function rejectFriendRequest(fromLogin) {
-            const res = await fetch('/api/reject-friend', {
+        async function respondFriendRequest(requesterLogin, accept) {
+            const res = await fetch('/api/respond-friend-request', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, friendLogin: fromLogin })
+                body: JSON.stringify({ login: currentUser.login, requesterLogin, accept })
             });
             const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                renderFriends();
-                socket.emit('refresh-db');
-            }
+            if (data.success) { db = data.db; renderFriends(); renderChatsList(); socket.emit('refresh-db'); }
         }
 
-        // СООБЩЕСТВА И ПОСТЫ
-        async function createNewGroup() {
-            const nameInput = document.getElementById('new-group-name');
-            const closedCheckbox = document.getElementById('new-group-closed');
-            const name = nameInput.value.trim();
-            if (!name) return;
-
-            const res = await fetch('/api/create-group', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, name, isClosed: closedCheckbox.checked })
-            });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                nameInput.value = '';
-                closedCheckbox.checked = false;
-                renderGroups();
-                showCustomModal('Успех', 'Сообщество успешно создано!', false, null, '✨');
-                socket.emit('refresh-db');
-            } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠️');
-            }
+        async function removeFriend(friendLogin) {
+            showCustomModal('Подтверждение', `Удалить пользователя ${friendLogin} из друзей?`, true, async (confirmed) => {
+                if (!confirmed) return;
+                const res = await fetch('/api/remove-friend', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ login: currentUser.login, targetLogin: friendLogin })
+                });
+                const data = await res.json();
+                if (data.success) { db = data.db; renderFriends(); renderChatsList(); socket.emit('refresh-db'); }
+            }, '⚠');
         }
 
-        async function renderGroups() {
-            const list = document.getElementById('groups-list');
-            const select = document.getElementById('group-post-select');
+        socket.on('update-db', (updatedDb) => {
+            const oldRequestsCount = (db.friendRequests && db.friendRequests[currentUser.login]) ? db.friendRequests[currentUser.login].length : 0;
+            db = updatedDb;
+            const newRequestsCount = (db.friendRequests && db.friendRequests[currentUser.login]) ? db.friendRequests[currentUser.login].length : 0;
+
+            if (newRequestsCount > oldRequestsCount) {
+                playNotificationSound();
+                showWebNotification('Новая заявка в друзья', 'У вас появился новый запрос на добавление в друзья!');
+            }
+
+            renderFriends();
+            renderChatsList();
+            renderGroups();
+            renderNewsFeed();
+            renderMessages();
+            renderPinnedMessageBanner();
+            renderModerationPanel();
+            if (activeGroupWorkspaceId) {
+                updateGroupWorkspaceHeader(activeGroupWorkspaceId);
+            }
+        });
+
+        socket.on('receive-message', ({ sender, receiver, msg }) => {
+            if (!db.messagesStore) db.messagesStore = {};
+            const key = [sender, receiver].sort().join('_');
+            if (!db.messagesStore[key]) db.messagesStore[key] = [];
+            db.messagesStore[key].push(msg);
+
+            if (sender !== currentUser.login) {
+                if (!activeChat || activeChat.type !== 'user' || activeChat.id !== sender) {
+                    unreadMessagesMap[sender] = (unreadMessagesMap[sender] || 0) + 1;
+                    updateChatsBadge();
+                    playNotificationSound();
+                    showWebNotification(`Новое сообщение от @${sender}`, msg.text || '[Медиафайл]');
+                }
+            }
+            renderChatsList();
+            renderMessages();
+            renderModerationPanel();
+        });
+
+        socket.on('receive-group-message', ({ groupId, msg, subgroup }) => {
+            if (msg.sender !== currentUser.login) {
+                unreadGroupsCount++;
+                updateGroupsBadge();
+                playNotificationSound();
+            }
+            renderMessages();
+            renderModerationPanel();
+        });
+
+        function renderChatsList() {
+            const list = document.getElementById('chats-list');
+            if (!list) return;
             list.innerHTML = '';
-            select.innerHTML = '';
 
-            const groups = db.groups || {};
-            let myGroupsCount = 0;
+            const savedCard = document.createElement('div');
+            savedCard.className = `p-3 rounded-2xl cursor-pointer flex items-center space-x-3 hover:bg-gray-800 transition ${activeChat?.type === 'saved' ? 'bg-gray-800' : ''}`;
+            savedCard.onclick = () => selectChat({ type: 'saved', id: currentUser.login });
+            savedCard.innerHTML = `
+                <div class="w-10 h-10 rounded-full bg-purple-600/30 text-purple-400 flex items-center justify-center font-bold flex-shrink-0">📌</div>
+                <div class="overflow-hidden">
+                    <div class="font-bold text-white truncate">Избранное</div>
+                    <div class="text-xs text-gray-400 truncate">Заметки и файлы</div>
+                </div>
+            `;
+            list.appendChild(savedCard);
 
-            Object.values(groups).forEach(g => {
-                const isMember = g.members && g.members.includes(currentUser.login.toLowerCase());
-                const isLeader = g.leader && g.leader.toLowerCase() === currentUser.login.toLowerCase();
+            const myFriends = db.friends[currentUser.login] || [];
+            myFriends.forEach(friendLogin => {
+                const friendObj = db.users[friendLogin] || {};
+                const displayName = db.customNicknames[currentUser.login]?.[friendLogin] || friendObj.name || friendLogin;
+                const avatarUrl = getAvatar(friendObj.avatar);
+                const unreadCount = unreadMessagesMap[friendLogin] || 0;
+                const isOnline = isUserOnline(friendLogin);
+                const roleInfo = getRoleBadgeAndColor(friendLogin);
 
-                if (isMember || isLeader) {
-                    myGroupsCount++;
-                    const opt = document.createElement('option');
-                    opt.value = g.id;
-                    opt.textContent = g.name + (g.verified ? ' ✓' : '');
-                    select.appendChild(opt);
-                }
-
-                const div = document.createElement('div');
-                div.className = 'bg-gray-950 border border-gray-800 p-3 rounded-xl flex items-center justify-between text-xs';
-                
-                let actionBtn = '';
-                if (isLeader || isMember) {
-                    actionBtn = `<button onclick="openGroupWorkspace('${g.id}')" class="bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded-lg text-white font-bold">Открыть</button>`;
-                } else if (g.requests && g.requests.includes(currentUser.login.toLowerCase())) {
-                    actionBtn = `<span class="text-yellow-400 italic">Запрос отправлен</span>`;
-                } else {
-                    actionBtn = `<button onclick="joinGroup('${g.id}')" class="bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 px-3 py-1.5 rounded-lg font-bold">${g.isClosed ? 'Подать запрос' : 'Вступить'}</button>`;
-                }
-
-                div.innerHTML = `
-                    <div class="flex items-center space-x-3">
-                        <img src="${getAvatar(g.avatar)}" class="w-10 h-10 rounded-xl object-cover border border-purple-500/30">
-                        <div>
-                            <div class="font-bold text-white text-sm flex items-center space-x-1">
-                                <span>${g.name}</span>
-                                ${g.verified ? '<span class="text-blue-400" title="Верифицировано">✓</span>' : ''}
-                            </div>
-                            <div class="text-gray-400">${g.isClosed ? '🔒 Закрытая' : '🌐 Открытая'} • Участников: ${(g.members || []).length}</div>
+                const item = document.createElement('div');
+                item.className = `p-3 rounded-2xl cursor-pointer flex items-center justify-between hover:bg-gray-800 transition ${activeChat?.type === 'user' && activeChat?.id === friendLogin ? 'bg-gray-800' : ''}`;
+                item.onclick = () => selectChat({ type: 'user', id: friendLogin });
+                item.innerHTML = `
+                    <div class="flex items-center space-x-3 overflow-hidden">
+                        <div class="relative flex-shrink-0">
+                            <img src="${avatarUrl}" class="w-10 h-10 rounded-full object-cover">
+                            ${roleInfo.badge ? `<span class="absolute -bottom-1 -right-1 text-[9px] bg-purple-900 rounded-full px-0.5 border border-purple-500">${roleInfo.badge}</span>` : ''}
+                            ${isOnline ? '<span class="absolute top-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-gray-900"></span>' : ''}
+                        </div>
+                        <div class="overflow-hidden">
+                            <div class="font-bold truncate ${roleInfo.color}">${displayName}</div>
+                            <div class="text-xs text-gray-400 truncate">${isOnline ? 'В сети' : formatLastSeen(db.lastSeen?.[friendLogin])}</div>
                         </div>
                     </div>
-                    <div>${actionBtn}</div>
+                    ${unreadCount > 0 ? `<span class="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">${unreadCount}</span>` : ''}
                 `;
-                list.appendChild(div);
+                list.appendChild(item);
             });
-
-            if (myGroupsCount === 0) {
-                const opt = document.createElement('option');
-                opt.value = '';
-                opt.textContent = 'У вас нет групп';
-                select.appendChild(opt);
-            }
-
-            renderGroupsFeed();
         }
 
-        async function joinGroup(groupId) {
-            const res = await fetch('/api/join-group', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, groupId })
+        function filterChats() {
+            const query = document.getElementById('chat-search').value.toLowerCase();
+            const items = document.querySelectorAll('#chats-list > div');
+            items.forEach(item => {
+                const text = item.textContent.toLowerCase();
+                item.style.display = text.includes(query) ? 'flex' : 'none';
             });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                renderGroups();
-                showCustomModal('Успех', data.message || 'Вы вступили в сообщество!', false, null, '✨');
-                socket.emit('refresh-db');
+        }
+
+        function openUserChat(friendLogin) {
+            switchTab('chats');
+            selectChat({ type: 'user', id: friendLogin });
+        }
+
+        let editingGroupId = null;
+
+        function openActiveGroupSettings() {
+            const gId = activeGroupWorkspaceId || (activeChat && activeChat.type === 'group' ? activeChat.id : null);
+            if (!gId) return;
+            openGroupSettings(gId);
+        }
+
+        function openGroupSettings(groupId) {
+            editingGroupId = groupId;
+            const group = db.groups[groupId];
+            document.getElementById('edit-group-name-input').value = group.name;
+            document.getElementById('edit-group-avatar-preview').src = getAvatar(group.avatar);
+            document.getElementById('edit-group-closed-checkbox').checked = !!group.isClosed;
+
+            const isLeader = group.creator === currentUser.login || hasFullAccess(currentUser.login);
+            const myRole = group.roles?.[currentUser.login];
+            const canManage = isLeader || myRole === 'Админ';
+
+            const rolesManagerBox = document.getElementById('leader-roles-manager');
+            const deleteSection = document.getElementById('leader-delete-section');
+
+            if (canManage || hasFullAccess(currentUser.login)) {
+                rolesManagerBox.classList.remove('hidden');
+                renderRolePermissionsEditor(group);
             } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠️');
-            }
-        }
-
-        function openGroupWorkspace(groupId) {
-            activeGroupWorkspaceId = groupId;
-            const g = db.groups[groupId];
-            if (!g) return;
-
-            document.getElementById('groups-main-view').classList.add('hidden');
-            document.getElementById('group-workspace-view').classList.remove('hidden');
-
-            document.getElementById('ws-group-sidebar-name').textContent = g.name;
-            document.getElementById('ws-active-chat-avatar').src = getAvatar(g.avatar);
-            document.getElementById('ws-active-chat-name').innerHTML = `${g.name} ${g.verified ? '<span class="text-blue-400">✓</span>' : ''}`;
-
-            const isLeader = g.leader && g.leader.toLowerCase() === currentUser.login.toLowerCase();
-            const verifBtnContainer = document.getElementById('ws-verification-btn-container');
-            verifBtnContainer.innerHTML = '';
-            if (isLeader && !g.verified) {
-                verifBtnContainer.innerHTML = `<button onclick="requestGroupVerification('${groupId}')" class="p-1.5 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 rounded-lg text-xs" title="Запросить верификацию">🛡️</button>`;
+                rolesManagerBox.classList.add('hidden');
             }
 
-            const textChanList = document.getElementById('ws-sidebar-text-channels');
-            const voiceChanList = document.getElementById('ws-sidebar-voice-channels');
-            textChanList.innerHTML = '';
-            voiceChanList.innerHTML = '';
-
-            const mainTextDiv = document.createElement('div');
-            mainTextDiv.className = `p-2 rounded-xl cursor-pointer text-xs font-bold ${activeSubgroup === 'main' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:bg-gray-800'}`;
-            mainTextDiv.textContent = '# общий';
-            mainTextDiv.onclick = () => switchGroupChannel('main', 'text');
-            textChanList.appendChild(mainTextDiv);
-
-            if (g.subgroups) {
-                g.subgroups.forEach(sub => {
-                    const subDiv = document.createElement('div');
-                    subDiv.className = `p-2 rounded-xl cursor-pointer text-xs font-bold flex items-center justify-between ${activeSubgroup === sub.id ? 'bg-purple-600 text-white' : 'text-gray-400 hover:bg-gray-800'}`;
-                    subDiv.innerHTML = `<span>${sub.type === 'voice' ? '🎙' : '#'} ${sub.name}</span>`;
-                    subDiv.onclick = () => switchGroupChannel(sub.id, sub.type);
-                    if (sub.type === 'voice') voiceChanList.appendChild(subDiv);
-                    else textChanList.appendChild(subDiv);
+            if (isLeader || hasFullAccess(currentUser.login)) {
+                deleteSection.classList.remove('hidden');
+            } else {
+                deleteSection.classList.add('hidden');
+            }
+            
+            const channelsList = document.getElementById('group-channels-list');
+            channelsList.innerHTML = '';
+            if (group.subgroups && group.subgroups.length > 0) {
+                group.subgroups.forEach(sub => {
+                    const row = document.createElement('div');
+                    row.className = 'flex justify-between items-center bg-gray-800 p-2.5 rounded-xl text-xs';
+                    row.innerHTML = `
+                        <span class="text-white font-bold">${sub.type === 'voice' ? '🎙' : '#'} ${sub.name} <span class="text-gray-400 font-normal">(${sub.allowedRole || 'всем'})</span></span>
+                        <button onclick="deleteSubgroup('${groupId}', '${sub.id}')" class="text-red-400 hover:text-red-300 font-bold px-2 py-1 bg-red-600/20 rounded-lg">Удалить</button>
+                    `;
+                    channelsList.appendChild(row);
                 });
+            } else {
+                channelsList.innerHTML = '<div class="text-xs text-gray-500 p-2">Нет дополнительных каналов</div>';
             }
 
-            renderGroupChannelMessages();
-        }
+            const membersList = document.getElementById('group-members-column-list');
+            membersList.innerHTML = '';
+            const availableRoles = ['Лидер', 'Админ', 'Участник', ...Object.keys(group.customRoles || {})];
 
-        function closeGroupWorkspace() {
-            activeGroupWorkspaceId = null;
-            activeSubgroup = 'main';
-            document.getElementById('group-workspace-view').classList.add('hidden');
-            document.getElementById('groups-main-view').classList.remove('hidden');
-        }
+            group.members.forEach(m => {
+                const mLeader = group.creator === m;
+                const mRole = group.roles?.[m] || (mLeader ? 'Лидер' : 'Участник');
+                const row = document.createElement('div');
+                row.className = 'flex justify-between items-center bg-gray-950 p-2.5 rounded-xl text-xs border border-gray-800';
+                
+                let roleSelectorHTML = `<span class="text-purple-400">[${mRole}]</span>`;
+                if (canManage && !mLeader && m !== currentUser.login) {
+                    let options = availableRoles.map(r => `<option value="${r}" ${mRole === r ? 'selected' : ''}>${r}</option>`).join('');
+                    roleSelectorHTML = `<select onchange="changeMemberRole('${groupId}', '${m}', this.value)" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-purple-300">${options}</select>`;
+                }
 
-        function switchGroupChannel(subId, type) {
-            activeSubgroup = subId;
-            openGroupWorkspace(activeGroupWorkspaceId);
-        }
-
-        async function requestGroupVerification(groupId) {
-            const res = await fetch('/api/request-verification', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, groupId })
+                row.innerHTML = `
+                    <div class="flex items-center space-x-2">
+                        <span class="text-white font-bold">@${m} ${mLeader ? '⭐' : ''}</span>
+                        ${roleSelectorHTML}
+                    </div>
+                    ${(canManage && !mLeader && m !== currentUser.login) ? `<button onclick="kickGroupMember('${groupId}', '${m}')" class="bg-red-600 hover:bg-red-500 px-2 py-1 rounded text-[10px] font-bold text-white">Исключить</button>` : ''}
+                `;
+                membersList.appendChild(row);
             });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                showCustomModal('Успех', 'Запрос на верификацию отправлен модераторам!', false, null, '🛡️');
-                socket.emit('refresh-db');
-            }
-        }
 
-        function openCreateChannelModal(type) {
-            document.getElementById('subgroup-modal-title').textContent = type === 'text' ? 'Создать текстовый канал' : 'Создать голосовой канал';
-            document.getElementById('subgroup-type-select').value = type;
-            document.getElementById('subgroup-name-input').value = '';
-            document.getElementById('subgroup-modal').classList.remove('hidden');
-        }
-
-        async function submitCreateSubgroup() {
-            const name = document.getElementById('subgroup-name-input').value.trim();
-            const type = document.getElementById('subgroup-type-select').value;
-            if (!name || !activeGroupWorkspaceId) return;
-
-            const res = await fetch('/api/create-subgroup', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, groupId: activeGroupWorkspaceId, name, type })
-            });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                document.getElementById('subgroup-modal').classList.add('hidden');
-                openGroupWorkspace(activeGroupWorkspaceId);
-                showCustomModal('Успех', 'Канал успешно создан!', false, null, '✨');
-                socket.emit('refresh-db');
-            }
-        }
-
-        async function deleteSubgroup(groupId, subId) {
-            const res = await fetch('/api/delete-subgroup', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, groupId, subId })
-            });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                renderModerationPanel();
-                if (activeGroupWorkspaceId === groupId) openGroupWorkspace(groupId);
-                socket.emit('refresh-db');
-            }
-        }
-
-        function renderGroupChannelMessages() {
-            if (!activeGroupWorkspaceId) return;
-            activeChat = { type: 'group_channel', groupId: activeGroupWorkspaceId, channelId: activeSubgroup };
-            renderActiveChatMessages();
+            document.getElementById('group-settings-modal').classList.remove('hidden');
         }
 
         function openGroupRequestsModal() {
-            const g = db.groups[activeGroupWorkspaceId];
-            if (!g) return;
-            const listEl = document.getElementById('group-requests-list-modal');
-            listEl.innerHTML = '';
-            const reqs = g.requests || [];
+            const gId = activeGroupWorkspaceId;
+            if (!gId) return;
+            const group = db.groups[gId];
+            if (!group) return;
 
-            if (reqs.length === 0) {
-                listEl.innerHTML = '<div class="text-xs text-gray-500 text-center py-2">Нет запросов на вступление.</div>';
+            const listModal = document.getElementById('group-requests-list-modal');
+            listModal.innerHTML = '';
+            const requests = group.joinRequests || [];
+
+            if (requests.length === 0) {
+                listModal.innerHTML = '<div class="text-xs text-gray-500 text-center py-4">Нет входящих запросов на вступление.</div>';
             } else {
-                reqs.forEach(userLogin => {
-                    const uObj = db.users[userLogin] || { name: userLogin };
-                    const div = document.createElement('div');
-                    div.className = 'bg-gray-950 p-2.5 rounded-xl border border-gray-800 flex items-center justify-between text-xs';
-                    div.innerHTML = `
-                        <div class="flex items-center space-x-2">
-                            <img src="${getAvatar(uObj.avatar)}" class="w-8 h-8 rounded-full object-cover">
-                            <span class="font-bold text-white">${uObj.name || userLogin} (@${userLogin})</span>
-                        </div>
+                requests.forEach(reqLogin => {
+                    const item = document.createElement('div');
+                    item.className = 'flex justify-between items-center bg-gray-950 p-2.5 rounded-xl text-xs border border-gray-800';
+                    item.innerHTML = `
+                        <span class="text-white font-bold">@${reqLogin}</span>
                         <div class="space-x-1">
-                            <button onclick="resolveGroupRequest('${activeGroupWorkspaceId}', '${userLogin}', true)" class="bg-green-600 hover:bg-green-500 px-3 py-1 rounded-lg font-bold text-white">Принять</button>
-                            <button onclick="resolveGroupRequest('${activeGroupWorkspaceId}', '${userLogin}', false)" class="bg-red-600 hover:bg-red-500 px-3 py-1 rounded-lg font-bold text-white">Отклонить</button>
+                            <button onclick="respondJoinRequest('${group.id}', '${reqLogin}', true)" class="bg-green-600 hover:bg-green-500 text-white px-2.5 py-1 rounded-lg font-bold">Принять</button>
+                            <button onclick="respondJoinRequest('${group.id}', '${reqLogin}', false)" class="bg-red-600 hover:bg-red-500 text-white px-2.5 py-1 rounded-lg font-bold">Отклонить</button>
                         </div>
                     `;
-                    listEl.appendChild(div);
+                    listModal.appendChild(item);
                 });
             }
             document.getElementById('group-requests-modal').classList.remove('hidden');
         }
 
-        async function resolveGroupRequest(groupId, userLogin, accept) {
-            const res = await fetch('/api/resolve-group-request', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, groupId, targetLogin: userLogin, accept })
-            });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                openGroupRequestsModal();
-                socket.emit('refresh-db');
-            }
-        }
-
+        // МОДАЛЬНОЕ ОКНО УПРАВЛЕНИЯ УЧАСТНИКАМИ ГРУППЫ С МУТОМ И НИКНЕЙМАМИ
         function openGroupMembersModal() {
-            const g = db.groups[activeGroupWorkspaceId];
-            if (!g) return;
+            const gId = activeGroupWorkspaceId;
+            if (!gId) return;
+            const group = db.groups[gId];
+            if (!group) return;
+
             const listEl = document.getElementById('group-members-list-modal');
             listEl.innerHTML = '';
-            const members = g.members || [];
-            const isLeader = g.leader && g.leader.toLowerCase() === currentUser.login.toLowerCase();
+            
+            const isLeader = group.creator === currentUser.login;
+            const myRole = group.roles?.[currentUser.login] || (isLeader ? 'Лидер' : 'Участник');
+            const canManage = isLeader || myRole === 'Админ' || hasFullAccess(currentUser.login);
+            const availableRoles = ['Лидер', 'Админ', 'Участник', ...Object.keys(group.customRoles || {})];
 
-            members.forEach(memberLogin => {
-                const uObj = db.users[memberLogin] || { name: memberLogin };
+            group.members.forEach(m => {
+                const mLeader = group.creator === m;
+                const mRole = group.roles?.[m] || (mLeader ? 'Лидер' : 'Участник');
+                const customNick = group.groupNicknames?.[m] || '';
+                const isMuted = group.groupMutedUsers?.[m] && group.groupMutedUsers[m] > Date.now();
+                const userObj = db.users[m] || {};
+
                 const div = document.createElement('div');
-                div.className = 'bg-gray-950 p-3 rounded-xl border border-gray-800 flex items-center justify-between text-xs';
+                div.className = 'bg-gray-950 border border-gray-800 p-3 rounded-2xl space-y-2 text-xs';
+                
+                let roleSelectHTML = `<span class="text-purple-400 font-bold">[${mRole}]</span>`;
+                if (canManage && !mLeader && m !== currentUser.login) {
+                    let opts = availableRoles.map(r => `<option value="${r}" ${mRole === r ? 'selected' : ''}>${r}</option>`).join('');
+                    roleSelectHTML = `<select onchange="changeMemberRole('${groupId}', '${m}', this.value)" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-purple-300">${opts}</select>`;
+                }
+
                 div.innerHTML = `
-                    <div class="flex items-center space-x-3">
-                        <img src="${getAvatar(uObj.avatar)}" class="w-9 h-9 rounded-full object-cover">
-                        <div>
-                            <div class="font-bold text-white">${uObj.name || memberLogin} ${g.leader === memberLogin ? '<span class="text-amber-400 font-bold">[Лидер]</span>' : ''}</div>
-                            <div class="text-gray-400">@${memberLogin}</div>
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <img src="${getAvatar(userObj.avatar)}" class="w-8 h-8 rounded-full object-cover">
+                            <div>
+                                <div class="font-bold text-white">@${m} ${customNick ? '(' + customNick + ')' : ''} ${mLeader ? '⭐' : ''}</div>
+                                <div class="text-[10px] text-gray-400">${isMuted ? '<span class="text-red-400 font-bold">🔇 В муте в группе</span>' : 'Активен'}</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                            ${roleSelectHTML}
                         </div>
                     </div>
-                    ${isLeader && g.leader !== memberLogin ? `<button onclick="kickGroupMember('${groupId}', '${memberLogin}')" class="bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white px-3 py-1.5 rounded-lg font-bold">Исключить</button>` : ''}
+                    ${canManage && !mLeader ? `
+                    <div class="flex items-center justify-between pt-2 border-t border-gray-800 flex-wrap gap-1">
+                        <div class="flex items-center space-x-1">
+                            <input type="text" id="group-nick-input-${m}" value="${customNick}" placeholder="Ник в группе..." class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-28">
+                            <button onclick="saveGroupNickname('${groupId}', '${m}')" class="bg-purple-600 hover:bg-purple-500 px-2 py-1 rounded text-white font-bold">Изменить ник</button>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                            ${isMuted ? 
+                                `<button onclick="groupUnmuteMember('${groupId}', '${m}')" class="bg-green-600 hover:bg-green-500 px-2 py-1 rounded text-white font-bold">Размутить</button>` :
+                                `<button onclick="groupMuteMemberModal('${groupId}', '${m}')" class="bg-red-600 hover:bg-red-500 px-2 py-1 rounded text-white font-bold">Мут</button>`
+                            }
+                            <button onclick="kickGroupMember('${groupId}', '${m}')" class="bg-gray-700 hover:bg-red-600 px-2 py-1 rounded text-white font-bold">Исключить</button>
+                        </div>
+                    </div>
+                    ` : ''}
                 `;
                 listEl.appendChild(div);
             });
+
             document.getElementById('group-members-modal').classList.remove('hidden');
         }
 
-        async function kickGroupMember(groupId, memberLogin) {
-            const res = await fetch('/api/kick-group-member', {
+        async function saveGroupNickname(groupId, targetLogin) {
+            const input = document.getElementById(`group-nick-input-${targetLogin}`);
+            if (!input) return;
+            const nickname = input.value.trim();
+
+            const res = await fetch('/api/group-set-nickname', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, groupId, targetLogin: memberLogin })
+                body: JSON.stringify({ groupId, login: currentUser.login, targetLogin, nickname })
             });
             const data = await res.json();
             if (data.success) {
                 db = data.db;
                 openGroupMembersModal();
+                showCustomModal('Успех', 'Ник участника в группе изменен!', false, null, '✨');
+                socket.emit('refresh-db');
+            } else {
+                showCustomModal('Ошибка', data.error, false, null, '⚠️');
+            }
+        }
+
+        function groupMuteMemberModal(groupId, targetLogin) {
+            showCustomModal('Мут в группе', `Выдать мут пользователю @${targetLogin} в этой группе? (Запрет на отправку сообщений и голосовой чат)`, true, async (confirmed) => {
+                if (!confirmed) return;
+                const res = await fetch('/api/group-mute-member', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ groupId, login: currentUser.login, targetLogin, muteMinutes: 60 })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    db = data.db;
+                    openGroupMembersModal();
+                    showCustomModal('Мут выдан', 'Пользователь заблокирован в этой группе.', false, null, '🔇');
+                    socket.emit('refresh-db');
+                } else {
+                    showCustomModal('Ошибка', data.error, false, null, '⚠️');
+                }
+            }, '🔇');
+        }
+
+        async function groupUnmuteMember(groupId, targetLogin) {
+            const res = await fetch('/api/group-mute-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, login: currentUser.login, targetLogin, muteMinutes: 0 })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                openGroupMembersModal();
+                showCustomModal('Успех', 'Мут снят с участника.', false, null, '✨');
                 socket.emit('refresh-db');
             }
         }
 
-        function openActiveGroupSettings() {
-            const g = db.groups[activeGroupWorkspaceId];
-            if (!g) return;
-            document.getElementById('edit-group-name-input').value = g.name;
-            document.getElementById('edit-group-avatar-preview').src = getAvatar(g.avatar);
-            document.getElementById('edit-group-closed-checkbox').checked = g.isClosed;
-
-            const isLeader = g.leader && g.leader.toLowerCase() === currentUser.login.toLowerCase();
-            const rolesManager = document.getElementById('leader-roles-manager');
-            const deleteSection = document.getElementById('leader-delete-section');
-
-            if (isLeader) {
-                rolesManager.classList.remove('hidden');
-                deleteSection.classList.remove('hidden');
+        async function requestGroupVerification() {
+            const gId = activeGroupWorkspaceId;
+            if (!gId) return;
+            const res = await fetch('/api/request-verification', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId: gId, login: currentUser.login })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                updateGroupWorkspaceHeader(gId);
+                showCustomModal('Запрос отправлен', 'Запрос на верификацию сообщества успешно отправлен модераторам.', false, null, '✨');
+                socket.emit('refresh-db');
             } else {
-                rolesManager.classList.add('hidden');
-                deleteSection.classList.add('hidden');
+                showCustomModal('Ошибка', data.error, false, null, '⚠️');
             }
+        }
 
-            document.getElementById('group-settings-modal').classList.remove('hidden');
+        function updateGroupWorkspaceHeader(groupId) {
+            const group = db.groups[groupId];
+            const dot = document.getElementById('ws-requests-badge-dot');
+            const verifContainer = document.getElementById('ws-verification-btn-container');
+            const nameEl = document.getElementById('ws-group-sidebar-name');
+            const activeNameEl = document.getElementById('ws-active-chat-name');
+            if (!group) return;
+
+            const reqs = group.joinRequests || [];
+            if (reqs.length > 0) dot.classList.remove('hidden');
+            else dot.classList.add('hidden');
+
+            if (group.isVerified) {
+                verifContainer.innerHTML = `<span class="text-blue-400 text-sm font-bold" title="Сообщество верифицировано">✅</span>`;
+                nameEl.innerHTML = `<span class="verified-gradient-name">${group.name}</span> <span class="text-blue-400">✓</span>`;
+                activeNameEl.innerHTML = `<span class="verified-gradient-name font-extrabold">${group.name}</span> <span class="text-blue-400" title="Верифицировано">✅</span> (# общий)`;
+            } else if (group.verificationPending) {
+                verifContainer.innerHTML = `<span class="text-yellow-400 text-[10px]" title="На проверке">⏳ На проверке</span>`;
+                nameEl.textContent = group.name;
+                activeNameEl.textContent = group.name + ' (# общий)';
+            } else {
+                verifContainer.innerHTML = `<button onclick="requestGroupVerification()" class="p-1.5 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 rounded-lg text-xs" title="Запросить верификацию">🛡️</button>`;
+                nameEl.textContent = group.name;
+                activeNameEl.textContent = group.name + ' (# общий)';
+            }
+        }
+
+        async function respondJoinRequest(groupId, targetLogin, accept) {
+            const res = await fetch('/api/respond-join-request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, login: currentUser.login, targetLogin, accept })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                openGroupRequestsModal();
+                updateGroupWorkspaceHeader(groupId);
+                socket.emit('refresh-db');
+            }
+        }
+
+        async function kickGroupMember(groupId, targetLogin) {
+            showCustomModal('Подтверждение', `Исключить @${targetLogin} из группы?`, true, async (confirmed) => {
+                if (!confirmed) return;
+                const res = await fetch('/api/kick-group-member', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ groupId, login: currentUser.login, targetLogin })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    db = data.db;
+                    openGroupSettings(groupId);
+                    openGroupMembersModal();
+                    socket.emit('refresh-db');
+                } else {
+                    showCustomModal('Ошибка', data.error, false, null, '⚠️️');
+                }
+            }, '⚠️');
+        }
+
+        function renderRolePermissionsEditor(group) {
+            const listEl = document.getElementById('role-permissions-editor-list');
+            if (!listEl) return;
+            listEl.innerHTML = '';
+            if (!group.customRoles) group.customRoles = {};
+
+            Object.entries(group.customRoles).forEach(([roleName, perms]) => {
+                const item = document.createElement('div');
+                item.className = 'flex flex-col sm:flex-row justify-between items-start sm:items-center bg-gray-900 p-2.5 rounded-xl text-xs gap-2';
+                item.innerHTML = `
+                    <span class="text-white font-bold">${roleName}</span>
+                    <div class="flex items-center space-x-3 flex-wrap gap-y-1">
+                        <label class="text-[11px] text-gray-300 flex items-center space-x-1 cursor-pointer">
+                            <input type="checkbox" id="perm-post-${roleName}" ${perms.canPost ? 'checked' : ''} onchange="updateRolePerms('${group.id}', '${roleName}')" class="accent-purple-500"> 
+                            <span>Посты</span>
+                        </label>
+                        <label class="text-[11px] text-gray-300 flex items-center space-x-1 cursor-pointer">
+                            <input type="checkbox" id="perm-del-${roleName}" ${perms.canDelete ? 'checked' : ''} onchange="updateRolePerms('${group.id}', '${roleName}')" class="accent-purple-500"> 
+                            <span>Удаление</span>
+                        </label>
+                        <label class="text-[11px] text-gray-300 flex items-center space-x-1 cursor-pointer">
+                            <input type="checkbox" id="perm-news-${roleName}" ${perms.canDuplicateNews ? 'checked' : ''} onchange="updateRolePerms('${group.id}', '${roleName}')" class="accent-purple-500"> 
+                            <span>Дубл. в новости</span>
+                        </label>
+                        ${roleName !== 'Админ' && roleName !== 'Участник' ? `<button onclick="deleteCustomRole('${group.id}', '${roleName}')" class="text-red-400 hover:text-red-300 font-bold px-2 py-0.5 bg-red-600/20 rounded">Удалить</button>` : ''}
+                    </div>
+                `;
+                listEl.appendChild(item);
+            });
+        }
+
+        async function updateRolePerms(groupId, roleName) {
+            const canPost = document.getElementById(`perm-post-${roleName}`).checked;
+            const canDelete = document.getElementById(`perm-del-${roleName}`).checked;
+            const canDuplicateNews = document.getElementById(`perm-news-${roleName}`).checked;
+
+            const res = await fetch('/api/update-role-permissions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, login: currentUser.login, roleName, permissions: { canPost, canDelete, canVoice: true, canDuplicateNews } })
+            });
+            const data = await res.json();
+            if (data.success) { db = data.db; }
+        }
+
+        async function createCustomRole() {
+            const nameInput = document.getElementById('new-role-name-input');
+            const roleName = nameInput.value.trim();
+            if (!roleName || !editingGroupId) return;
+
+            const canPost = document.getElementById('role-perm-post').checked;
+            const canDelete = document.getElementById('role-perm-del').checked;
+            const canDuplicateNews = document.getElementById('role-perm-news').checked;
+
+            const res = await fetch('/api/create-custom-role', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId: editingGroupId, login: currentUser.login, roleName, permissions: { canPost, canDelete, canVoice: true, canDuplicateNews } })
+            });
+            const data = await res.json();
+            if (data.success) { db = data.db; nameInput.value = ''; openGroupSettings(editingGroupId); }
+        }
+
+        async function deleteCustomRole(groupId, roleName) {
+            const res = await fetch('/api/delete-custom-role', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, login: currentUser.login, roleName })
+            });
+            const data = await res.json();
+            if (data.success) { db = data.db; openGroupSettings(groupId); }
+        }
+
+        async function changeMemberRole(groupId, targetLogin, newRole) {
+            const res = await fetch('/api/set-group-role', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, login: currentUser.login, targetLogin, newRole })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                renderGroups();
+                openGroupMembersModal();
+            }
         }
 
         async function saveGroupSettings() {
-            if (!activeGroupWorkspaceId) return;
             const name = document.getElementById('edit-group-name-input').value.trim();
             const isClosed = document.getElementById('edit-group-closed-checkbox').checked;
-            let avatar = db.groups[activeGroupWorkspaceId].avatar;
+            if (!name || !editingGroupId) return;
 
             const fileInput = document.getElementById('edit-group-avatar-file');
+            let avatar = db.groups[editingGroupId].avatar;
             if (fileInput.files && fileInput.files[0]) {
                 avatar = await readFileAsDataURL(fileInput.files[0]);
             }
@@ -2834,81 +2435,560 @@
             const res = await fetch('/api/update-group', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, groupId: activeGroupWorkspaceId, name, isClosed, avatar })
+                body: JSON.stringify({ groupId: editingGroupId, name, avatar, isClosed, login: currentUser.login })
             });
             const data = await res.json();
             if (data.success) {
                 db = data.db;
                 document.getElementById('group-settings-modal').classList.add('hidden');
-                openGroupWorkspace(activeGroupWorkspaceId);
                 renderGroups();
-                showCustomModal('Успех', 'Настройки группы сохранены!', false, null, '✨');
-                socket.emit('refresh-db');
+                if (activeGroupWorkspaceId === editingGroupId) openGroupWorkspace(editingGroupId);
             }
         }
 
         async function deleteCurrentGroupModal() {
-            if (!activeGroupWorkspaceId) return;
-            showCustomModal('Удаление группы', 'Вы уверены, что хотите удалить это сообщество?', true, async (res) => {
-                if (res) {
-                    const response = await fetch('/api/delete-group', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ login: currentUser.login, groupId: activeGroupWorkspaceId })
-                    });
-                    const data = await response.json();
-                    if (data.success) {
-                        db = data.db;
-                        document.getElementById('group-settings-modal').classList.add('hidden');
-                        closeGroupWorkspace();
-                        renderGroups();
-                        showCustomModal('Успех', 'Группа успешно удалена.', false, null, '✨');
-                        socket.emit('refresh-db');
-                    }
+            if (!editingGroupId) return;
+            showCustomModal('Подтверждение', 'Удалить эту группу?', true, async (confirmed) => {
+                if (!confirmed) return;
+                const res = await fetch('/api/delete-group', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ groupId: editingGroupId, login: currentUser.login })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    db = data.db;
+                    document.getElementById('group-settings-modal').classList.add('hidden');
+                    closeGroupWorkspace();
+                    renderGroups();
                 }
             }, '⚠️');
         }
 
-        // ---------- ПОСТЫ СООБЩЕСТВ И НОВОСТИ ----------
-        let currentPostMedia = null;
-        async function handlePostFileUpload(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            currentPostMedia = await readFileAsDataURL(file);
-            document.getElementById('post-file-preview').textContent = `Файл прикреплен: ${file.name}`;
-        }
-
-        async function publishPost() {
-            const textInput = document.getElementById('post-text-input');
-            const text = textInput.value.trim();
-            if (!text && !currentPostMedia) return;
-
-            // Проверка на мут
-            const mutedUntil = db.mutedUsers?.[currentUser.login.toLowerCase()] || 0;
-            if (mutedUntil > Date.now()) {
-                const mins = Math.ceil((mutedUntil - Date.now()) / 60000);
-                showCustomModal('Мут', `Вам выдан мут! Вы не можете отправлять посты. Осталось минут: ${mins}`, false, null, '🔇');
+        async function createNewGroup() {
+            const nameInput = document.getElementById('new-group-name');
+            const name = nameInput.value.trim();
+            const isClosed = document.getElementById('new-group-closed').checked;
+            if (!name) {
+                showCustomModal('Ошибка', 'Введите название группы!', false, null, '⚠️');
                 return;
             }
 
-            if (!hasFullAccess(currentUser.login)) {
-                showCustomModal('Доступ ограничен', 'Публиковать записи в ленту новостей могут только модераторы и Warren!', false, null, '⚠️');
-                return;
-            }
-
-            const res = await fetch('/api/publish-news', {
+            const res = await fetch('/api/create-group', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, text, mediaUrl: currentPostMedia })
+                body: JSON.stringify({ name, isClosed, creator: currentUser.login })
             });
             const data = await res.json();
             if (data.success) {
                 db = data.db;
-                textInput.value = '';
-                currentPostMedia = null;
-                document.getElementById('post-file-preview').textContent = '';
-                renderNewsFeed();
-                showCustomModal('Успех', 'Новость успешно опубликована!', false, null, '✨');
+                nameInput.value = '';
+                document.getElementById('new-group-closed').checked = false;
+                renderGroups();
+                showCustomModal('Успех', 'Сообщество успешно создано!', false, null, '✨');
+                socket.emit('refresh-db');
+            } else {
+                showCustomModal('Ошибка', data.error || 'Не удалось создать группу', false, null, '⚠️');
+            }
+        }
+
+        function openCreateChannelModal(type) {
+            const gId = activeGroupWorkspaceId;
+            if (!gId) return;
+            const group = db.groups[gId];
+            if (!group) return;
+
+            document.getElementById('subgroup-modal-title').textContent = type === 'voice' ? 'Создать голосовой канал' : 'Создать текстовый канал';
+            document.getElementById('subgroup-type-select').value = type;
+            document.getElementById('subgroup-type-select').disabled = true;
+            document.getElementById('subgroup-name-input').value = '';
+
+            const roleSelect = document.getElementById('subgroup-role-select');
+            roleSelect.innerHTML = '<option value="all">Всем участникам</option>';
+            const roles = ['Лидер', 'Админ', 'Участник', ...Object.keys(group.customRoles || {})];
+            roles.forEach(r => {
+                const opt = document.createElement('option');
+                opt.value = r;
+                opt.textContent = `Роль: ${r}`;
+                roleSelect.appendChild(opt);
+            });
+
+            document.getElementById('subgroup-modal').classList.remove('hidden');
+        }
+
+        async function submitCreateSubgroup() {
+            const nameInput = document.getElementById('subgroup-name-input');
+            const name = nameInput.value.trim();
+            const type = document.getElementById('subgroup-type-select').value;
+            const allowedRole = document.getElementById('subgroup-role-select').value;
+            const gId = activeGroupWorkspaceId;
+            if (!name || !gId) return;
+
+            const res = await fetch('/api/create-subgroup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId: gId, name, type, allowedRole, login: currentUser.login })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                nameInput.value = '';
+                document.getElementById('subgroup-modal').classList.add('hidden');
+                openGroupWorkspace(gId);
+            }
+        }
+
+        async function deleteSubgroup(groupId, subId) {
+            const res = await fetch('/api/delete-subgroup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, subId, login: currentUser.login })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                if (activeGroupWorkspaceId) openGroupWorkspace(groupId);
+                renderModerationPanel();
+                socket.emit('refresh-db');
+            }
+        }
+
+        function openGroupWorkspace(groupId) {
+            activeGroupWorkspaceId = groupId;
+            activeSubgroup = 'main';
+            cancelEditing();
+
+            document.getElementById('groups-main-view').classList.add('hidden');
+            document.getElementById('group-workspace-view').classList.remove('hidden');
+            socket.emit('join-group-room', groupId);
+
+            const group = db.groups[groupId];
+            if (!group) return;
+
+            updateGroupWorkspaceHeader(groupId);
+            renderGroupWorkspaceSidebar(group);
+            renderMessages();
+            renderPinnedMessageBanner();
+        }
+
+        function closeGroupWorkspace() {
+            activeGroupWorkspaceId = null;
+            document.getElementById('group-workspace-view').classList.add('hidden');
+            document.getElementById('groups-main-view').classList.remove('hidden');
+            renderGroups();
+        }
+
+        function renderGroupWorkspaceSidebar(group) {
+            const textChannels = document.getElementById('ws-sidebar-text-channels');
+            const voiceChannels = document.getElementById('ws-sidebar-voice-channels');
+            if (!textChannels || !voiceChannels) return;
+            textChannels.innerHTML = '';
+            voiceChannels.innerHTML = '';
+
+            const isLeader = group.creator === currentUser.login;
+            const userRole = isLeader ? 'Лидер' : (group.roles?.[currentUser.login] || 'Участник');
+
+            const mainTextDiv = document.createElement('div');
+            mainTextDiv.className = `p-2 rounded-xl text-xs font-bold cursor-pointer transition flex items-center justify-between ${activeSubgroup === 'main' ? 'bg-purple-600/30 text-purple-300' : 'text-gray-300 hover:bg-gray-800'}`;
+            mainTextDiv.innerHTML = `<span># общий</span>`;
+            mainTextDiv.onclick = () => {
+                activeSubgroup = 'main';
+                document.getElementById('ws-active-chat-name').textContent = group.name + ' (# общий)';
+                renderGroupWorkspaceSidebar(group);
+                renderMessages();
+                renderPinnedMessageBanner();
+            };
+            textChannels.appendChild(mainTextDiv);
+
+            if (group.subgroups) {
+                group.subgroups.forEach(sub => {
+                    const hasAccess = sub.allowedRole === 'all' || userRole === sub.allowedRole || isLeader || hasFullAccess(currentUser.login);
+                    if (!hasAccess) return;
+
+                    const div = document.createElement('div');
+                    div.className = `p-2 rounded-xl text-xs font-bold cursor-pointer transition flex items-center justify-between ${activeSubgroup === sub.id ? 'bg-purple-600/30 text-purple-300' : 'text-gray-300 hover:bg-gray-800'}`;
+                    if (sub.type === 'text') {
+                        div.innerHTML = `<span># ${sub.name}</span>`;
+                        div.onclick = () => {
+                            activeSubgroup = sub.id;
+                            document.getElementById('ws-active-chat-name').textContent = group.name + ' (# ' + sub.name + ')';
+                            renderGroupWorkspaceSidebar(group);
+                            renderMessages();
+                            renderPinnedMessageBanner();
+                        };
+                        textChannels.appendChild(div);
+                    } else if (sub.type === 'voice') {
+                        div.innerHTML = `<span>🎙 ${sub.name}</span>`;
+                        div.onclick = () => {
+                            startGroupConference(group.id, sub.id);
+                        };
+                        voiceChannels.appendChild(div);
+                    }
+                });
+            }
+        }
+
+        function selectChat(chat) {
+            if (chat.type === 'group') {
+                switchTab('groups');
+                openGroupWorkspace(chat.id);
+                return;
+            }
+            activeChat = chat;
+            activeSubgroup = 'main';
+            cancelEditing();
+
+            if (chat.type === 'user') {
+                delete unreadMessagesMap[chat.id];
+                updateChatsBadge();
+            }
+
+            document.getElementById('no-chat-selected').classList.add('hidden');
+            document.getElementById('chat-window').classList.remove('hidden');
+            document.getElementById('message-history-search').classList.remove('hidden');
+
+            if (window.innerWidth <= 768) {
+                document.getElementById('chat-list-panel').classList.add('mobile-hidden');
+            }
+
+            const btnCall = document.getElementById('btn-call-user');
+
+            if (chat.type === 'saved') {
+                document.getElementById('active-chat-name').textContent = 'Избранное';
+                document.getElementById('active-chat-avatar').src = getAvatar(currentUser.avatar);
+                document.getElementById('active-chat-status').textContent = 'Личное хранилище';
+                btnCall.classList.add('hidden');
+            } else if (chat.type === 'user') {
+                const friendObj = db.users[chat.id] || {};
+                const displayName = db.customNicknames[currentUser.login]?.[chat.id] || friendObj.name || chat.id;
+                document.getElementById('active-chat-name').textContent = displayName;
+                document.getElementById('active-chat-avatar').src = getAvatar(friendObj.avatar);
+                document.getElementById('active-chat-status').textContent = isUserOnline(chat.id) ? 'В сети' : formatLastSeen(db.lastSeen?.[chat.id]);
+                btnCall.classList.remove('hidden');
+            }
+
+            renderMessages();
+            renderPinnedMessageBanner();
+        }
+
+        function backToChatList() {
+            document.getElementById('chat-list-panel').classList.remove('mobile-hidden');
+        }
+
+        async function sendMessage() {
+            const isGroup = !!activeGroupWorkspaceId;
+            const inputId = isGroup ? 'ws-message-input' : 'message-input';
+            const input = document.getElementById(inputId);
+            let text = input.value.trim();
+            if (!text && !currentUploadedMedia) return;
+
+            if (editingMessageId) {
+                await editMessage(editingMessageId, text);
+                return;
+            }
+
+            const media = currentUploadedMedia;
+            currentUploadedMedia = null;
+
+            const msgData = {
+                sender: currentUser.login,
+                text,
+                media,
+                timestamp: Date.now(),
+                chatType: isGroup ? 'group' : (activeChat?.type || 'user'),
+                chatId: isGroup ? activeGroupWorkspaceId : (activeChat?.id || currentUser.login),
+                subgroup: activeSubgroup
+            };
+
+            const res = await fetch('/api/send-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(msgData)
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                input.value = '';
+                renderMessages();
+                socket.emit('refresh-db');
+            } else {
+                showCustomModal('Ошибка', data.error || 'Нельзя отправить сообщение', false, null, '⚠️');
+            }
+        }
+
+        async function editMessage(messageId, newText) {
+            const res = await fetch('/api/edit-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, messageId, newText })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                cancelEditing();
+                renderMessages();
+                socket.emit('refresh-db');
+            } else {
+                showCustomModal('Ошибка', data.error || 'Недостаточно прав', false, null, '⚠️');
+            }
+        }
+
+        function startEditingMessage(msgId, currentText) {
+            editingMessageId = msgId;
+            const isGroup = !!activeGroupWorkspaceId;
+            const input = document.getElementById(isGroup ? 'ws-message-input' : 'message-input');
+            input.value = currentText;
+            document.getElementById(isGroup ? 'ws-editing-text-preview' : 'editing-text-preview').textContent = currentText;
+            document.getElementById(isGroup ? 'ws-editing-bar' : 'editing-bar').classList.remove('hidden');
+            input.focus();
+        }
+
+        function cancelEditing() {
+            editingMessageId = null;
+            const isGroup = !!activeGroupWorkspaceId;
+            const input = document.getElementById(isGroup ? 'ws-message-input' : 'message-input');
+            if (input) input.value = '';
+            document.getElementById('editing-bar')?.classList.add('hidden');
+            document.getElementById('ws-editing-bar')?.classList.add('hidden');
+        }
+
+        async function deleteMessage(msgId) {
+            const res = await fetch('/api/delete-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, messageId: msgId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                renderMessages();
+                renderModerationPanel();
+                socket.emit('refresh-db');
+            } else {
+                showCustomModal('Ошибка', data.error || 'Нельзя удалить чужое сообщение', false, null, '⚠');
+            }
+        }
+
+        async function pinMessage(msgId) {
+            const res = await fetch('/api/pin-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, messageId: msgId, chatKey: getActiveChatKey() })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                renderPinnedMessageBanner();
+                socket.emit('refresh-db');
+            }
+        }
+
+        async function unpinCurrentMessage() {
+            const res = await fetch('/api/unpin-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, chatKey: getActiveChatKey() })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                renderPinnedMessageBanner();
+                socket.emit('refresh-db');
+            }
+        }
+
+        function getActiveChatKey() {
+            if (activeGroupWorkspaceId) return `group_${activeGroupWorkspaceId}_${activeSubgroup}`;
+            if (!activeChat) return '';
+            if (activeChat.type === 'user') return [currentUser.login, activeChat.id].sort().join('_');
+            if (activeChat.type === 'group') return `group_${activeChat.id}_${activeSubgroup}`;
+            return `saved_${currentUser.login}`;
+        }
+
+        function renderPinnedMessageBanner() {
+            const isGroup = !!activeGroupWorkspaceId;
+            const banner = document.getElementById(isGroup ? 'ws-pinned-message-banner' : 'pinned-message-banner');
+            if (!banner) return;
+            const key = getActiveChatKey();
+            const pinnedId = db.pinnedMessages?.[key];
+            if (!pinnedId) {
+                banner.classList.add('hidden');
+                return;
+            }
+            const msg = (db.messagesStore[key] || []).find(m => m.id === pinnedId);
+            if (msg) {
+                document.getElementById(isGroup ? 'ws-pinned-message-text' : 'pinned-message-text').textContent = msg.text || '[Медиафайл]';
+                banner.classList.remove('hidden');
+            } else {
+                banner.classList.add('hidden');
+            }
+        }
+
+        function renderMessages() {
+            const isGroup = !!activeGroupWorkspaceId;
+            const containerId = isGroup ? 'ws-messages-container' : 'messages-container';
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            container.innerHTML = '';
+
+            const key = getActiveChatKey();
+            const msgs = db.messagesStore[key] || [];
+
+            msgs.forEach(msg => {
+                const isMe = msg.sender === currentUser.login;
+                const roleInfo = getRoleBadgeAndColor(msg.sender);
+                const canManage = isMe || hasFullAccess(currentUser.login);
+
+                let senderDisplayName = msg.sender;
+                if (isGroup && activeGroupWorkspaceId) {
+                    const grp = db.groups[activeGroupWorkspaceId];
+                    if (grp && grp.groupNicknames && grp.groupNicknames[msg.sender]) {
+                        senderDisplayName = `${msg.sender} (${grp.groupNicknames[msg.sender]})`;
+                    }
+                }
+
+                const div = document.createElement('div');
+                div.className = `flex flex-col ${isMe ? 'items-end' : 'items-start'} space-y-1`;
+                
+                let mediaHTML = '';
+                if (msg.media) {
+                    if (msg.media.startsWith('data:image') || msg.media.startsWith('http')) {
+                        mediaHTML = `<img src="${msg.media}" class="max-w-xs rounded-xl max-h-60 object-cover mt-1">`;
+                    } else if (msg.media.startsWith('data:audio')) {
+                        mediaHTML = `<audio controls src="${msg.media}" class="mt-1 h-10 w-48"></audio>`;
+                    }
+                }
+
+                div.innerHTML = `
+                    <div class="flex items-center space-x-2 text-xs text-gray-400">
+                        <span class="font-bold ${roleInfo.color}">@${senderDisplayName} ${roleInfo.badge}</span>
+                        <span>${new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                    </div>
+                    <div class="p-3 rounded-2xl max-w-sm sm:max-w-md ${isMe ? 'bg-purple-600 text-white rounded-tr-none' : 'bg-gray-800 text-gray-100 rounded-tl-none'} shadow">
+                        ${msg.text ? `<div class="break-words text-sm">${msg.text}</div>` : ''}
+                        ${mediaHTML}
+                        <div class="flex items-center justify-end space-x-2 mt-1 text-[10px] opacity-80">
+                            <button onclick="pinMessage('${msg.id}')" class="hover:underline">📌</button>
+                            ${isMe || hasFullAccess(currentUser.login) ? `<button onclick="startEditingMessage('${msg.id}', \`${msg.text || ''}\`)" class="hover:underline">✏️</button>` : ''}
+                            ${canManage ? `<button onclick="deleteMessage('${msg.id}')" class="hover:underline text-red-300">🗑️</button>` : ''}
+                        </div>
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function handleFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            currentUploadedMedia = await readFileAsDataURL(file);
+            showCustomModal('Файл прикреплен', 'Файл готов к отправке.', false, null, '📎');
+        }
+
+        function toggleVoiceRecord() {
+            if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+                navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+                    mediaRecorder = new MediaRecorder(stream);
+                    audioChunks = [];
+                    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+                    mediaRecorder.onstop = async () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        currentUploadedMedia = await readFileAsDataURL(audioBlob);
+                        sendMessage();
+                    };
+                    mediaRecorder.start();
+                    const isGroup = !!activeGroupWorkspaceId;
+                    document.getElementById(isGroup ? 'ws-voice-timer' : 'voice-timer')?.classList.remove('hidden');
+                    voiceSeconds = 0;
+                }).catch(() => {
+                    showCustomModal('Ошибка', 'Нет доступа к микрофону', false, null, '⚠️');
+                });
+            } else {
+                mediaRecorder.stop();
+                const isGroup = !!activeGroupWorkspaceId;
+                document.getElementById(isGroup ? 'ws-voice-timer' : 'voice-timer')?.classList.add('hidden');
+            }
+        }
+
+        async function renderGroups() {
+            const list = document.getElementById('groups-list');
+            const select = document.getElementById('group-post-select');
+            if (!list || !select) return;
+            list.innerHTML = '';
+            select.innerHTML = '';
+
+            Object.values(db.groups || {}).forEach(group => {
+                const isMember = group.members && group.members.includes(currentUser.login);
+                const isRequested = group.joinRequests && group.joinRequests.includes(currentUser.login);
+
+                const item = document.createElement('div');
+                item.className = 'flex items-center justify-between p-3 bg-gray-800 rounded-xl';
+                
+                let actionBtnHTML = '';
+                if (isMember) {
+                    actionBtnHTML = `<button onclick="switchTab('groups'); openGroupWorkspace('${group.id}');" class="bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white">Открыть</button>`;
+                } else if (group.isClosed) {
+                    if (isRequested) {
+                        actionBtnHTML = `<span class="text-xs text-yellow-400 font-bold">Заявка отправлена</span>`;
+                    } else {
+                        actionBtnHTML = `<button onclick="requestJoinGroup('${group.id}')" class="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white">Подать заявку</button>`;
+                    }
+                } else {
+                    actionBtnHTML = `<button onclick="joinGroup('${group.id}')" class="bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white">Вступить</button>`;
+                }
+
+                const nameDisplay = group.isVerified 
+                    ? `<span class="verified-gradient-name font-bold">${group.name}</span> <span class="text-blue-400" title="Верифицировано">✅</span>` 
+                    : `<span class="font-bold text-white">${group.name}</span>`;
+
+                item.innerHTML = `
+                    <div class="flex items-center space-x-3">
+                        <img src="${getAvatar(group.avatar)}" class="w-10 h-10 rounded-xl object-cover">
+                        <div>
+                            <div class="flex items-center space-x-1">
+                                ${nameDisplay}
+                                ${group.isClosed ? '<span class="text-xs" title="Закрытая">🔒</span>' : ''}
+                            </div>
+                            <div class="text-xs text-gray-400">${group.members.length} участников</div>
+                        </div>
+                    </div>
+                    <div>${actionBtnHTML}</div>
+                `;
+                list.appendChild(item);
+
+                if (isMember) {
+                    const opt = document.createElement('option');
+                    opt.value = group.id;
+                    opt.textContent = group.name + (group.isVerified ? ' (✅ Верифицировано)' : '');
+                    select.appendChild(opt);
+                }
+            });
+            renderGroupFeedList();
+        }
+
+        async function joinGroup(groupId) {
+            const res = await fetch('/api/join-group', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, login: currentUser.login })
+            });
+            const data = await res.json();
+            if (data.success) { db = data.db; renderGroups(); socket.emit('refresh-db'); }
+            else { showCustomModal('Информация', data.error, false, null, '⚠'); }
+        }
+
+        async function requestJoinGroup(groupId) {
+            const res = await fetch('/api/request-join-group', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, login: currentUser.login })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                renderGroups();
+                showCustomModal('Заявка отправлена', 'Заявка на вступление успешно отправлена.', false, null, '✨');
                 socket.emit('refresh-db');
             } else {
                 showCustomModal('Ошибка', data.error, false, null, '⚠️');
@@ -2916,146 +2996,84 @@
         }
 
         async function publishGroupPost() {
-            const groupId = document.getElementById('group-post-select').value;
+            const select = document.getElementById('group-post-select');
+            const groupId = select.value;
             const text = document.getElementById('group-post-text').value.trim();
-            const announcementCheckbox = document.getElementById('group-post-announcement');
+            const announcement = document.getElementById('group-post-announcement').checked;
+
             if (!groupId || !text) return;
 
-            // Проверка на мут
-            const mutedUntil = db.mutedUsers?.[currentUser.login.toLowerCase()] || 0;
-            if (mutedUntil > Date.now()) {
-                const mins = Math.ceil((mutedUntil - Date.now()) / 60000);
-                showCustomModal('Мут', `Вам выдан мут! Вы не можете публиковать посты. Осталось минут: ${mins}`, false, null, '🔇');
+            const group = db.groups[groupId];
+            if (announcement && group && !group.isVerified) {
+                showCustomModal('Верификация не пройдена', 'Без верификации сообщества кнопка «Дублировать в ленте новостей» не работает! Пройдите верификацию в настройках группы.', false, null, '🛡️');
                 return;
             }
 
             const res = await fetch('/api/publish-group-post', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, groupId, text, duplicateToNews: announcementCheckbox.checked })
+                body: JSON.stringify({ groupId, login: currentUser.login, text, announcement })
             });
             const data = await res.json();
             if (data.success) {
                 db = data.db;
                 document.getElementById('group-post-text').value = '';
-                announcementCheckbox.checked = false;
-                renderGroupsFeed();
+                document.getElementById('group-post-announcement').checked = false;
+                renderGroupFeedList();
                 renderNewsFeed();
-                showCustomModal('Успех', 'Пост опубликован в сообщество!', false, null, '✨');
+                renderModerationPanel();
                 socket.emit('refresh-db');
             } else {
-                if (data.isViolation) {
-                    showCustomModal('Обнаружено нарушение', 'Ваш пост содержал ненормативную лексику и отправлен на модерацию!', false, null, '🚨');
-                } else {
-                    showCustomModal('Ошибка', data.error, false, null, '⚠️');
-                }
+                showCustomModal('Ошибка', data.error || 'Недостаточно прав для публикации', false, null, '⚠️');
             }
         }
 
-        function renderNewsFeed() {
-            const feedList = document.getElementById('news-feed-list');
-            if (!feedList) return;
-            feedList.innerHTML = '';
-            const news = db.news || [];
-
-            if (news.length === 0) {
-                feedList.innerHTML = '<div class="text-xs text-gray-500 text-center py-4">Лента новостей пуста.</div>';
-                return;
-            }
-
-            news.forEach(item => {
-                const authorObj = db.users[item.author] || { name: item.author };
-                const badgeInfo = getRoleBadgeAndColor(item.author);
-                const isModeratorOrWarren = hasFullAccess(currentUser.login);
-
-                const div = document.createElement('div');
-                div.className = 'bg-gray-900 border border-gray-800 p-4 rounded-2xl shadow-xl space-y-3';
-                div.innerHTML = `
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center space-x-3">
-                            <img src="${getAvatar(authorObj.avatar)}" class="w-10 h-10 rounded-full object-cover border border-purple-500">
-                            <div>
-                                <div class="font-bold text-white text-sm flex items-center space-x-1">
-                                    <span>${authorObj.name || item.author}</span>
-                                    ${badgeInfo.badge ? `<span title="${badgeInfo.title}">${badgeInfo.badge}</span>` : ''}
-                                </div>
-                                <div class="text-xs text-gray-400">${item.time || new Date().toLocaleTimeString()}</div>
-                            </div>
-                        </div>
-                        <div class="flex items-center space-x-2">
-                            <!-- Кнопка Mute на сообщении в ленте новостей для модераторов -->
-                            ${isModeratorOrWarren ? `<button onclick="openViolationMuteModal('${item.author}')" class="bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white px-2.5 py-1 rounded-lg text-xs font-bold" title="Замутить автора">🔇 Mute</button>` : ''}
-                            <!-- Удаление и редактирование только для модераторов и Warren -->
-                            ${isModeratorOrWarren ? `
-                                <button onclick="deleteNewsPost('${item.id}')" class="text-red-400 hover:text-red-300 text-xs font-bold px-2 py-1 bg-red-600/20 rounded-lg">🗑 Удалить</button>
-                            ` : ''}
-                        </div>
-                    </div>
-                    ${item.mediaUrl ? `<img src="${item.mediaUrl}" class="w-full max-h-80 rounded-xl object-cover border border-purple-500/30">` : ''}
-                    <div class="text-sm text-gray-200 break-words whitespace-pre-wrap">${escapeHtml(item.text)}</div>
-                `;
-                feedList.appendChild(div);
-            });
-        }
-
-        async function deleteNewsPost(postId) {
-            if (!hasFullAccess(currentUser.login)) return;
-            const res = await fetch('/api/delete-news', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, postId })
-            });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                renderNewsFeed();
-                socket.emit('refresh-db');
-            }
-        }
-
-        function renderGroupsFeed() {
-            const feedList = document.getElementById('groups-feed-list');
-            if (!feedList) return;
-            feedList.innerHTML = '';
-            let allPosts = [];
-
+        function renderGroupFeedList() {
+            const list = document.getElementById('groups-feed-list');
+            if (!list) return;
+            list.innerHTML = '';
+            
+            let allGroupPosts = [];
             Object.values(db.groups || {}).forEach(g => {
                 if (g.posts) {
-                    g.posts.forEach(p => {
-                        allPosts.push({ ...p, groupName: g.name, groupId: g.id });
-                    });
+                    g.posts.forEach(p => allGroupPosts.push({ ...p, groupName: g.name, groupId: g.id, groupVerified: g.isVerified }));
                 }
             });
+            allGroupPosts.sort((a, b) => b.timestamp - a.timestamp);
 
-            allPosts.sort((a, b) => b.timestamp - a.timestamp);
-
-            if (allPosts.length === 0) {
-                feedList.innerHTML = '<div class="text-xs text-gray-500 text-center py-2">Нет постов в сообществах.</div>';
+            if (allGroupPosts.length === 0) {
+                list.innerHTML = '<div class="text-xs text-gray-500 p-2">Нет записей в ленте групп.</div>';
                 return;
             }
 
-            allPosts.forEach(p => {
-                const authorObj = db.users[p.author] || { name: p.author };
-                const isModeratorOrWarren = hasFullAccess(currentUser.login);
-                const g = db.groups[p.groupId];
-                const isGroupLeader = g && g.leader && g.leader.toLowerCase() === currentUser.login.toLowerCase();
-                const canModify = isModeratorOrWarren || isGroupLeader;
+            allGroupPosts.forEach(post => {
+                const authorObj = db.users[post.author] || {};
+                const roleInfo = getRoleBadgeAndColor(post.author);
+                const canManage = post.author === currentUser.login || hasFullAccess(currentUser.login);
+
+                let authorDisplayName = post.author;
+                const grp = db.groups[post.groupId];
+                if (grp && grp.groupNicknames && grp.groupNicknames[post.author]) {
+                    authorDisplayName = `${post.author} (${grp.groupNicknames[post.author]})`;
+                }
 
                 const div = document.createElement('div');
-                div.className = 'bg-gray-950 border border-gray-800 p-3 rounded-xl space-y-2 text-xs';
+                div.className = 'bg-gray-950 border border-gray-800 p-3 rounded-xl space-y-2';
                 div.innerHTML = `
-                    <div class="flex items-center justify-between">
-                        <span class="font-bold text-purple-300">🏢 ${p.groupName} • @${p.author}</span>
-                        <div class="flex items-center space-x-2">
-                            <!-- Кнопка Mute на посте группы для модераторов -->
-                            ${isModeratorOrWarren ? `<button onclick="openViolationMuteModal('${p.author}')" class="bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white px-2 py-0.5 rounded-lg text-[10px] font-bold" title="Замутить автора">🔇 Mute</button>` : ''}
-                            <!-- Удаление только для модераторов, Warren или лидера группы -->
-                            ${canModify ? `<button onclick="deleteGroupPost('${p.groupId}', '${p.id}')" class="text-red-400 hover:text-red-300 font-bold px-2 py-0.5 bg-red-600/20 rounded-lg">🗑 Удалить</button>` : ''}
-                        </div>
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="font-bold text-purple-400">🏢 ${post.groupName} ${post.groupVerified ? '✅' : ''}</span>
+                        <span class="text-gray-500">${new Date(post.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                     </div>
-                    <div class="text-gray-200 break-words">${escapeHtml(p.text)}</div>
+                    <div class="flex items-center space-x-2">
+                        <img src="${getAvatar(authorObj.avatar)}" class="w-6 h-6 rounded-full object-cover">
+                        <span class="text-xs font-bold ${roleInfo.color}">@${authorDisplayName} ${roleInfo.badge}</span>
+                    </div>
+                    <div class="text-sm text-gray-200 break-words">${post.text}</div>
+                    <div class="flex justify-end space-x-2">
+                        ${canManage ? `<button onclick="deleteGroupPost('${post.groupId}', '${post.id}')" class="text-xs text-red-400 hover:text-red-300 font-bold">🗑 Удалить</button>` : ''}
+                    </div>
                 `;
-                feedList.appendChild(div);
+                list.appendChild(div);
             });
         }
 
@@ -3068,92 +3086,184 @@
             const data = await res.json();
             if (data.success) {
                 db = data.db;
-                renderGroupsFeed();
+                renderGroupFeedList();
+                renderNewsFeed();
                 socket.emit('refresh-db');
+            } else {
+                showCustomModal('Ошибка', data.error || 'Нельзя удалить запись', false, null, '⚠️');
             }
+        }
+
+        let postFileUploaded = null;
+        async function handlePostFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            postFileUploaded = await readFileAsDataURL(file);
+            document.getElementById('post-file-preview').textContent = `Файл прикреплен ✓`;
+        }
+
+        async function publishPost() {
+            const text = document.getElementById('post-text-input').value.trim();
+            if (!text && !postFileUploaded) return;
+
+            if (editingPostId) {
+                await editNewsPost(editingPostId, text);
+                return;
+            }
+
+            const media = postFileUploaded;
+            postFileUploaded = null;
+            document.getElementById('post-file-input').value = '';
+            document.getElementById('post-file-preview').textContent = '';
+
+            const res = await fetch('/api/publish-news', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, text, media })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                document.getElementById('post-text-input').value = '';
+                renderNewsFeed();
+                renderModerationPanel();
+                socket.emit('refresh-db');
+            } else {
+                showCustomModal('Доступ запрещен', data.error || 'Только модераторы могут публиковать в ленту новостей!', false, null, '⚠️');
+            }
+        }
+
+        async function editNewsPost(postId, newText) {
+            const res = await fetch('/api/edit-news', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, postId, newText })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                editingPostId = null;
+                document.getElementById('post-text-input').value = '';
+                renderNewsFeed();
+                socket.emit('refresh-db');
+            } else {
+                showCustomModal('Ошибка', data.error || 'Не удалось отредактировать новость', false, null, '⚠️');
+            }
+        }
+
+        async function deleteNewsPost(postId) {
+            const res = await fetch('/api/delete-news', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, postId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                renderNewsFeed();
+                socket.emit('refresh-db');
+            } else {
+                showCustomModal('Ошибка', data.error || 'Нельзя удалить запись', false, null, '⚠️');
+            }
+        }
+
+        function renderNewsFeed() {
+            const list = document.getElementById('news-feed-list');
+            if (!list) return;
+            list.innerHTML = '';
+            const posts = db.news || [];
+
+            if (posts.length === 0) {
+                list.innerHTML = '<div class="text-xs text-gray-500 text-center py-4">Нет записей в ленте новостей.</div>';
+                return;
+            }
+
+            posts.forEach(post => {
+                const authorObj = db.users[post.author] || {};
+                const roleInfo = getRoleBadgeAndColor(post.author);
+                const canManage = post.author === currentUser.login || hasFullAccess(currentUser.login);
+
+                let mediaHTML = '';
+                if (post.media) {
+                    mediaHTML = `<img src="${post.media}" class="w-full rounded-2xl max-h-96 object-cover mt-2">`;
+                }
+
+                const card = document.createElement('div');
+                card.className = 'bg-gray-900 border border-gray-800 p-4 rounded-2xl space-y-3 shadow-xl';
+                card.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <img src="${getAvatar(authorObj.avatar)}" class="w-10 h-10 rounded-full object-cover">
+                            <div>
+                                <div class="font-bold flex items-center space-x-2">
+                                    <span class="${roleInfo.color}">@${post.author}</span>
+                                    ${roleInfo.badge ? `<span class="text-[10px] bg-purple-600/30 text-purple-300 px-1.5 py-0.5 rounded-md">${roleInfo.title}</span>` : ''}
+                                </div>
+                                <div class="text-xs text-gray-500">${new Date(post.timestamp).toLocaleString()}</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="text-sm text-gray-200 break-words whitespace-pre-wrap">${post.text}</div>
+                    ${mediaHTML}
+                    <div class="flex justify-end space-x-3 pt-2">
+                        ${hasFullAccess(currentUser.login) || post.author === currentUser.login ? `<button onclick="editingPostId='${post.id}'; document.getElementById('post-text-input').value=\`${post.text || ''}\`; document.getElementById('post-text-input').focus();" class="text-xs text-purple-400 font-bold hover:underline">✏️ Редактировать</button>` : ''}
+                        ${canManage ? `<button onclick="deleteNewsPost('${post.id}')" class="text-xs text-red-400 font-bold hover:underline">🗑 Удалить</button>` : ''}
+                    </div>
+                `;
+                list.appendChild(card);
+            });
         }
 
         async function loadInternetNews() {
             const list = document.getElementById('internet-news-list');
             if (!list) return;
-            list.innerHTML = `
-                <div class="bg-gray-950 p-3 rounded-xl border border-gray-800 space-y-1">
-                    <div class="font-bold text-white text-xs">🚀 Запуск новых технологий связи в РФ</div>
-                    <div class="text-[11px] text-gray-400">Ведущие разработчики представили обновленную архитектуру защищенных WebRTC-соединений и аудиосвязи высокой четкости.</div>
-                </div>
-                <div class="bg-gray-950 p-3 rounded-xl border border-gray-800 space-y-1">
-                    <div class="font-bold text-white text-xs">🌐 Развитие комьюнити-платформ</div>
-                    <div class="text-[11px] text-gray-400">Модерация сообществ получила новые инструменты автоматического контроля качества контента и управления правами.</div>
-                </div>
-            `;
-        }
-
-        // РАДИО
-        function renderRadioStations() {
-            const list = document.getElementById('radio-stations-list');
-            if (!list) return;
-            list.innerHTML = '';
-
-            radioStations.forEach(st => {
-                const div = document.createElement('div');
-                div.className = 'bg-gray-900 border border-gray-800 p-4 rounded-2xl flex items-center justify-between shadow-xl';
-                div.innerHTML = `
-                    <div class="flex items-center space-x-3">
-                        <span class="text-2xl">${st.logo}</span>
-                        <div>
-                            <div class="font-bold text-white text-sm">${st.name}</div>
-                            <div class="text-xs text-gray-400">${st.genre}</div>
-                        </div>
-                    </div>
-                    <button onclick="playRadio('${st.url}', this)" class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-xl text-xs font-bold transition shadow-[0_0_15px_rgba(168,85,247,0.3)]">▶ Слушать</button>
-                `;
-                list.appendChild(div);
-            });
-        }
-
-        let activeAudioPlayer = null;
-        function playRadio(url, btn) {
-            if (activeAudioPlayer) {
-                activeAudioPlayer.pause();
-                activeAudioPlayer = null;
-                document.querySelectorAll('#radio-stations-list button').forEach(b => b.textContent = '▶ Слушать');
+            list.innerHTML = '<div class="text-xs text-gray-400 animate-pulse">Загрузка актуальных новостей...</div>';
+            try {
+                const res = await fetch('/api/internet-news');
+                const data = await res.json();
+                if (data.success && data.news) {
+                    list.innerHTML = '';
+                    data.news.forEach(item => {
+                        const div = document.createElement('div');
+                        div.className = 'bg-gray-950 p-3 rounded-xl border border-gray-800 text-xs space-y-1';
+                        div.innerHTML = `
+                            <div class="font-bold text-purple-300">${item.title}</div>
+                            <div class="flex justify-between text-[10px] text-gray-400">
+                                <span>${item.by}</span>
+                                <span>👍 ${item.score}</span>
+                            </div>
+                        `;
+                        list.appendChild(div);
+                    });
+                }
+            } catch (e) {
+                list.innerHTML = '<div class="text-xs text-gray-500">Не удалось загрузить новости.</div>';
             }
-            activeAudioPlayer = new Audio(url);
-            activeAudioPlayer.play().then(() => {
-                btn.textContent = '⏹ Стоп';
-                btn.onclick = () => stopRadio(btn);
-            }).catch(() => {
-                showCustomModal('Ошибка', 'Не удалось запустить радиотрансляцию.', false, null, '⚠️');
-            });
         }
 
-        function stopRadio(btn) {
-            if (activeAudioPlayer) {
-                activeAudioPlayer.pause();
-                activeAudioPlayer = null;
-            }
-            btn.textContent = '▶ Слушать';
-            btn.onclick = function() { playRadio(radioStations.find(s => s.name === this.parentElement.querySelector('.font-bold').textContent)?.url, this); };
-        }
-
-        // ПРОФИЛЬ
         function fillProfileData() {
             document.getElementById('profile-avatar-preview').src = getAvatar(currentUser.avatar);
-            document.getElementById('profile-username').textContent = currentUser.name;
-            document.getElementById('profile-link-box').textContent = location.origin + '/?user=' + currentUser.login;
+            document.getElementById('profile-username').textContent = `@${currentUser.login}`;
             document.getElementById('profile-name-input').value = currentUser.name || '';
             document.getElementById('profile-bio-input').value = currentUser.bio || '';
             document.getElementById('profile-email-input').value = currentUser.email || '';
+            document.getElementById('profile-link-box').textContent = `${location.origin}/#${currentUser.login}`;
         }
 
         async function saveProfile() {
             const name = document.getElementById('profile-name-input').value.trim();
             const bio = document.getElementById('profile-bio-input').value.trim();
             const email = document.getElementById('profile-email-input').value.trim();
-            const pass = document.getElementById('profile-password-input').value;
-            let avatar = currentUser.avatar;
+            const password = document.getElementById('profile-password-input').value;
+            const confirm = document.getElementById('profile-password-confirm').value;
+
+            if (password && password !== confirm) {
+                showCustomModal('Ошибка', 'Пароли не совпадают!', false, null, '⚠️');
+                return;
+            }
 
             const fileInput = document.getElementById('profile-avatar-file');
+            let avatar = currentUser.avatar;
             if (fileInput.files && fileInput.files[0]) {
                 avatar = await readFileAsDataURL(fileInput.files[0]);
             }
@@ -3161,31 +3271,181 @@
             const res = await fetch('/api/update-profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, name, bio, email, password: pass, avatar })
+                body: JSON.stringify({ login: currentUser.login, name, bio, email, avatar, password })
             });
             const data = await res.json();
             if (data.success) {
                 currentUser = data.user;
                 db = data.db;
-                fillProfileData();
-                document.getElementById('my-avatar-icon').src = getAvatar(currentUser.avatar);
+                initApp();
                 showCustomModal('Успех', 'Профиль успешно сохранен!', false, null, '✨');
-                socket.emit('refresh-db');
-            } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠️');
             }
         }
 
-        socket.on('refresh-db', (serverDb) => {
-            db = serverDb;
-            if (activeChat && activeChat.type === 'direct') renderActiveChatMessages();
-            if (activeGroupWorkspaceId) openGroupWorkspace(activeGroupWorkspaceId);
-            renderFriends();
-            renderGroups();
-            renderNewsFeed();
-            renderModerationPanel();
-            renderChatsList();
+        // WEBRTC ЗВОНКИ И КОНФЕРЕНЦИИ
+        async function startDirectCall() {
+            if (!activeChat || activeChat.type !== 'user') return;
+            callTargetUser = activeChat.id;
+            document.getElementById('call-partner-name').textContent = activeChat.id;
+            document.getElementById('call-status-text').textContent = 'Вызов абонента...';
+            document.getElementById('single-call-modal').classList.remove('hidden');
+            isInCallOrConference = true;
+            startOutgoingRingtone();
+
+            try {
+                const noiseSup = document.getElementById('noise-suppression-checkbox')?.checked ?? true;
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: { noiseSuppression: noiseSup, echoCancellation: true } });
+                peerConnection = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+                localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+                peerConnection.ontrack = e => {
+                    document.getElementById('remote-audio').srcObject = e.streams[0];
+                };
+
+                peerConnection.onicecandidate = e => {
+                    if (e.candidate) socket.emit('ice-candidate', { to: callTargetUser, candidate: e.candidate });
+                };
+
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                socket.emit('call-user', { to: callTargetUser, offer, from: currentUser.login });
+            } catch (e) {
+                hangUpCall();
+            }
+        }
+
+        async function startDirectCallTo(friendLogin) {
+            openUserChat(friendLogin);
+            setTimeout(() => startDirectCall(), 300);
+        }
+
+        function startGroupCallConference() {
+            if (!activeGroupWorkspaceId) return;
+            const group = db.groups[activeGroupWorkspaceId];
+            if (!group) return;
+            const targets = group.members.filter(m => m !== currentUser.login);
+            document.getElementById('call-partner-name').textContent = `Группа: ${group.name}`;
+            document.getElementById('call-status-text').textContent = 'Подключение к конференции...';
+            document.getElementById('single-call-modal').classList.remove('hidden');
+            isInCallOrConference = true;
+            socket.emit('start-group-conference', { groupId: group.id, targets, from: currentUser.login });
+        }
+
+        function startGroupConference(groupId, channelId) {
+            const group = db.groups[groupId];
+            if (!group) return;
+            const targets = group.members.filter(m => m !== currentUser.login);
+            document.getElementById('call-partner-name').textContent = `Канал: ${channelId}`;
+            document.getElementById('call-status-text').textContent = 'Подключение к голосовому каналу...';
+            document.getElementById('single-call-modal').classList.remove('hidden');
+            isInCallOrConference = true;
+            socket.emit('start-group-conference', { groupId, channelId, targets, from: currentUser.login });
+        }
+
+        socket.on('incoming-call', async ({ from, offer, isGroup, groupId }) => {
+            incomingCallerLogin = from;
+            incomingOffer = offer;
+            startIncomingRingtone();
+            document.getElementById('incoming-caller-title').textContent = isGroup ? `Голосовой вызов из группы` : `Входящий вызов от @${from}`;
+            document.getElementById('incoming-caller-avatar').src = getAvatar(db.users[from]?.avatar);
+            document.getElementById('incoming-call-modal').classList.remove('hidden');
         });
+
+        async function acceptIncomingCall() {
+            stopIncomingRingtone();
+            document.getElementById('incoming-call-modal').classList.add('hidden');
+            document.getElementById('call-partner-name').textContent = incomingCallerLogin || 'Конференция';
+            document.getElementById('call-status-text').textContent = 'Соединение установлено';
+            document.getElementById('single-call-modal').classList.remove('hidden');
+            isInCallOrConference = true;
+
+            try {
+                const noiseSup = document.getElementById('noise-suppression-checkbox')?.checked ?? true;
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: { noiseSuppression: noiseSup, echoCancellation: true } });
+                peerConnection = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+                localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
+
+                peerConnection.ontrack = e => {
+                    document.getElementById('remote-audio').srcObject = e.streams[0];
+                };
+
+                peerConnection.onicecandidate = e => {
+                    if (e.candidate && incomingCallerLogin) socket.emit('ice-candidate', { to: incomingCallerLogin, candidate: e.candidate });
+                };
+
+                if (incomingOffer) {
+                    await peerConnection.setRemoteDescription(new RTCSessionDescription(incomingOffer));
+                    const answer = await peerConnection.createAnswer();
+                    await peerConnection.setLocalDescription(answer);
+                    if (incomingCallerLogin) socket.emit('call-accepted', { to: incomingCallerLogin, answer });
+                } else if (incomingCallerLogin) {
+                    const offer = await peerConnection.createOffer();
+                    await peerConnection.setLocalDescription(offer);
+                    socket.emit('call-user', { to: incomingCallerLogin, offer, from: currentUser.login });
+                }
+            } catch (e) {
+                hangUpCall();
+            }
+        }
+
+        socket.on('call-answered', async ({ answer }) => {
+            stopOutgoingRingtone();
+            stopIncomingRingtone();
+            document.getElementById('incoming-call-modal').classList.add('hidden');
+            document.getElementById('call-status-text').textContent = 'Разговор идет';
+            if (peerConnection && answer) {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+            }
+        });
+
+        socket.on('ice-candidate', async ({ candidate }) => {
+            if (peerConnection && candidate) {
+                try { await peerConnection.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) {}
+            }
+        });
+
+        socket.on('hang-up', () => {
+            hangUpCall();
+        });
+
+        function rejectIncomingCall() {
+            stopIncomingRingtone();
+            document.getElementById('incoming-call-modal').classList.add('hidden');
+            if (incomingCallerLogin) socket.emit('hang-up', { to: incomingCallerLogin });
+        }
+
+        function hangUpCall() {
+            stopOutgoingRingtone();
+            stopIncomingRingtone();
+            if (localStream) {
+                localStream.getTracks().forEach(t => t.stop());
+                localStream = null;
+            }
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            if (callTargetUser) socket.emit('hang-up', { to: callTargetUser });
+            if (incomingCallerLogin) socket.emit('hang-up', { to: incomingCallerLogin });
+
+            document.getElementById('single-call-modal').classList.add('hidden');
+            document.getElementById('incoming-call-modal').classList.add('hidden');
+            isInCallOrConference = false;
+            callTargetUser = null;
+            incomingCallerLogin = null;
+        }
+
+        function toggleMyCallMute() {
+            if (localStream) {
+                const audioTrack = localStream.getAudioTracks()[0];
+                if (audioTrack) {
+                    audioTrack.enabled = !audioTrack.enabled;
+                    const btn = document.getElementById('btn-call-mute');
+                    btn.textContent = audioTrack.enabled ? 'Микрофон' : '🔇 Выключен';
+                    btn.className = audioTrack.enabled ? 'flex-1 bg-gray-800 hover:bg-gray-700 text-white py-2 rounded-xl text-xs font-bold transition' : 'flex-1 bg-red-600 text-white py-2 rounded-xl text-xs font-bold transition';
+                }
+            }
+        }
     </script>
 </body>
 </html>
