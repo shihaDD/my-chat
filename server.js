@@ -31,7 +31,6 @@ if (fs.existsSync(DB_FILE)) {
         const data = fs.readFileSync(DB_FILE, 'utf8');
         const parsed = JSON.parse(data);
         db = { ...db, ...parsed };
-        // Автомиграция старых групп для предотвращения ошибок загрузки
         for (let gId in db.groups) {
             if (!db.groups[gId].subgroups) db.groups[gId].subgroups = [];
             if (!db.groups[gId].roles) db.groups[gId].roles = {};
@@ -50,17 +49,6 @@ function saveDb() {
         console.error('Ошибка сохранения базы данных:', e);
     }
 }
-
-app.get('/api/music-search', async (req, res) => {
-    const q = (req.query.q || 'popular').toLowerCase();
-    const tracks = [
-        { title: `Хит: ${q} (Remix)`, artist: 'Neon Wave', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3', artwork: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150' },
-        { title: `${q} - Cyber Edition`, artist: 'DJ Cyber', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3', artwork: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=150' },
-        { title: `Chill Lofi: ${q}`, artist: 'Lofi Club', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3', artwork: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=150' },
-        { title: `Future Bass: ${q}`, artist: 'Future Sound', previewUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3', artwork: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150' }
-    ];
-    res.json({ success: true, tracks });
-});
 
 app.get('/api/internet-news', async (req, res) => {
     const internetNews = [
@@ -115,14 +103,17 @@ app.post('/api/login', (req, res) => {
 
 app.post('/api/update-profile', (req, res) => {
     const { login, name, email, bio, avatar, password } = req.body;
-    if (!login || !db.users[login]) return res.json({ success: false, error: 'Пользователь не найден' });
-    if (name) db.users[login].name = name.trim();
-    if (email !== undefined) db.users[login].email = email.trim();
-    if (bio !== undefined) db.users[login].bio = bio.trim();
-    if (avatar) db.users[login].avatar = avatar;
-    if (password) db.users[login].password = password;
+    if (!login) return res.json({ success: false, error: 'Логин не передан' });
+    const cleanLogin = login.trim().toLowerCase();
+    if (!db.users[cleanLogin]) return res.json({ success: false, error: 'Пользователь не найден' });
+    
+    if (name) db.users[cleanLogin].name = name.trim();
+    if (email !== undefined) db.users[cleanLogin].email = email.trim();
+    if (bio !== undefined) db.users[cleanLogin].bio = bio.trim();
+    if (avatar) db.users[cleanLogin].avatar = avatar;
+    if (password) db.users[cleanLogin].password = password;
     saveDb();
-    res.json({ success: true, user: db.users[login], db });
+    res.json({ success: true, user: db.users[cleanLogin], db });
 });
 
 app.post('/api/add-friend', (req, res) => {
@@ -221,6 +212,19 @@ app.post('/api/create-group', (req, res) => {
     res.json({ success: true, db });
 });
 
+app.post('/api/update-group', (req, res) => {
+    const { groupId, name, login } = req.body;
+    const group = db.groups[groupId];
+    if (!group) return res.json({ success: false, error: 'Группа не найдена' });
+    if (group.creator !== login && group.roles?.[login] !== 'Админ') {
+        return res.json({ success: false, error: 'Недостаточно прав!' });
+    }
+    if (name) group.name = name.trim();
+    saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
 app.post('/api/join-group', (req, res) => {
     const { groupId, login } = req.body;
     const group = db.groups[groupId];
@@ -280,6 +284,19 @@ app.post('/api/create-subgroup', (req, res) => {
     if (!group.subgroups) group.subgroups = [];
     const subId = 'sub_' + Date.now();
     group.subgroups.push({ id: subId, name: name.trim(), permission, messages: [] });
+    saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
+app.post('/api/delete-subgroup', (req, res) => {
+    const { groupId, subId, login } = req.body;
+    const group = db.groups[groupId];
+    if (!group) return res.json({ success: false, error: 'Группа не найдена' });
+    if (group.creator !== login && group.roles?.[login] !== 'Админ') {
+        return res.json({ success: false, error: 'Недостаточно прав!' });
+    }
+    group.subgroups = (group.subgroups || []).filter(s => s.id !== subId);
     saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
