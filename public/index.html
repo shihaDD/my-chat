@@ -917,6 +917,8 @@
         let incomingOffer = null;
         let incomingCallerLogin = null;
         let iceCandidateQueue = {};
+        let activeVoiceRoomsMap = {}; // комнаты голосовых каналов: { roomKey: [logins...] }
+        let outgoingRingInterval = null; // таймер для гудков исходящего вызова
 
         let unreadMessagesMap = {};
         let unreadGroupsCount = 0;
@@ -983,6 +985,12 @@
 
         socket.on('user-speaking', ({ login, isSpeaking }) => {
             speakingUsersMap[login] = isSpeaking;
+            const grp = db.groups[activeGroupWorkspaceId];
+            if (grp) renderGroupWorkspaceSidebar(grp);
+        });
+
+        socket.on('voice-room-update', ({ roomKey, participants }) => {
+            activeVoiceRoomsMap[roomKey] = participants;
             const grp = db.groups[activeGroupWorkspaceId];
             if (grp) renderGroupWorkspaceSidebar(grp);
         });
@@ -1625,7 +1633,7 @@
                             <div class="text-gray-200 bg-gray-900 p-2 rounded-lg break-words">${v.text}</div>
                             <div class="flex justify-end space-x-2 pt-1 flex-wrap gap-1">
                                 <button onclick="resolveViolationAction('${v.id}', 'approve')" class="bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded-lg text-white font-bold transition">✅ Одобрить</button>
-                                <button onclick="openViolationEditModal('${v.id}', \`${v.text || ''}\`)" class="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-lg text-white font-bold transition">✏️ Редактировать</button>
+                                <button onclick="openViolationEditModal('${v.id}', \`${v.text || ''}\`)" class="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-lg text-white font-bold transition">✏️️ Редактировать</button>
                                 <button onclick="resolveViolationAction('${v.id}', 'delete')" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg text-gray-200 font-bold transition">🗑 Удалить</button>
                                 <button onclick="openViolationMuteModal('${v.id}')" class="bg-red-600 hover:bg-red-500 px-3 py-1.5 rounded-lg text-white font-bold transition">🔇 Mute & Удалить</button>
                             </div>
@@ -1981,6 +1989,46 @@
                 osc.start();
                 osc.stop(ctx.currentTime + 0.4);
             } catch (e) {}
+        }
+
+        function playRingbackTone() {
+            try {
+                if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioContext.state === 'suspended') audioContext.resume();
+
+                const osc = audioContext.createOscillator();
+                const gain = audioContext.createGain();
+                osc.type = 'sine';
+                // Частота гудков (российские стандарты: 425 Гц)
+                osc.frequency.setValueAtTime(425, audioContext.currentTime);
+
+                gain.gain.setValueAtTime(0.12, audioContext.currentTime);
+                gain.gain.setValueAtTime(0, audioContext.currentTime + 0.8);
+
+                osc.connect(gain);
+                gain.connect(audioContext.destination);
+                osc.start(audioContext.currentTime);
+                osc.stop(audioContext.currentTime + 1.0);
+            } catch(e) {}
+        }
+
+        function startOutgoingRing() {
+            stopOutgoingRing();
+            playRingbackTone();
+            outgoingRingInterval = setInterval(() => {
+                if (isInCallOrConference && callTargetUser) {
+                    playRingbackTone();
+                } else {
+                    stopOutgoingRing();
+                }
+            }, 3500);
+        }
+
+        function stopOutgoingRing() {
+            if (outgoingRingInterval) {
+                clearInterval(outgoingRingInterval);
+                outgoingRingInterval = null;
+            }
         }
 
         function renderRadioStations() {
@@ -2594,7 +2642,7 @@
                     showCustomModal('Успех', 'Группа успешно удалена.', false, null, '🗑️');
                     socket.emit('refresh-db');
                 } else {
-                    showCustomModal('Ошибка', data.error || 'Не удалось удалить группу', false, null, '⚠️️');
+                    showCustomModal('Ошибка', data.error || 'Не удалось удалить группу', false, null, '⚠');
                 }
             }, '⚠️');
         }
@@ -3031,13 +3079,35 @@
                     const allowed = !sub.allowedRole || sub.allowedRole === 'all' || isLeader || myRole === sub.allowedRole || hasFullAccess(currentUser.login);
                     if (!allowed) return;
 
-                    const btn = document.createElement('button');
-                    btn.className = `w-full text-left px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center justify-between ${activeSubgroup === sub.id ? 'bg-purple-600 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]' : 'text-gray-300 hover:bg-gray-800'}`;
-                    
-                    if (sub.type === 'voice') {
-                        const inChannelUsers = Object.entries(speakingUsersMap).filter(([usr, isSpk]) => isSpk);
-                        const isVoiceActive = activeVoiceRoomKey === `${group.id}_sub_${sub.id}`;
+                    const roomKey = `${group.id}_sub_${sub.id}`;
+                    const participants = activeVoiceRoomsMap[roomKey] || [];
+                    const isVoiceActive = activeVoiceRoomKey === roomKey;
 
+                    if (sub.type === 'voice') {
+                        const voiceContainerDiv = document.createElement('div');
+                        voiceContainerDiv.className = `w-full rounded-xl transition ${activeSubgroup === sub.id ? 'bg-gray-800 border border-purple-500/40' : 'hover:bg-gray-800/60'}`;
+                        
+                        let participantsHTML = '';
+                        if (participants.length > 0) {
+                            participantsHTML = `<div class="pl-7 pr-2 pb-2 space-y-1.5 mt-1 border-t border-gray-800/80 pt-1.5">`;
+                            participants.forEach(pLogin => {
+                                const userObj = db.users[pLogin] || {};
+                                const isSpk = !!speakingUsersMap[pLogin];
+                                participantsHTML += `
+                                    <div class="flex items-center space-x-2 text-[11px] text-gray-300">
+                                        <div class="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 ${isSpk ? 'speaking-glow' : 'border border-gray-700'}">
+                                            ${getAvatarWithMuteBadge(userObj.avatar, pLogin)}
+                                        </div>
+                                        <span class="truncate font-medium text-gray-200">@${pLogin}</span>
+                                        ${isSpk ? '<span class="text-[9px] text-green-400 ml-auto animate-pulse">🎤</span>' : ''}
+                                    </div>
+                                `;
+                            });
+                            participantsHTML += `</div>`;
+                        }
+
+                        const btn = document.createElement('button');
+                        btn.className = `w-full text-left px-3 py-2 flex items-center justify-between text-xs font-semibold text-gray-300`;
                         btn.onclick = () => joinGroupVoiceConference(group.id, sub.id);
                         btn.innerHTML = `
                             <div class="flex items-center space-x-2 truncate">
@@ -3046,8 +3116,15 @@
                             </div>
                             ${isVoiceActive ? '<span class="text-[10px] bg-green-500 text-gray-950 font-bold px-1.5 py-0.5 rounded-full animate-pulse">В эфире</span>' : ''}
                         `;
-                        voiceChanContainer.appendChild(btn);
+
+                        voiceContainerDiv.appendChild(btn);
+                        if (participants.length > 0) {
+                            voiceContainerDiv.insertAdjacentHTML('beforeend', participantsHTML);
+                        }
+                        voiceChanContainer.appendChild(voiceContainerDiv);
                     } else {
+                        const btn = document.createElement('button');
+                        btn.className = `w-full text-left px-3 py-2 rounded-xl text-xs font-semibold transition flex items-center justify-between ${activeSubgroup === sub.id ? 'bg-purple-600 text-white shadow-[0_0_10px_rgba(168,85,247,0.4)]' : 'text-gray-300 hover:bg-gray-800'}`;
                         btn.onclick = () => selectSubgroup(sub.id);
                         btn.innerHTML = `
                             <div class="flex items-center space-x-2 truncate">
@@ -3199,7 +3276,7 @@
                 showCustomModal('Успех', 'Пост опубликован!', false, null, '✨');
                 socket.emit('refresh-db');
             } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠️');
+                showCustomModal('Ошибка', data.error || 'Не удалось опубликовать пост', false, null, '⚠️');
             }
         }
 
@@ -3288,7 +3365,7 @@
                     renderNewsFeed();
                     socket.emit('refresh-db');
                 } else {
-                    showCustomModal('Ошибка', data.error || 'Не удалось удалить пост', false, null, '⚠️️');
+                    showCustomModal('Ошибка', data.error || 'Не удалось удалить пост', false, null, '⚠');
                 }
             }, '⚠️');
         }
@@ -3655,6 +3732,7 @@
             document.getElementById('call-status-text').textContent = 'Вызов собеседника...';
             document.getElementById('single-call-modal').classList.remove('hidden');
             updatePttUIState();
+            startOutgoingRing();
 
             try {
                 const noiseSup = document.getElementById('noise-suppression-checkbox')?.checked ?? true;
@@ -3694,6 +3772,7 @@
             document.getElementById('call-status-text').textContent = 'Соединение установлено';
             document.getElementById('single-call-modal').classList.remove('hidden');
             updatePttUIState();
+            stopOutgoingRing();
 
             try {
                 const noiseSup = document.getElementById('noise-suppression-checkbox')?.checked ?? true;
@@ -3725,11 +3804,13 @@
         }
 
         socket.on('call-rejected', () => {
+            stopOutgoingRing();
             showCustomModal('Вызов отклонен', 'Собеседник отклонил ваш вызов.', false, null, '📞');
             hangUpCall();
         });
 
         socket.on('call-answered', async ({ answer, from }) => {
+            stopOutgoingRing();
             const pc = peerConnections[from];
             if (pc) {
                 await pc.setRemoteDescription(new RTCSessionDescription(answer));
@@ -3783,6 +3864,7 @@
 
         function hangUpCall() {
             isInCallOrConference = false;
+            stopOutgoingRing();
             if (localStream) {
                 localStream.getTracks().forEach(t => t.stop());
                 localStream = null;
@@ -3801,6 +3883,7 @@
         }
 
         socket.on('call-ended', () => {
+            stopOutgoingRing();
             showCustomModal('Звонок завершен', 'Собеседник завершил вызов.', false, null, '📞');
             hangUpCall();
         });
@@ -4044,7 +4127,7 @@
                 renderNewsFeed();
                 socket.emit('refresh-db');
             } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠️');
+                showCustomModal('Ошибка', data.error || 'Не удалось опубликовать пост', false, null, '⚠️');
             }
         }
 
@@ -4119,7 +4202,7 @@
                 showCustomModal('Успех', 'Ваш профиль успешно обновлен!', false, null, '✨');
                 socket.emit('refresh-db');
             } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠️');
+                showCustomModal('Ошибка', data.error, false, null, '⚠️️');
             }
         }
     </script>
