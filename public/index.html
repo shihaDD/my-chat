@@ -941,11 +941,12 @@
         function isUserMutedAnywhere(login) {
             if (!login) return false;
             const l = login.toLowerCase();
+            const now = Date.now();
             
             const globalMute = db.mutedUsers?.[l];
             if (globalMute) {
                 const exp = typeof globalMute === 'object' ? globalMute.expires : globalMute;
-                if (exp > Date.now()) return true;
+                if (exp > now) return true;
             }
 
             if (db.groups) {
@@ -953,7 +954,7 @@
                     if (group.groupMutedUsers?.[l]) {
                         const gm = group.groupMutedUsers[l];
                         const exp = typeof gm === 'object' ? gm.expires : gm;
-                        if (exp > Date.now()) return true;
+                        if (exp > now) return true;
                     }
                 }
             }
@@ -1054,8 +1055,9 @@
             const exp = typeof muteObj === 'object' ? muteObj.expires : muteObj;
             const reason = typeof muteObj === 'object' ? (muteObj.reason || 'Нарушение правил') : 'Нарушение правил';
 
-            if (exp && exp > Date.now()) {
-                const leftMins = Math.ceil((exp - Date.now()) / 60000);
+            const now = Date.now();
+            if (exp && exp > now) {
+                const leftMins = Math.ceil((exp - now) / 60000);
                 muteTimerEl.textContent = `Осталось примерно ${leftMins} мин.`;
                 muteReasonEl.textContent = `Причина: ${reason}`;
                 muteStatusBox.classList.remove('hidden');
@@ -1074,7 +1076,8 @@
         async function issueGlobalMuteFromModal() {
             if (!targetAssignLogin) return;
             const reason = document.getElementById('profile-modal-mute-reason').value.trim() || 'Нарушение правил';
-            const muteMinutes = document.getElementById('profile-modal-mute-mins').value || '60';
+            const muteMinutes = parseInt(document.getElementById('profile-modal-mute-mins').value) || 60;
+            const expiresTime = Date.now() + (muteMinutes * 60 * 1000);
 
             const res = await fetch('/api/resolve-violation-action', {
                 method: 'POST',
@@ -1083,7 +1086,7 @@
             });
             if (!db.mutedUsers) db.mutedUsers = {};
             db.mutedUsers[targetAssignLogin.toLowerCase()] = {
-                expires: Date.now() + (parseInt(muteMinutes) * 60 * 1000),
+                expires: expiresTime,
                 reason
             };
 
@@ -1737,7 +1740,7 @@
         async function submitViolationMute() {
             if (!selectedViolationIdForAction) return;
             const reason = document.getElementById('violation-mute-reason').value.trim() || 'Нарушение правил';
-            const muteMinutes = document.getElementById('violation-mute-minutes').value;
+            const muteMinutes = parseInt(document.getElementById('violation-mute-minutes').value) || 60;
             
             document.getElementById('violation-mute-modal').classList.add('hidden');
 
@@ -2817,7 +2820,7 @@
                 } else {
                     showCustomModal('Ошибка', data.error, false, null, '⚠️');
                 }
-            }, '⚠️');
+            }, '⚠️️');
         }
 
         async function createNewGroup() {
@@ -3067,7 +3070,7 @@
         async function kickUserFromVoice(groupId, subId, targetLogin) {
             const group = db.groups[groupId];
             if (!canControlVoice(group, currentUser.login)) {
-                showCustomModal('Ошибка', 'Недостаточно прав для управления участниками канала', false, null, '⚠️️');
+                showCustomModal('Ошибка', 'Недостаточно прав для управления участниками канала', false, null, '⚠');
                 return;
             }
             socket.emit('admin-voice-action', { groupId, subId, targetLogin, action: 'kick', adminLogin: currentUser.login });
@@ -3077,7 +3080,7 @@
         async function muteUserInVoice(groupId, subId, targetLogin) {
             const group = db.groups[groupId];
             if (!canControlVoice(group, currentUser.login)) {
-                showCustomModal('Ошибка', 'Недостаточно прав для выдачи мута в канале', false, null, '⚠️️');
+                showCustomModal('Ошибка', 'Недостаточно прав для выдачи мута в канале', false, null, '⚠');
                 return;
             }
             socket.emit('admin-voice-action', { groupId, subId, targetLogin, action: 'mute', adminLogin: currentUser.login });
@@ -3176,8 +3179,9 @@
                             const groupMuteExp = groupMuteObj ? (typeof groupMuteObj === 'object' ? groupMuteObj.expires : groupMuteObj) : 0;
                             const groupMuteReason = groupMuteObj && typeof groupMuteObj === 'object' ? (groupMuteObj.reason || 'Нарушение') : 'Нарушение';
 
-                            if (groupMuteExp > Date.now()) {
-                                const left = Math.ceil((groupMuteExp - Date.now()) / 60000);
+                            const now = Date.now();
+                            if (groupMuteExp > now) {
+                                const left = Math.ceil((groupMuteExp - now) / 60000);
                                 showCustomModal('Мут в группе', `Вы замучены в этой группе. Осталось минут: ${left}, причина: ${groupMuteReason}`, false, null, '🔇');
                                 return;
                             }
@@ -3240,12 +3244,13 @@
         async function sendMessage() {
             const isGroup = !!activeGroupWorkspaceId;
 
+            const now = Date.now();
             if (db.mutedUsers?.[currentUser.login]) {
                 const muteObj = db.mutedUsers[currentUser.login];
                 const exp = typeof muteObj === 'object' ? muteObj.expires : muteObj;
                 const reason = typeof muteObj === 'object' ? (muteObj.reason || 'Нарушение правил') : 'Нарушение правил';
-                if (exp > Date.now()) {
-                    const left = Math.ceil((exp - Date.now()) / 60000);
+                if (exp > now) {
+                    const left = Math.ceil((exp - now) / 60000);
                     showCustomModal('Глобальный мут', `Вы в глобальном муте. Осталось минут: ${left}, причина: ${reason}`, false, null, '🔇');
                     return;
                 }
@@ -3256,8 +3261,8 @@
                     const gm = grp.groupMutedUsers[currentUser.login];
                     const exp = typeof gm === 'object' ? gm.expires : gm;
                     const reason = typeof gm === 'object' ? (gm.reason || 'Нарушение') : 'Нарушение';
-                    if (exp > Date.now()) {
-                        const left = Math.ceil((exp - Date.now()) / 60000);
+                    if (exp > now) {
+                        const left = Math.ceil((exp - now) / 60000);
                         showCustomModal('Мут в группе', `Вы замучены в этой группе. Осталось минут: ${left}, причина: ${reason}`, false, null, '🔇');
                         return;
                     }
@@ -3477,10 +3482,11 @@
         }
 
         function toggleVoiceRecord() {
+            const now = Date.now();
             if (db.mutedUsers?.[currentUser.login]) {
                 const muteObj = db.mutedUsers[currentUser.login];
                 const exp = typeof muteObj === 'object' ? muteObj.expires : muteObj;
-                if (exp > Date.now()) {
+                if (exp > now) {
                     showCustomModal('Мут', 'У вас активен мут.', false, null, '🔇');
                     return;
                 }
@@ -3621,7 +3627,7 @@
                 showCustomModal('Успех', 'Пост опубликован!', false, null, '✨');
                 socket.emit('refresh-db');
             } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠️');
+                showCustomModal('Ошибка', data.error, false, null, '⚠️️');
             }
         }
 
@@ -3860,7 +3866,7 @@
 
                 outgoingRingtoneInterval = setInterval(() => playPhoneRing(), 1500);
             }).catch(() => {
-                showCustomModal('Ошибка', 'Нет доступа к микрофону для звонка', false, null, '⚠️️');
+                showCustomModal('Ошибка', 'Нет доступа к микрофону для звонка', false, null, '⚠');
                 hangUpCall();
             });
         }
