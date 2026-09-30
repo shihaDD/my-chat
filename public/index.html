@@ -152,14 +152,20 @@
                     <span id="friends-badge" class="absolute top-1 right-3 w-3 h-3 bg-yellow-400 rounded-full border-2 border-gray-900 hidden shadow-[0_0_10px_rgba(250,204,21,0.9)]"></span>
                 </button>
 
-                <button onclick="switchTab('groups')" id="nav-groups" title="Сообщества" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
+                <!-- ВКЛАДКА ГРУПП СО ЗНАЧКОМ УВЕДОМЛЕНИЯ -->
+                <button onclick="switchTab('groups')" id="nav-groups" title="Сообщества" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition relative">
                     <span class="text-lg mb-0.5">🏢</span>
                     <span class="text-[10px] font-medium tracking-tight">Группы</span>
+                    <span id="groups-badge" class="absolute top-1 right-3 w-3 h-3 bg-red-500 rounded-full border-2 border-gray-900 hidden shadow-[0_0_8px_rgba(239,68,68,0.8)]"></span>
                 </button>
-                <button onclick="switchTab('news')" id="nav-news" title="Лента Новостей" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
+
+                <!-- ВКЛАДКА НОВОСТЕЙ СО ЗНАЧКОМ УВЕДОМЛЕНИЯ -->
+                <button onclick="switchTab('news')" id="nav-news" title="Лента Новостей" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition relative">
                     <span class="text-lg mb-0.5">📰</span>
                     <span class="text-[10px] font-medium tracking-tight">Новости</span>
+                    <span id="news-badge" class="absolute top-1 right-3 w-3 h-3 bg-red-500 rounded-full border-2 border-gray-900 hidden shadow-[0_0_8px_rgba(239,68,68,0.8)]"></span>
                 </button>
+
                 <button onclick="switchTab('tiktok')" id="nav-tiktok" title="Видео-Приколы" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
                     <span class="text-lg mb-0.5">🎬</span>
                     <span class="text-[10px] font-medium tracking-tight">Приколы</span>
@@ -597,7 +603,6 @@
             <h2 id="call-partner-name" class="text-3xl font-bold">Голосовой вызов...</h2>
             <p id="call-status-text" class="text-gray-400 text-sm animate-pulse">Установление аудиосоединения</p>
             
-            <!-- ИНДИКАТОР РАЦИИ В ЗВОНКЕ (ЗЕЛЕНЫЙ ПРИ АКТИВАЦИИ) -->
             <div id="call-ptt-status" class="text-xs font-mono hidden pt-1">
                 <span id="call-ptt-hint-text">Рация: Нажмите и удерживайте <span id="call-ptt-key">Space</span> для разговора</span>
                 <div id="call-ptt-talking-indicator" class="bg-green-600 text-white text-xs font-bold px-3 py-1.5 rounded-xl shadow-[0_0_20px_rgba(34,197,94,0.8)] hidden animate-pulse inline-block mt-1">🟢 Говорите</div>
@@ -701,7 +706,10 @@
         let conferenceParticipants = {};
         let outgoingRingtoneInterval = null;
         let incomingRingtoneInterval = null;
+        
         let unreadMessagesMap = {};
+        let unreadGroupsCount = 0;
+        let unreadNewsCount = 0;
 
         let appSettings = { audioDevice: '', audioOutput: '', pttMode: 'voice', pttKey: 'Space', micVolume: 80 };
         let isPttPressed = false;
@@ -957,9 +965,9 @@
             document.getElementById(`nav-${tab}`)?.classList.remove('text-gray-400');
 
             if (tab === 'chats') { unreadMessagesMap = {}; updateChatsBadge(); }
+            if (tab === 'groups') { unreadGroupsCount = 0; updateGroupsBadge(); renderGroups(); }
+            if (tab === 'news') { unreadNewsCount = 0; updateNewsBadge(); renderNewsFeed(); loadInternetNews(); }
             if (tab === 'friends') renderFriends();
-            if (tab === 'groups') renderGroups();
-            if (tab === 'news') { renderNewsFeed(); loadInternetNews(); }
             if (tab === 'music') renderRadioStations();
         }
 
@@ -973,11 +981,20 @@
         function updateFriendsBadge() {
             const badge = document.getElementById('friends-badge');
             const myRequests = db.friendRequests[currentUser.login] || [];
-            if (myRequests.length > 0) {
-                badge.classList.remove('hidden');
-            } else {
-                badge.classList.add('hidden');
-            }
+            if (myRequests.length > 0) badge.classList.remove('hidden');
+            else badge.classList.add('hidden');
+        }
+
+        function updateGroupsBadge() {
+            const badge = document.getElementById('groups-badge');
+            if (unreadGroupsCount > 0) badge.classList.remove('hidden');
+            else badge.classList.add('hidden');
+        }
+
+        function updateNewsBadge() {
+            const badge = document.getElementById('news-badge');
+            if (unreadNewsCount > 0) badge.classList.remove('hidden');
+            else badge.classList.add('hidden');
         }
 
         function openSettingsModal() {
@@ -1059,7 +1076,6 @@
             };
         }
 
-        // БЕСПЕРЕБОЙНАЯ ЛОГИКА РАЦИИ (PTT) С ЗЕЛЕНЫМ ИНДИКАТОРОМ "ГОВОРИТЕ"
         function setupPttListeners() {
             window.addEventListener('keydown', (e) => {
                 if (appSettings.pttMode === 'ptt' && e.code === appSettings.pttKey && !isPttPressed && !e.repeat) {
@@ -1957,6 +1973,10 @@
                 }
                 playNotificationSound();
                 showWebNotification(`Группа: ${db.groups[groupId].name}`, `${msg.sender}: ${msg.text || 'Медиа'}`);
+
+                unreadGroupsCount++;
+                updateGroupsBadge();
+
                 if (activeChat && activeChat.type === 'group' && activeChat.id === groupId && activeSubgroup === subgroup) {
                     renderMessages();
                 }
@@ -2209,9 +2229,16 @@
                 body: JSON.stringify({ author: currentUser.login, text })
             });
             const data = await res.json();
-            if (data.success) { db = data.db; textInput.value = ''; renderNewsFeed(); }
+            if (data.success) {
+                db = data.db;
+                textInput.value = '';
+                unreadNewsCount++;
+                updateNewsBadge();
+                renderNewsFeed();
+            }
         }
 
+        // НАДЕЖНОЕ АВТОВОСПРОИЗВЕДЕНИЕ ВИДЕО ПРИ СКРОЛЛЕ
         function initVideoFeed() {
             const feed = document.getElementById('tiktok-feed');
             feed.innerHTML = '';
@@ -2222,11 +2249,15 @@
                 entries.forEach(entry => {
                     const video = entry.target.querySelector('video');
                     if (video) {
-                        if (entry.isIntersecting) video.play().catch(() => {});
-                        else video.pause();
+                        if (entry.isIntersecting) {
+                            video.play().catch(() => {});
+                        } else {
+                            video.pause();
+                            video.currentTime = 0;
+                        }
                     }
                 });
-            }, { threshold: 0.5 });
+            }, { threshold: 0.6 });
 
             loadMoreVideos(4);
             feed.onscroll = () => {
@@ -2250,15 +2281,16 @@
                 const item = funnyVideosPool[randPoolIdx];
 
                 const card = document.createElement('div');
-                card.className = 'w-full h-full flex-shrink-0 snap-start relative bg-black flex items-center justify-center border-b border-gray-900';
+                card.className = 'w-full h-full flex-shrink-0 snap-start relative bg-black flex items-center justify-center border-b border-gray-950';
                 card.innerHTML = `
-                    <video src="${item.url}" loop autoplay muted playsinline class="w-full h-full object-cover"></video>
-                    <div class="absolute bottom-6 left-4 z-10 text-white drop-shadow-md">
+                    <video src="${item.url}" loop autoplay muted playsinline preload="auto" class="w-full h-full object-cover"></video>
+                    <div class="absolute bottom-6 left-4 z-10 text-white drop-shadow-md pointer-events-none">
                         <div class="font-bold text-lg">${item.author}</div>
                         <div class="text-sm opacity-90">${item.desc}</div>
                     </div>
                 `;
                 feed.appendChild(card);
+                const videoEl = card.querySelector('video');
                 videoObserver.observe(card);
             }
         }
@@ -2536,7 +2568,7 @@
                 tile.id = `audio-tile-${id}`;
                 tile.className = 'relative bg-gray-900 border border-purple-500/30 rounded-2xl p-6 flex flex-col items-center justify-center space-y-3 shadow-xl';
                 tile.innerHTML = `
-                    <div class="w-20 h-20 rounded-full bg-purple-600/30 border-2 border-purple-500 flex items-center justify-center text-3xl animate-pulse">🎙️️</div>
+                    <div class="w-20 h-20 rounded-full bg-purple-600/30 border-2 border-purple-500 flex items-center justify-center text-3xl animate-pulse">🎙</div>
                     <div class="text-white font-bold text-sm">${label}</div>
                     <audio autoplay playsinline ${id === 'local' ? 'muted' : ''}></audio>
                 `;
