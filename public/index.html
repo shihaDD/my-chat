@@ -855,7 +855,7 @@
         </div>
         
         <div class="flex items-center space-x-3">
-            <div class="w-12 h-12 rounded-full bg-purple-600/30 border border-purple-500 flex items-center justify-center text-xl animate-bounce flex-shrink-0">🎙️</div>
+            <div class="w-12 h-12 rounded-full bg-purple-600/30 border border-purple-500 flex items-center justify-center text-xl animate-bounce flex-shrink-0">🎙️️</div>
             <div class="overflow-hidden">
                 <h2 id="call-partner-name" class="text-sm font-bold text-white truncate">Вызов...</h2>
                 <p id="call-status-text" class="text-xs text-gray-400 animate-pulse truncate">Установление соединения</p>
@@ -2788,7 +2788,7 @@
                     renderGroups();
                     showCustomModal('Успех', 'Группа успешно удалена.', false, null, '🗑️');
                 } else {
-                    showCustomModal('Ошибка', data.error, false, null, '⚠️️');
+                    showCustomModal('Ошибка', data.error, false, null, '⚠');
                 }
             }, '⚠');
         }
@@ -3068,7 +3068,7 @@
         socket.on('forced-voice-action', ({ action, subId }) => {
             if (action === 'kick' && activeVoiceChannel === subId) {
                 leaveGroupVoiceConference();
-                showCustomModal('Кик', 'Вас отключили от голосового канала', false, null, '⚠️');
+                showCustomModal('Кик', 'Вас отключили от голосового канала', false, null, '⚠️️');
             } else if (action === 'mute' && activeVoiceChannel === subId) {
                 if (localStream) {
                     localStream.getAudioTracks().forEach(t => t.enabled = false);
@@ -3620,7 +3620,7 @@
             const isAnnouncement = annCheckbox ? annCheckbox.checked : false;
 
             if (!groupId || (!text && !currentUploadedMedia)) {
-                showCustomModal('Ошибка', 'Выберите группу и введите текст поста!', false, null, '⚠️');
+                showCustomModal('Ошибка', 'Выберите группу и введите текст поста!', false, null, '⚠️️');
                 return;
             }
 
