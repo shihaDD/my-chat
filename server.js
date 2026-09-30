@@ -89,8 +89,8 @@ async function initDatabase() {
             if (!db.groups[gId].roles) db.groups[gId].roles = {};
             if (!db.groups[gId].customRoles) {
                 db.groups[gId].customRoles = {
-                    'Админ': { canPost: true, canDelete: true, canVoice: true, canDuplicateNews: true },
-                    'Участник': { canPost: false, canDelete: false, canVoice: true, canDuplicateNews: false }
+                    'Админ': { canPost: true, canDelete: true, canVoice: true, canDuplicateNews: true, canVoiceControl: true },
+                    'Участник': { canPost: false, canDelete: false, canVoice: true, canDuplicateNews: false, canVoiceControl: false }
                 };
             }
             if (!db.groups[gId].posts) db.groups[gId].posts = [];
@@ -329,8 +329,8 @@ app.post('/api/create-group', async (req, res) => {
         members: [creator],
         roles: { [creator]: 'Лидер' },
         customRoles: {
-            'Админ': { canPost: true, canDelete: true, canVoice: true, canDuplicateNews: true },
-            'Участник': { canPost: false, canDelete: false, canVoice: true, canDuplicateNews: false }
+            'Админ': { canPost: true, canDelete: true, canVoice: true, canDuplicateNews: true, canVoiceControl: true },
+            'Участник': { canPost: false, canDelete: false, canVoice: true, canDuplicateNews: false, canVoiceControl: false }
         },
         isClosed: !!isClosed,
         joinRequests: [],
@@ -599,7 +599,7 @@ app.post('/api/create-custom-role', async (req, res) => {
     const cleanName = roleName.trim();
     if (!cleanName) return res.json({ success: false, error: 'Введите название роли' });
 
-    group.customRoles[cleanName] = permissions || { canPost: true, canDelete: true, canVoice: true, canDuplicateNews: false };
+    group.customRoles[cleanName] = permissions || { canPost: true, canDelete: true, canVoice: true, canDuplicateNews: false, canVoiceControl: false };
     await saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
@@ -1060,41 +1060,74 @@ io.on('connection', (socket) => {
         io.to(targetLogin.toLowerCase()).emit('webrtc-candidate', { candidate });
     });
 
-    socket.on('join-voice-channel', ({ groupId, channelId, login }) => {
-        const roomKey = `voice_${groupId}_${channelId}`;
+    socket.on('join-voice-channel', ({ roomKey, login, groupId, subId }) => {
         socket.join(roomKey);
         socket.roomKey = roomKey;
+        socket.voiceLogin = login;
+
+        if (!global.voiceRooms) global.voiceRooms = {};
+        if (!global.voiceRooms[roomKey]) global.voiceRooms[roomKey] = new Set();
+        global.voiceRooms[roomKey].add(login);
+
         const clients = io.sockets.adapter.rooms.get(roomKey);
         const socketsInRoom = clients ? Array.from(clients).filter(id => id !== socket.id) : [];
+        
         socket.emit('voice-channel-users', { users: socketsInRoom });
         socket.to(roomKey).emit('user-joined-voice', { socketId: socket.id, login });
+        
+        io.to(`group_${groupId}`).emit('voice-participants-update', {
+            channelKey: subId,
+            participants: Array.from(global.voiceRooms[roomKey])
+        });
     });
 
-    socket.on('leave-voice-channel', ({ groupId, channelId }) => {
-        const roomKey = `voice_${groupId}_${channelId}`;
+    socket.on('leave-voice-channel', ({ roomKey, groupId, subId }) => {
         socket.leave(roomKey);
         socket.to(roomKey).emit('user-left-voice', { socketId: socket.id });
+        if (global.voiceRooms && global.voiceRooms[roomKey] && socket.voiceLogin) {
+            global.voiceRooms[roomKey].delete(socket.voiceLogin);
+            io.to(`group_${groupId}`).emit('voice-participants-update', {
+                channelKey: subId,
+                participants: Array.from(global.voiceRooms[roomKey])
+            });
+        }
         socket.roomKey = null;
+        socket.voiceLogin = null;
+    });
+
+    socket.on('admin-voice-action', ({ groupId, subId, targetLogin, action, adminLogin }) => {
+        const group = db.groups[groupId];
+        if (!group) return;
+        const isLeader = group.creator === adminLogin;
+        const myRole = group.roles?.[adminLogin] || 'Участник';
+        const rolePerms = group.customRoles?.[myRole];
+        const canCtrl = isLeader || myRole === 'Админ' || (rolePerms && rolePerms.canVoiceControl) || hasFullAccess(adminLogin);
+        if (!canCtrl) return;
+
+        io.to(targetLogin.toLowerCase()).emit('forced-voice-action', { action, subId });
     });
 
     socket.on('voice-offer', ({ targetSocketId, offer, senderLogin }) => {
-        io.to(targetSocketId).emit('voice-offer', { offer, senderLogin, senderSocketId: socket.id });
+        io.to(targetSocketId).emit('voice-offer', { offer, senderLogin, targetSocketId: socket.id });
     });
 
-    socket.on('voice-answer', ({ targetSocketId, answer, senderSocketId }) => {
-        io.to(targetSocketId).emit('voice-answer', { answer, senderSocketId: socket.id });
+    socket.on('voice-answer', ({ targetSocketId, answer }) => {
+        io.to(targetSocketId).emit('voice-answer', { answer, targetSocketId: socket.id });
     });
 
     socket.on('voice-candidate', ({ targetSocketId, candidate }) => {
-        io.to(targetSocketId).emit('voice-candidate', { candidate, senderSocketId: socket.id });
+        io.to(targetSocketId).emit('voice-candidate', { candidate, targetSocketId: socket.id });
     });
 
     socket.on('disconnect', () => {
         if (socket.userLogin) {
             db.lastSeen[socket.userLogin] = Date.now();
         }
-        if (socket.roomKey) {
+        if (socket.roomKey && socket.voiceLogin) {
             socket.to(socket.roomKey).emit('user-left-voice', { socketId: socket.id });
+            if (global.voiceRooms && global.voiceRooms[socket.roomKey]) {
+                global.voiceRooms[socket.roomKey].delete(socket.voiceLogin);
+            }
         }
     });
 });
