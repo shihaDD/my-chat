@@ -315,7 +315,7 @@
                 </div>
             </div>
 
-            <!-- Вкладка: ВИДЕО-ПРИКОЛЫ (ЗАМЕНА TIKTOK БЕЗ ПОВТОРОВ) -->
+            <!-- Вкладка: ВИДЕО-ПРИКОЛЫ -->
             <div id="tab-content-tiktok" class="flex-1 bg-black hidden flex justify-center items-center relative overflow-hidden">
                 <div id="tiktok-feed" class="w-full max-w-sm h-full overflow-y-scroll snap-y-mandatory no-scrollbar relative"></div>
             </div>
@@ -428,7 +428,7 @@
         </div>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО НАСТРОЕК ГРУППЫ (С УПРАВЛЕНИЕМ РОЛЯМИ И ПРАВАМИ) -->
+    <!-- МОДАЛЬНОЕ ОКНО НАСТРОЕК ГРУППЫ -->
     <div id="group-settings-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
         <div class="bg-gray-900 border border-purple-500/50 p-6 rounded-3xl w-full max-w-xl shadow-[0_0_35px_rgba(168,85,247,0.3)] space-y-4 max-h-[90vh] overflow-y-auto">
             <div class="flex justify-between items-center border-b border-gray-800 pb-3">
@@ -448,7 +448,7 @@
                     <input type="text" id="edit-group-name-input" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-purple-500">
                 </div>
                 
-                <!-- УПРАВЛЕНИЕ КАСТОМНЫМИ РОЛЯМИ И ПРАВАМИ (ТОЛЬКО ДЛЯ ЛИДЕРА) -->
+                <!-- УПРАВЛЕНИЕ РОЛЯМИ И ПРАВАМИ (ТОЛЬКО ДЛЯ ЛИДЕРА) -->
                 <div id="leader-roles-manager" class="hidden bg-gray-950 p-4 rounded-2xl border border-purple-500/30 space-y-3">
                     <h4 class="text-xs font-bold text-purple-300 uppercase">🛡 Создание и настройка ролей</h4>
                     <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -470,6 +470,11 @@
                 <div>
                     <h4 class="text-xs font-bold text-purple-300 uppercase mb-2">👥 Участники группы</h4>
                     <div id="group-members-column-list" class="space-y-2 max-h-48 overflow-y-auto pr-1"></div>
+                </div>
+
+                <!-- КНОПКА УДАЛЕНИЯ ГРУППЫ (ТОЛЬКО ДЛЯ СОЗДАТЕЛЯ) -->
+                <div id="leader-delete-section" class="hidden pt-2 border-t border-gray-800">
+                    <button onclick="deleteCurrentGroupModal()" class="w-full bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white py-2.5 rounded-xl font-bold transition text-xs">🗑️ Удалить группу</button>
                 </div>
             </div>
             <div class="flex justify-end pt-2">
@@ -1170,7 +1175,17 @@
             renderGroups();
             renderMessages();
             if (activeChat && activeChat.type === 'group') {
-                renderGroupSidebar(db.groups[activeChat.id]);
+                if (!db.groups[activeChat.id]) {
+                    // Группа была удалена
+                    activeChat = null;
+                    document.getElementById('chat-window').classList.add('hidden');
+                    document.getElementById('no-chat-selected').classList.remove('hidden');
+                    document.getElementById('message-history-search').classList.add('hidden');
+                    document.getElementById('group-channels-sidebar').classList.add('hidden');
+                    showCustomModal('Уведомление', 'Эта группа была удалена создателем.', false, null, 'ℹ️');
+                } else {
+                    renderGroupSidebar(db.groups[activeChat.id]);
+                }
             }
         });
 
@@ -1255,11 +1270,15 @@
 
             const isLeader = group.creator === currentUser.login;
             const rolesManagerBox = document.getElementById('leader-roles-manager');
+            const deleteSection = document.getElementById('leader-delete-section');
+
             if (isLeader) {
                 rolesManagerBox.classList.remove('hidden');
+                deleteSection.classList.remove('hidden');
                 renderCustomRolesManager(group);
             } else {
                 rolesManagerBox.classList.add('hidden');
+                deleteSection.classList.add('hidden');
             }
             
             const channelsList = document.getElementById('group-channels-list');
@@ -1283,7 +1302,6 @@
             const myRole = group.roles?.[currentUser.login] || (isLeader ? 'Лидер' : 'Участник');
             const canManage = isLeader || myRole === 'Админ';
 
-            // Собираем все доступные роли (стандартные + кастомные)
             const availableRoles = ['Лидер', 'Админ', 'Участник', ...Object.keys(group.customRoles || {})];
 
             group.members.forEach(m => {
@@ -1406,6 +1424,35 @@
             }
         }
 
+        async function deleteCurrentGroupModal() {
+            if (!editingGroupId) return;
+            showCustomModal('Подтверждение', 'Вы уверены, что хотите навсегда удалить эту группу? Это действие необратимо.', true, async (confirmed) => {
+                if (!confirmed) return;
+                const res = await fetch('/api/delete-group', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ groupId: editingGroupId, login: currentUser.login })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    db = data.db;
+                    document.getElementById('group-settings-modal').classList.add('hidden');
+                    renderGroups();
+                    renderChatsList();
+                    if (activeChat && activeChat.id === editingGroupId) {
+                        activeChat = null;
+                        document.getElementById('chat-window').classList.add('hidden');
+                        document.getElementById('no-chat-selected').classList.remove('hidden');
+                        document.getElementById('message-history-search').classList.add('hidden');
+                        document.getElementById('group-channels-sidebar').classList.add('hidden');
+                    }
+                    showCustomModal('Успех', 'Группа успешно удалена', false, null, '✨');
+                } else {
+                    showCustomModal('Ошибка', data.error, false, null, '⚠️');
+                }
+            }, '⚠️');
+        }
+
         function openCreateChannelModal(type) {
             if (!activeChat || activeChat.type !== 'group') return;
             channelCreationType = type;
@@ -1488,7 +1535,6 @@
                 btnCall.classList.add('hidden');
                 sidebar.classList.remove('hidden');
 
-                // Подключаемся к сокет-комнате группы для мгновенного получения сообщений
                 socket.emit('join-group-room', chat.id);
                 renderGroupSidebar(group);
             }
@@ -1935,7 +1981,7 @@
                 textInput.value = '';
                 renderGroupsFeed();
             } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠️');
+                showCustomModal('Ошибка', data.error, false, null, '⚠️️');
             }
         }
 
@@ -2101,7 +2147,7 @@
             }
         }
 
-        // РАНДОМНЫЕ ВИДЕО-ПРИКОЛЫ БЕЗ ПОВТОРОВ С СКРОЛЛОМ
+        // ВИДЕО-ПРИКОЛЫ
         function initVideoFeed() {
             const feed = document.getElementById('tiktok-feed');
             feed.innerHTML = '';
@@ -2134,7 +2180,6 @@
         function loadMoreVideos(count) {
             const feed = document.getElementById('tiktok-feed');
             
-            // Если показаны все видео из пула, сбрасываем историю для бесшовного бесконечного цикла без повторов подряд
             if (shownVideoIndices.size >= funnyVideosPool.length) {
                 shownVideoIndices.clear();
             }
