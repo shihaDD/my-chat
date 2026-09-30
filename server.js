@@ -29,7 +29,15 @@ let db = {
 if (fs.existsSync(DB_FILE)) {
     try {
         const data = fs.readFileSync(DB_FILE, 'utf8');
-        db = { ...db, ...JSON.parse(data) };
+        const parsed = JSON.parse(data);
+        db = { ...db, ...parsed };
+        // Автомиграция старых групп для предотвращения ошибок загрузки
+        for (let gId in db.groups) {
+            if (!db.groups[gId].subgroups) db.groups[gId].subgroups = [];
+            if (!db.groups[gId].roles) db.groups[gId].roles = {};
+            if (!db.groups[gId].posts) db.groups[gId].posts = [];
+            if (!db.groups[gId].messages) db.groups[gId].messages = [];
+        }
     } catch (e) {
         console.error('Ошибка чтения database.json:', e);
     }
@@ -115,19 +123,6 @@ app.post('/api/update-profile', (req, res) => {
     if (password) db.users[login].password = password;
     saveDb();
     res.json({ success: true, user: db.users[login], db });
-});
-
-app.post('/api/set-nickname', (req, res) => {
-    const { owner, target, nickname } = req.body;
-    if (!db.customNicknames) db.customNicknames = {};
-    if (!db.customNicknames[owner]) db.customNicknames[owner] = {};
-    if (!nickname.trim()) {
-        delete db.customNicknames[owner][target];
-    } else {
-        db.customNicknames[owner][target] = nickname.trim();
-    }
-    saveDb();
-    res.json({ success: true, db });
 });
 
 app.post('/api/add-friend', (req, res) => {
@@ -357,6 +352,7 @@ app.post('/api/send-group-message', (req, res) => {
     const msgObj = { sender, text: text || '', media: media || null, time, edited: false };
 
     if (!subgroup || subgroup === 'main') {
+        if (!group.messages) group.messages = [];
         group.messages.push(msgObj);
     } else {
         const sub = group.subgroups?.find(s => s.id === subgroup);
