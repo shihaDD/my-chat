@@ -17,7 +17,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/messenger_db';
 
 const AppStateSchema = new mongoose.Schema({
-    key: { type: String, unique: true, default: 'main_db', index: true },
+    key: { type: String, unique: true, default: 'main_db' },
     users: { type: Object, default: {} },
     messagesStore: { type: Object, default: {} },
     friends: { type: Object, default: {} },
@@ -34,9 +34,6 @@ const AppStateSchema = new mongoose.Schema({
     verificationRequests: { type: Array, default: [] },
     mutedUsers: { type: Object, default: {} }
 });
-
-// Оптимизация индексации для быстрого доступа
-AppStateSchema.index({ key: 1 });
 
 const AppState = mongoose.model('AppState', AppStateSchema);
 
@@ -63,7 +60,7 @@ async function initDatabase() {
         await mongoose.connect(MONGO_URI);
         console.log('Успешное подключение к MongoDB');
         
-        let doc = await AppState.findOne({ key: 'main_db' }).lean();
+        let doc = await AppState.findOne({ key: 'main_db' });
         if (!doc) {
             doc = new AppState({ key: 'main_db', ...db });
             await doc.save();
