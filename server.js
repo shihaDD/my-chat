@@ -64,7 +64,6 @@ async function initDatabase() {
         if (!doc) {
             doc = new AppState({ key: 'main_db', ...db });
             await doc.save();
-            console.log('Создана новая структура базы данных в MongoDB');
         } else {
             db = {
                 users: doc.users || {},
@@ -244,24 +243,6 @@ app.post('/api/set-global-role', async (req, res) => {
     }
     if (!db.globalRoles) db.globalRoles = {};
     db.globalRoles[targetLogin.trim().toLowerCase()] = newRole;
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
-});
-
-app.post('/api/set-global-mute', async (req, res) => {
-    const { login, targetLogin, muteMinutes, reason } = req.body;
-    const cleanLogin = login ? login.trim().toLowerCase() : '';
-    if (!hasFullAccess(cleanLogin)) {
-        return res.json({ success: false, error: 'Недостаточно прав!' });
-    }
-    if (!db.mutedUsers) db.mutedUsers = {};
-    const mins = parseInt(muteMinutes) || 60;
-    const clampedMins = Math.min(Math.max(mins, 1), 9999);
-    db.mutedUsers[targetLogin.trim().toLowerCase()] = {
-        expires: Date.now() + (clampedMins * 60 * 1000),
-        reason: reason || 'Нарушение правил'
-    };
     await saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
@@ -448,9 +429,12 @@ app.post('/api/group-set-nickname', async (req, res) => {
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
 
     const isLeader = group.creator === login;
-    const myRole = group.roles?.[login];
-    if (!isLeader && myRole !== 'Админ' && !hasFullAccess(login)) {
-        return res.json({ success: false, error: 'Недостаточно прав для изменения никнейма в группе!' });
+    const myRole = group.roles?.[login] || 'Участник';
+    const canManage = isLeader || myRole === 'Админ' || hasFullAccess(login);
+    const isSelf = login.toLowerCase() === targetLogin.toLowerCase();
+
+    if (!canManage && !isSelf) {
+        return res.json({ success: false, error: 'Участники могут менять ник только себе!' });
     }
 
     if (!group.groupNicknames) group.groupNicknames = {};
@@ -735,6 +719,7 @@ app.post('/api/send-message', async (req, res) => {
             timestamp: Date.now(),
             source: chatType === 'group' ? 'group' : (chatType === 'global' ? 'global' : 'chat'),
             groupName: chatType === 'group' ? db.groups[chatId]?.name : '',
+            groupId: chatType === 'group' ? chatId : null,
             messageId: msgId,
             storeKey
         });
@@ -992,7 +977,7 @@ app.post('/api/resolve-violation-action', async (req, res) => {
             id: 'news_' + Date.now(),
             author: viol.author,
             groupName: viol.groupName || '',
-            groupVerified: !!viol.groupName,
+            groupVerified: viol.groupId ? !!db.groups[viol.groupId]?.isVerified : false,
             text: viol.text,
             timestamp: Date.now()
         });
@@ -1003,7 +988,7 @@ app.post('/api/resolve-violation-action', async (req, res) => {
             id: 'news_' + Date.now(),
             author: viol.author,
             groupName: viol.groupName || '',
-            groupVerified: !!viol.groupName,
+            groupVerified: viol.groupId ? !!db.groups[viol.groupId]?.isVerified : false,
             text: newText,
             timestamp: Date.now()
         });
@@ -1027,6 +1012,10 @@ app.post('/api/resolve-violation-action', async (req, res) => {
             if (grp.posts) {
                 grp.posts = grp.posts.filter(p => p.id !== viol.groupPostId);
             }
+        }
+        // Также зачищаем из новостей, если текст совпадает или дублирован
+        if (viol.text && db.news) {
+            db.news = db.news.filter(n => n.text !== viol.text);
         }
     }
 
@@ -1073,19 +1062,41 @@ io.on('connection', (socket) => {
         io.to(targetLogin.toLowerCase()).emit('webrtc-candidate', { candidate });
     });
 
-    socket.on('join-voice-channel', ({ roomKey, login }) => {
+    socket.on('join-voice-channel', ({ groupId, channelId, login }) => {
+        const roomKey = `voice_${groupId}_${channelId}`;
         socket.join(roomKey);
+        socket.roomKey = roomKey;
+        const clients = io.sockets.adapter.rooms.get(roomKey);
+        const socketsInRoom = clients ? Array.from(clients).filter(id => id !== socket.id) : [];
+        socket.emit('voice-channel-users', { users: socketsInRoom });
         socket.to(roomKey).emit('user-joined-voice', { socketId: socket.id, login });
     });
 
-    socket.on('leave-voice-channel', ({ roomKey }) => {
+    socket.on('leave-voice-channel', ({ groupId, channelId }) => {
+        const roomKey = `voice_${groupId}_${channelId}`;
         socket.leave(roomKey);
         socket.to(roomKey).emit('user-left-voice', { socketId: socket.id });
+        socket.roomKey = null;
+    });
+
+    socket.on('voice-offer', ({ targetSocketId, offer, senderLogin }) => {
+        io.to(targetSocketId).emit('voice-offer', { offer, senderLogin, senderSocketId: socket.id });
+    });
+
+    socket.on('voice-answer', ({ targetSocketId, answer, senderSocketId }) => {
+        io.to(targetSocketId).emit('voice-answer', { answer, senderSocketId: socket.id });
+    });
+
+    socket.on('voice-candidate', ({ targetSocketId, candidate }) => {
+        io.to(targetSocketId).emit('voice-candidate', { candidate, senderSocketId: socket.id });
     });
 
     socket.on('disconnect', () => {
         if (socket.userLogin) {
             db.lastSeen[socket.userLogin] = Date.now();
+        }
+        if (socket.roomKey) {
+            socket.to(socket.roomKey).emit('user-left-voice', { socketId: socket.id });
         }
     });
 });
