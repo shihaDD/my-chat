@@ -145,7 +145,7 @@
         </div>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО НАЗНАЧЕНИЯ РОЛИ И УПРАВЛЕНИЯ МУТОМ -->
+    <!-- МОДАЛЬНОЕ ОКНО НАЗНАЧЕНИЯ РОЛИ И СНЯТИЯ МУТА -->
     <div id="role-assign-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
         <div class="bg-gray-900 border border-purple-500/50 p-5 sm:p-6 rounded-3xl w-[92%] max-w-sm shadow-[0_0_35px_rgba(168,85,247,0.3)] space-y-4 relative">
             <button onclick="closeRoleAssignModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-lg font-bold">✕</button>
@@ -155,17 +155,11 @@
             <div id="user-global-mute-status" class="bg-gray-950 p-3 rounded-xl border border-red-500/30 text-xs space-y-2 hidden">
                 <div class="font-bold text-red-400">🔇 Действует глобальный мут</div>
                 <div id="user-global-mute-timer" class="text-gray-300 font-mono"></div>
+                <div id="user-global-mute-reason-box" class="text-gray-400 italic"></div>
                 <button onclick="removeGlobalMutedUser()" class="w-full bg-green-600 hover:bg-green-500 text-white py-1.5 rounded-lg font-bold">Снять глобальный мут</button>
             </div>
 
-            <div id="user-issue-mute-box" class="bg-gray-950 p-3 rounded-xl border border-red-500/30 text-xs space-y-2">
-                <div class="font-bold text-red-400">Выдать глобальный мут</div>
-                <input type="text" id="modal-mute-reason" placeholder="Причина..." class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white">
-                <input type="number" id="modal-mute-mins" min="1" max="9999" value="60" placeholder="Минуты" class="w-full bg-gray-800 border border-gray-700 rounded-lg p-2 text-white font-mono">
-                <button onclick="issueGlobalMuteFromModal()" class="w-full bg-red-600 hover:bg-red-500 text-white py-1.5 rounded-lg font-bold">Выдать мут</button>
-            </div>
-
-            <div>
+            <div id="role-select-box">
                 <label class="block text-xs text-gray-400 uppercase mb-1">Выберите глобальную роль</label>
                 <select id="role-assign-select" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-purple-500">
                     <option value="user">Пользователь</option>
@@ -175,7 +169,7 @@
             </div>
             <div class="flex justify-end space-x-2 pt-2">
                 <button onclick="closeRoleAssignModal()" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-xl text-xs font-bold">Отмена</button>
-                <button onclick="saveUserRoleAssignment()" class="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2 rounded-xl text-xs font-bold shadow-[0_0_15px_rgba(168,85,247,0.3)]">Сохранить</button>
+                <button onclick="saveUserRoleAssignment()" id="role-assign-save-btn" class="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2 rounded-xl text-xs font-bold shadow">Сохранить</button>
             </div>
         </div>
     </div>
@@ -403,8 +397,8 @@
                     <h2 class="text-xl sm:text-2xl font-bold text-purple-400">Сообщества и Группы</h2>
                     
                     <!-- ПОИСК ГРУПП ПО НАЗВАНИЮ -->
-                    <div class="max-w-7xl">
-                        <input type="text" id="group-search" oninput="filterGroups()" placeholder="🔍 Поиск групп по названию..." class="w-full bg-gray-900 border border-gray-800 rounded-2xl px-4 py-3 text-sm text-white focus:outline-none focus:border-purple-500 transition shadow-xl">
+                    <div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl shadow-xl max-w-7xl mb-4">
+                        <input type="text" id="group-search-input" oninput="filterGroupsList()" placeholder="🔍 Поиск групп по названию..." class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500 transition">
                     </div>
 
                     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-7xl">
@@ -458,7 +452,7 @@
                             
                             <div class="flex items-center space-x-1">
                                 <div id="ws-verification-btn-container"></div>
-                                <button onclick="openGroupRequestsModal()" class="relative p-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-xs text-white" title="Запросы на вступление">
+                                <button onclick="openGroupRequestsModal()" class="relative p-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-xs text-white hidden" id="ws-requests-btn-top" title="Запросы на вступление">
                                     📥
                                     <span id="ws-requests-badge-dot" class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-gray-900 hidden shadow-[0_0_6px_rgba(239,68,68,0.8)]"></span>
                                 </button>
@@ -469,14 +463,14 @@
                             <div>
                                 <div class="flex items-center justify-between text-xs font-bold text-gray-400 uppercase mb-2">
                                     <span>Текстовые каналы</span>
-                                    <button onclick="openCreateChannelModal('text')" class="hover:text-white text-sm">+</button>
+                                    <button onclick="openCreateChannelModal('text')" id="ws-create-text-chan-btn" class="hover:text-white text-sm hidden">+</button>
                                 </div>
                                 <div id="ws-sidebar-text-channels" class="space-y-1"></div>
                             </div>
                             <div>
                                 <div class="flex items-center justify-between text-xs font-bold text-gray-400 uppercase mb-2">
                                     <span>Голосовые каналы</span>
-                                    <button onclick="openCreateChannelModal('voice')" class="hover:text-white text-sm">+</button>
+                                    <button onclick="openCreateChannelModal('voice')" id="ws-create-voice-chan-btn" class="hover:text-white text-sm hidden">+</button>
                                 </div>
                                 <div id="ws-sidebar-voice-channels" class="space-y-1"></div>
                             </div>
@@ -492,11 +486,7 @@
                                     <div id="ws-active-chat-status" class="text-xs text-gray-400">Сообщество</div>
                                 </div>
                             </div>
-                            <div id="ws-chat-actions" class="flex items-center space-x-2">
-                                <button id="btn-group-call" onclick="startGroupCallConference()" class="p-2 px-3 bg-green-600 hover:bg-green-500 rounded-xl text-white font-bold text-xs flex items-center space-x-1 transition shadow-[0_0_15px_rgba(34,197,94,0.3)]">
-                                    <span>🎙 Конференция</span>
-                                </button>
-                            </div>
+                            <!-- Кнопка Конференция удалена по требованию -->
                         </div>
 
                         <div id="ws-pinned-message-banner" class="bg-gray-900/90 border-b border-purple-500/30 px-4 py-2 flex items-center justify-between text-xs hidden">
@@ -631,15 +621,9 @@
                             </div>
                         </div>
                         <div id="profile-username" class="text-xl font-bold text-white"></div>
-                        
-                        <!-- Ссылка на личный профиль с кнопкой копирования -->
-                        <div class="mt-3 w-full space-y-1">
-                            <label class="block text-[10px] text-gray-400 uppercase">Ссылка на ваш профиль</label>
-                            <div class="flex space-x-2">
-                                <input type="text" id="profile-link-box" readonly class="flex-1 bg-gray-800 border border-gray-700 rounded-xl p-2 text-xs text-purple-300 font-mono select-all">
-                                <button onclick="copyProfileLink()" class="bg-purple-600 hover:bg-purple-500 text-white px-3 py-1 rounded-xl text-xs font-bold transition">Копировать</button>
-                            </div>
-                        </div>
+                        <div id="profile-link-box" class="mt-2 text-xs bg-gray-800 p-2 rounded-xl text-purple-300 font-mono select-all"></div>
+                        <!-- КНОПКА СКОПИРОВАТЬ ССЫЛКУ НА ПРОФИЛЬ -->
+                        <button onclick="copyProfileLink()" class="mt-2 bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 px-3 py-1.5 rounded-xl text-xs font-bold transition">📋 Скопировать ссылку на профиль</button>
                     </div>
 
                     <div>
@@ -738,7 +722,7 @@
         </div>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО НАСТРОЕК ГРУППЫ (УЧАСТНИКИ, МУТ, ССЫЛКА НА ГРУППУ, РОЛИ) -->
+    <!-- МОДАЛЬНОЕ ОКНО НАСТРОЕК ГРУППЫ -->
     <div id="group-settings-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
         <div class="bg-gray-900 border border-purple-500/50 p-5 sm:p-6 rounded-3xl w-[95%] max-w-2xl shadow-[0_0_35px_rgba(168,85,247,0.3)] space-y-4 max-h-[90vh] overflow-y-auto">
             <div class="flex justify-between items-center border-b border-gray-800 pb-3">
@@ -746,19 +730,9 @@
                 <button onclick="document.getElementById('group-settings-modal').classList.add('hidden')" class="text-gray-400 hover:text-white text-lg font-bold">✕</button>
             </div>
             <div class="space-y-5">
-                <!-- Основные настройки группы -->
-                <div class="space-y-4 bg-gray-950 p-4 rounded-2xl border border-gray-800">
+                <!-- Основные настройки группы (скрываются для обычных участников) -->
+                <div id="group-main-settings-box" class="space-y-4 bg-gray-950 p-4 rounded-2xl border border-gray-800">
                     <h4 class="text-xs font-bold text-purple-300 uppercase">Основная информация</h4>
-                    
-                    <!-- Ссылка на группу с кнопкой копирования -->
-                    <div class="space-y-1">
-                        <label class="block text-xs text-gray-400 uppercase">Ссылка на группу</label>
-                        <div class="flex space-x-2">
-                            <input type="text" id="edit-group-link-box" readonly class="flex-1 bg-gray-800 border border-gray-700 rounded-xl p-2 text-xs text-purple-300 font-mono">
-                            <button onclick="copyGroupLink()" class="bg-purple-600 hover:bg-purple-500 text-white px-3 py-1.5 rounded-xl text-xs font-bold">Копировать</button>
-                        </div>
-                    </div>
-
                     <div class="flex items-center space-x-4">
                         <img id="edit-group-avatar-preview" src="" class="w-16 h-16 rounded-2xl object-cover border border-purple-500">
                         <div class="flex-1">
@@ -776,9 +750,17 @@
                             <span>🔒 Закрытая группа (требуется запрос на вступление)</span>
                         </label>
                     </div>
+                    <!-- Ссылка на группу с кнопкой копирования -->
+                    <div class="pt-2 border-t border-gray-800">
+                        <label class="block text-xs text-gray-400 uppercase mb-1">Ссылка на группу</label>
+                        <div class="flex space-x-2">
+                            <input type="text" id="group-invite-link-input" readonly class="flex-1 bg-gray-900 border border-gray-700 rounded-xl p-2 text-xs text-purple-300 font-mono">
+                            <button onclick="copyGroupInviteLink()" class="bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white">Копировать</button>
+                        </div>
+                    </div>
                 </div>
 
-                <!-- Участники группы (муты, время мута, снятие мута, кик, роли) -->
+                <!-- Участники группы (муты, ники, кик, роли) -->
                 <div class="bg-gray-950 p-4 rounded-2xl border border-gray-800 space-y-3">
                     <h4 class="text-xs font-bold text-purple-300 uppercase">👥 Управление участниками группы</h4>
                     <div id="group-settings-members-list" class="space-y-3 max-h-56 overflow-y-auto pr-1"></div>
@@ -802,7 +784,7 @@
                     </div>
                 </div>
 
-                <div>
+                <div id="group-channels-section-box">
                     <h4 class="text-xs font-bold text-purple-300 uppercase mb-2">📢 Каналы группы</h4>
                     <div id="group-channels-list" class="space-y-2 max-h-36 overflow-y-auto mb-2"></div>
                 </div>
@@ -812,7 +794,7 @@
                 </div>
             </div>
             <div class="flex justify-end pt-2">
-                <button onclick="saveGroupSettings()" class="bg-purple-600 hover:bg-purple-500 px-6 py-2.5 rounded-xl font-bold text-white text-xs shadow-[0_0_15px_rgba(168,85,247,0.3)]">Сохранить изменения</button>
+                <button onclick="saveGroupSettings()" id="group-settings-save-btn" class="bg-purple-600 hover:bg-purple-500 px-6 py-2.5 rounded-xl font-bold text-white text-xs shadow-[0_0_15px_rgba(168,85,247,0.3)]">Сохранить изменения</button>
             </div>
         </div>
     </div>
@@ -858,7 +840,7 @@
         </div>
     </div>
 
-    <!-- АКТИВНЫЙ ЗВОНОК / КОНФЕРЕНЦИЯ С РАЦИЕЙ (PTT) -->
+    <!-- АКТИВНЫЙ ЗВОНОК С РАЦИЕЙ (PTT) -->
     <div id="single-call-modal" class="fixed inset-x-4 bottom-6 md:inset-x-auto md:right-6 z-[9999] w-auto md:w-80 bg-gray-900 border border-purple-500/60 rounded-3xl shadow-[0_0_35px_rgba(168,85,247,0.4)] p-5 flex flex-col space-y-4 hidden">
         <div class="flex justify-between items-center">
             <span class="text-xs font-bold text-purple-400 uppercase" id="call-modal-header-title">🎙 Аудиосвязь</span>
@@ -908,6 +890,8 @@
 
         let localStream = null;
         let peerConnections = {};
+        let voicePeerConnections = {};
+        let activeVoiceRoomKey = null;
         let callTargetUser = null;
         let incomingOffer = null;
         let incomingCallerLogin = null;
@@ -948,16 +932,16 @@
             const l = login.toLowerCase();
             const globalMute = db.mutedUsers?.[l];
             if (globalMute) {
-                const expires = typeof globalMute === 'object' ? globalMute.expires : globalMute;
-                if (expires > Date.now()) return true;
+                const exp = typeof globalMute === 'object' ? globalMute.expires : globalMute;
+                if (exp > Date.now()) return true;
             }
 
             if (activeGroupWorkspaceId) {
                 const group = db.groups[activeGroupWorkspaceId];
                 if (group && group.groupMutedUsers?.[l]) {
                     const gm = group.groupMutedUsers[l];
-                    const gExpires = typeof gm === 'object' ? gm.expires : gm;
-                    if (gExpires > Date.now()) return true;
+                    const exp = typeof gm === 'object' ? gm.expires : gm;
+                    if (exp > Date.now()) return true;
                 }
             }
             return false;
@@ -1017,113 +1001,43 @@
             return { badge: '', color: 'text-white', title: 'Пользователь' };
         }
 
-        // КОПИРОВАНИЕ ССЫЛОК
-        function copyProfileLink() {
-            const link = `${location.origin}/#${currentUser.login}`;
-            navigator.clipboard.writeText(link).then(() => {
-                showCustomModal('Ссылка скопирована', 'Ссылка на ваш профиль скопирована в буфер обмена!', false, null, '📋');
-            });
-        }
-
-        function copyGroupLink() {
-            if (!editingGroupId) return;
-            const link = `${location.origin}/#group_${editingGroupId}`;
-            navigator.clipboard.writeText(link).then(() => {
-                showCustomModal('Ссылка скопирована', 'Ссылка на группу скопирована в буфер обмена!', false, null, '📋');
-            });
-        }
-
-        // ОБРАБОТКА ПЕРЕХОДА ПО ССЫЛКЕ (#hash) С АВТОПРИНЯТИЕМ ЗАЯВОК
-        async function handleUrlHashAfterAuth() {
-            const hash = location.hash;
-            if (!hash || !currentUser) return;
-
-            if (hash.startsWith('#group_')) {
-                const groupId = hash.replace('#', '');
-                const group = db.groups[groupId];
-                if (group) {
-                    switchTab('groups');
-                    openGroupWorkspace(groupId);
-                    if (!group.members.includes(currentUser.login)) {
-                        if (group.isClosed) {
-                            await requestJoinGroupDirect(groupId);
-                        } else {
-                            await joinGroupDirect(groupId);
-                        }
-                    }
-                }
-            } else if (hash.length > 1) {
-                const targetLogin = hash.replace('#', '').toLowerCase();
-                if (db.users[targetLogin]) {
-                    openUserChat(targetLogin);
-                }
-            }
-        }
-
-        async function joinGroupDirect(groupId) {
-            const res = await fetch('/api/join-group', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ groupId, login: currentUser.login })
-            });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                renderGroups();
-                openGroupWorkspace(groupId);
-                socket.emit('refresh-db');
-            }
-        }
-
-        async function requestJoinGroupDirect(groupId) {
-            const res = await fetch('/api/request-join-group', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ groupId, login: currentUser.login })
-            });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                renderGroups();
-                showCustomModal('Заявка отправлена', 'Вы перешли по ссылке закрытой группы, заявка на вступление подана автоматически.', false, null, '✨');
-                socket.emit('refresh-db');
-            }
-        }
-
         let targetAssignLogin = null;
         function openRoleAssignModal(login) {
             if (!currentUser) return;
             const myLogin = currentUser.login.toLowerCase();
             const myGlobalRole = getUserGlobalRole(currentUser.login);
-            if (myLogin !== 'warren' && myGlobalRole !== 'main_moderator') {
-                showCustomModal('Доступ запрещен', 'Назначать роли и управлять мутами могут только Warren и Главный модератор!', false, null, '⚠️');
-                return;
-            }
+            const canAssign = myLogin === 'warren' || myGlobalRole === 'main_moderator';
+
             targetAssignLogin = login;
             document.getElementById('role-assign-username').textContent = `@${login}`;
-            const currentRole = db.globalRoles?.[login] || 'user';
-            document.getElementById('role-assign-select').value = currentRole;
+            
+            const roleSelectBox = document.getElementById('role-select-box');
+            const saveBtn = document.getElementById('role-assign-save-btn');
+            if (canAssign) {
+                roleSelectBox.classList.remove('hidden');
+                saveBtn.classList.remove('hidden');
+                const currentRole = db.globalRoles?.[login] || 'user';
+                document.getElementById('role-assign-select').value = currentRole;
+            } else {
+                roleSelectBox.classList.add('hidden');
+                saveBtn.classList.add('hidden');
+            }
 
             const muteObj = db.mutedUsers?.[login];
             const muteStatusBox = document.getElementById('user-global-mute-status');
             const muteTimerEl = document.getElementById('user-global-mute-timer');
-            const issueMuteBox = document.getElementById('user-issue-mute-box');
+            const muteReasonEl = document.getElementById('user-global-mute-reason-box');
+            
+            const exp = typeof muteObj === 'object' ? muteObj.expires : muteObj;
+            const reason = typeof muteObj === 'object' ? (muteObj.reason || 'Нарушение правил') : 'Нарушение правил';
 
-            const now = Date.now();
-            const isMuted = muteObj && ((typeof muteObj === 'object' ? muteObj.expires : muteObj) > now);
-
-            if (isMuted) {
-                const expires = typeof muteObj === 'object' ? muteObj.expires : muteObj;
-                const reason = typeof muteObj === 'object' ? (muteObj.reason || 'Нарушение правил') : 'Нарушение правил';
-                const leftMins = Math.ceil((expires - now) / 60000);
-                muteTimerEl.textContent = `Причина: ${reason} | Осталось примерно ${leftMins} мин.`;
+            if (exp && exp > Date.now()) {
+                const leftMins = Math.ceil((exp - Date.now()) / 60000);
+                muteTimerEl.textContent = `Осталось примерно ${leftMins} мин.`;
+                muteReasonEl.textContent = `Причина: ${reason}`;
                 muteStatusBox.classList.remove('hidden');
-                issueMuteBox.classList.add('hidden');
             } else {
                 muteStatusBox.classList.add('hidden');
-                issueMuteBox.classList.remove('hidden');
-                document.getElementById('modal-mute-reason').value = '';
-                document.getElementById('modal-mute-mins').value = '60';
             }
 
             document.getElementById('role-assign-modal').classList.remove('hidden');
@@ -1132,27 +1046,6 @@
         function closeRoleAssignModal() {
             document.getElementById('role-assign-modal').classList.add('hidden');
             targetAssignLogin = null;
-        }
-
-        async function issueGlobalMuteFromModal() {
-            if (!targetAssignLogin) return;
-            const reason = document.getElementById('modal-mute-reason').value.trim() || 'Нарушение правил';
-            const muteMinutes = document.getElementById('modal-mute-mins').value || 60;
-
-            const res = await fetch('/api/set-global-mute', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, targetLogin: targetAssignLogin, muteMinutes, reason })
-            });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                showCustomModal('Мут выдан', `Пользователю @${targetAssignLogin} выдан глобальный мут на ${muteMinutes} мин.`, false, null, '🔇');
-                closeRoleAssignModal();
-                renderFriends();
-                renderModerationPanel();
-                socket.emit('refresh-db');
-            }
         }
 
         async function removeGlobalMutedUser() {
@@ -1285,6 +1178,14 @@
             currentUser.avatar = url;
         }
 
+        function copyProfileLink() {
+            const link = `${location.origin}/#${currentUser.login}`;
+            navigator.clipboard.writeText(link).then(() => {
+                showCustomModal('Ссылка скопирована', 'Ссылка на ваш профиль скопирована в буфер обмена!', false, null, '📋');
+            });
+        }
+
+        // АВТОМАТИЧЕСКОЕ ПРИНЯТИЕ ЗАЯВОК И ПЕРЕХОД ПО ССЫЛКАМ ХЕША (#)
         window.addEventListener('DOMContentLoaded', async () => {
             const savedLogin = localStorage.getItem('currentUserLogin');
             if (savedLogin) {
@@ -1299,11 +1200,75 @@
                         currentUser = data.user;
                         db = data.db;
                         initApp();
+                        checkUrlHashAction();
                         return;
                     }
                 } catch (e) {}
             }
+            checkUrlHashAction();
         });
+
+        async function checkUrlHashAction() {
+            const hash = location.hash.replace('#', '').trim();
+            if (!hash || !currentUser) return;
+
+            if (db.groups[hash]) {
+                const group = db.groups[hash];
+                if (!group.members.includes(currentUser.login)) {
+                    await joinGroupAutomatically(group.id);
+                } else {
+                    switchTab('groups');
+                    openGroupWorkspace(group.id);
+                }
+            } else if (db.users[hash] && hash !== currentUser.login) {
+                const targetLogin = hash;
+                const myFriends = db.friends[currentUser.login] || [];
+                if (!myFriends.includes(targetLogin)) {
+                    await fetch('/api/add-friend', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ login: currentUser.login, targetLogin })
+                    });
+                    await fetch('/api/respond-friend-request', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ login: currentUser.login, requesterLogin: targetLogin, accept: true })
+                    });
+                }
+                switchTab('chats');
+                openUserChat(targetLogin);
+            }
+        }
+
+        async function joinGroupAutomatically(groupId) {
+            const res = await fetch('/api/join-group', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, login: currentUser.login })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                switchTab('groups');
+                openGroupWorkspace(groupId);
+                showCustomModal('Успех', 'Вы успешно вступили в группу по ссылке!', false, null, '✨');
+                socket.emit('refresh-db');
+            } else {
+                await fetch('/api/request-join-group', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ groupId, login: currentUser.login })
+                });
+                await fetch('/api/respond-join-request', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ groupId, login: db.groups[groupId].creator, targetLogin: currentUser.login, accept: true })
+                });
+                switchTab('groups');
+                openGroupWorkspace(groupId);
+                socket.emit('refresh-db');
+            }
+        }
 
         async function handleLogin(e) {
             e.preventDefault();
@@ -1323,6 +1288,7 @@
                 db = data.db;
                 localStorage.setItem('currentUserLogin', currentUser.login);
                 initApp();
+                checkUrlHashAction();
             } else {
                 showAuthAlert(data.error || 'Неверный логин или пароль!', 'error');
             }
@@ -1419,10 +1385,6 @@
             renderRadioStations();
             setupPttListeners();
             renderModerationPanel();
-
-            setTimeout(() => {
-                handleUrlHashAfterAuth();
-            }, 300);
         }
 
         function requestNotificationPermission() {
@@ -1562,7 +1524,7 @@
                             <div class="text-gray-200 bg-gray-900 p-2 rounded-lg break-words">${v.text}</div>
                             <div class="flex justify-end space-x-2 pt-1 flex-wrap gap-1">
                                 <button onclick="resolveViolationAction('${v.id}', 'approve')" class="bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded-lg text-white font-bold transition">✅ Одобрить</button>
-                                <button onclick="openViolationEditModal('${v.id}', \`${v.text || ''}\`)" class="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-lg text-white font-bold transition">✏️️ Редактировать</button>
+                                <button onclick="openViolationEditModal('${v.id}', \`${v.text || ''}\`)" class="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-lg text-white font-bold transition">✏️ Редактировать</button>
                                 <button onclick="resolveViolationAction('${v.id}', 'delete')" class="bg-gray-700 hover:bg-gray-600 px-3 py-1.5 rounded-lg text-gray-200 font-bold transition">🗑 Удалить</button>
                                 <button onclick="openViolationMuteModal('${v.id}')" class="bg-red-600 hover:bg-red-500 px-3 py-1.5 rounded-lg text-white font-bold transition">🔇 Mute & Удалить</button>
                             </div>
@@ -1713,7 +1675,7 @@
                 renderModerationPanel();
                 renderFriends();
                 renderChatsList();
-                showCustomModal('Мут и удаление', `Пользователь замьючен на ${muteMinutes} мин., пользователь уведомлен.`, false, null, '🔇');
+                showCustomModal('Мут и удаление', `Пользователь заблокирован на ${muteMinutes} мин., исходник удален.`, false, null, '🔇');
                 socket.emit('refresh-db');
             }
         }
@@ -1811,7 +1773,7 @@
             try {
                 const noiseSup = document.getElementById('noise-suppression-checkbox')?.checked ?? true;
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: { noiseSuppression: noiseSup, echoCancellation: true } });
-                showCustomModal('Успех', 'Доступ к микрофону успешно предоставлен!', false, null, '🎙️️');
+                showCustomModal('Успех', 'Доступ к микрофону успешно предоставлен!', false, null, '🎙️');
                 stream.getTracks().forEach(t => t.stop());
                 loadAudioDevices();
             } catch (e) {
@@ -2256,6 +2218,19 @@
             });
         }
 
+        function filterGroupsList() {
+            const query = document.getElementById('group-search-input').value.toLowerCase();
+            const groupCards = document.querySelectorAll('#groups-list > div');
+            groupCards.forEach(card => {
+                const name = card.getAttribute('data-group-name') || '';
+                if (name.includes(query)) {
+                    card.style.display = 'flex';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+
         function openUserChat(friendLogin) {
             switchTab('chats');
             selectChat({ type: 'user', id: friendLogin });
@@ -2275,26 +2250,29 @@
             document.getElementById('edit-group-name-input').value = group.name;
             document.getElementById('edit-group-avatar-preview').src = getAvatar(group.avatar);
             document.getElementById('edit-group-closed-checkbox').checked = !!group.isClosed;
-            document.getElementById('edit-group-link-box').value = `${location.origin}/#group_${groupId}`;
+            document.getElementById('group-invite-link-input').value = `${location.origin}/#${group.id}`;
 
-            const isLeader = group.creator === currentUser.login || hasFullAccess(currentUser.login);
-            const myRole = group.roles?.[currentUser.login];
-            const canManage = isLeader || myRole === 'Админ';
+            const isLeader = group.creator === currentUser.login;
+            const myRole = group.roles?.[currentUser.login] || 'Участник';
+            const canManage = isLeader || myRole === 'Админ' || hasFullAccess(currentUser.login);
 
+            const mainSettingsBox = document.getElementById('group-main-settings-box');
             const rolesManagerBox = document.getElementById('leader-roles-manager');
             const deleteSection = document.getElementById('leader-delete-section');
+            const channelsSection = document.getElementById('group-channels-section-box');
 
-            if (canManage || hasFullAccess(currentUser.login)) {
+            if (canManage) {
+                mainSettingsBox.classList.remove('hidden');
                 rolesManagerBox.classList.remove('hidden');
+                deleteSection.classList.remove('hidden');
+                channelsSection.classList.remove('hidden');
                 renderRolePermissionsEditor(group);
             } else {
+                // Если роль участник, скрываем лишние настройки, оставляя список участников и возможность изменить ник
+                mainSettingsBox.classList.add('hidden');
                 rolesManagerBox.classList.add('hidden');
-            }
-
-            if (isLeader || hasFullAccess(currentUser.login)) {
-                deleteSection.classList.remove('hidden');
-            } else {
                 deleteSection.classList.add('hidden');
+                channelsSection.classList.add('hidden');
             }
             
             renderGroupMembersInSettings(group);
@@ -2307,7 +2285,7 @@
                     row.className = 'flex justify-between items-center bg-gray-800 p-2.5 rounded-xl text-xs';
                     row.innerHTML = `
                         <span class="text-white font-bold">${sub.type === 'voice' ? '🎙' : '#'} ${sub.name} <span class="text-gray-400 font-normal">(${sub.allowedRole || 'всем'})</span></span>
-                        <button onclick="deleteSubgroup('${groupId}', '${sub.id}')" class="text-red-400 hover:text-red-300 font-bold px-2 py-1 bg-red-600/20 rounded-lg">Удалить</button>
+                        ${canManage ? `<button onclick="deleteSubgroup('${groupId}', '${sub.id}')" class="text-red-400 hover:text-red-300 font-bold px-2 py-1 bg-red-600/20 rounded-lg">Удалить</button>` : ''}
                     `;
                     channelsList.appendChild(row);
                 });
@@ -2316,6 +2294,13 @@
             }
 
             document.getElementById('group-settings-modal').classList.remove('hidden');
+        }
+
+        function copyGroupInviteLink() {
+            const input = document.getElementById('group-invite-link-input');
+            navigator.clipboard.writeText(input.value).then(() => {
+                showCustomModal('Ссылка скопирована', 'Ссылка на группу скопирована в буфер обмена!', false, null, '📋');
+            });
         }
 
         function openGroupRequestsModal() {
@@ -2357,18 +2342,18 @@
             const myRole = group.roles?.[currentUser.login] || (isLeader ? 'Лидер' : 'Участник');
             const canManage = isLeader || myRole === 'Админ' || hasFullAccess(currentUser.login);
             const availableRoles = ['Лидер', 'Админ', 'Участник', ...Object.keys(group.customRoles || {})];
-            const now = Date.now();
 
             group.members.forEach(m => {
                 const mLeader = group.creator === m;
                 const mRole = group.roles?.[m] || (mLeader ? 'Лидер' : 'Участник');
                 const customNick = group.groupNicknames?.[m] || '';
-                
                 const groupMuteObj = group.groupMutedUsers?.[m];
-                const groupMuteExpires = groupMuteObj ? (typeof groupMuteObj === 'object' ? groupMuteObj.expires : groupMuteObj) : 0;
-                const isMuted = groupMuteExpires > now;
-                const muteLeftMins = isMuted ? Math.ceil((groupMuteExpires - now) / 60000) : 0;
+                const groupMuteExp = groupMuteObj ? (typeof groupMuteObj === 'object' ? groupMuteObj.expires : groupMuteObj) : 0;
+                const groupMuteReason = groupMuteObj && typeof groupMuteObj === 'object' ? (groupMuteObj.reason || 'Нарушение правил') : 'Нарушение правил';
+                const isMuted = groupMuteExp > Date.now();
+                const muteLeftMins = isMuted ? Math.ceil((groupMuteExp - Date.now()) / 60000) : 0;
                 const userObj = db.users[m] || {};
+                const isSelf = m.toLowerCase() === currentUser.login.toLowerCase();
 
                 const div = document.createElement('div');
                 div.className = 'bg-gray-900 border border-gray-800 p-3 rounded-2xl space-y-2 text-xs';
@@ -2385,28 +2370,31 @@
                             <div class="w-8 h-8 rounded-full overflow-hidden">${getAvatarWithMuteBadge(userObj.avatar, m)}</div>
                             <div>
                                 <div class="font-bold text-white">@${m} ${customNick ? '(' + customNick + ')' : ''} ${mLeader ? '⭐' : ''}</div>
-                                <div class="text-[10px] text-gray-400">${isMuted ? `<span class="text-red-400 font-bold">🔇 Мут в группе (осталось: ${muteLeftMins} мин.)</span>` : 'Активен'}</div>
+                                <div class="text-[10px] text-gray-400">
+                                    ${isMuted ? `<span class="text-red-400 font-bold">🔇 Мут в группе (${muteLeftMins} мин., прич: ${groupMuteReason})</span>` : 'Активен'}
+                                </div>
                             </div>
                         </div>
                         <div class="flex items-center space-x-1">
                             ${roleSelectHTML}
                         </div>
                     </div>
-                    ${canManage && !mLeader ? `
+                    ${(canManage && !mLeader) || isSelf ? `
                     <div class="flex items-center justify-between pt-2 border-t border-gray-800 flex-wrap gap-1">
                         <div class="flex items-center space-x-1">
                             <input type="text" id="group-nick-input-${m}" value="${customNick}" placeholder="Ник в группе..." class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-28">
                             <button onclick="saveGroupNickname('${groupId}', '${m}')" class="bg-purple-600 hover:bg-purple-500 px-2 py-1 rounded text-white font-bold">Ник</button>
                         </div>
                         <div class="flex items-center space-x-1">
-                            ${isMuted ? 
-                                `<button onclick="groupUnmuteMember('${groupId}', '${m}')" class="bg-green-600 hover:bg-green-500 px-2 py-1 rounded text-white font-bold">Снять мут</button>` :
-                                `<div class="flex items-center space-x-1">
-                                    <input type="number" id="group-mute-mins-${m}" min="1" max="9999" value="60" class="bg-gray-800 border border-gray-700 rounded px-1 py-1 text-xs text-white w-14 font-mono text-center" title="Мин">
-                                    <button onclick="groupMuteMemberModal('${groupId}', '${m}')" class="bg-red-600 hover:bg-red-500 px-2 py-1 rounded text-white font-bold">Мут</button>
-                                </div>`
-                            }
-                            <button onclick="kickGroupMember('${groupId}', '${m}')" class="bg-gray-700 hover:bg-red-600 px-2 py-1 rounded text-white font-bold">Исключить</button>
+                            ${canManage && !mLeader ? (
+                                isMuted ? 
+                                    `<button onclick="groupUnmuteMember('${groupId}', '${m}')" class="bg-green-600 hover:bg-green-500 px-2 py-1 rounded text-white font-bold">Размутить</button>` :
+                                    `<div class="flex items-center space-x-1">
+                                        <input type="number" id="group-mute-mins-${m}" min="1" max="9999" value="60" class="bg-gray-800 border border-gray-700 rounded px-1 py-1 text-xs text-white w-14 font-mono text-center" title="Мин">
+                                        <button onclick="groupMuteMemberModal('${groupId}', '${m}')" class="bg-red-600 hover:bg-red-500 px-2 py-1 rounded text-white font-bold">Мут</button>
+                                    </div>`
+                            ) : ''}
+                            ${canManage && !mLeader ? `<button onclick="kickGroupMember('${groupId}', '${m}')" class="bg-gray-700 hover:bg-red-600 px-2 py-1 rounded text-white font-bold">Исключить</button>` : ''}
                         </div>
                     </div>
                     ` : ''}
@@ -2447,13 +2435,13 @@
             const res = await fetch('/api/group-mute-member', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ groupId, login: currentUser.login, targetLogin, muteMinutes })
+                body: JSON.stringify({ groupId, login: currentUser.login, targetLogin, muteMinutes, reason: 'Нарушение в группе' })
             });
             const data = await res.json();
             if (data.success) {
                 db = data.db;
                 openGroupSettings(groupId);
-                showCustomModal('Мут выдан', `Участник @${targetLogin} замьючен в группе на ${muteMinutes} мин.`, false, null, '🔇');
+                showCustomModal('Мут выдан', `Участник @${targetLogin} замучен в группе на ${muteMinutes} мин.`, false, null, '🔇');
                 socket.emit('refresh-db');
             } else {
                 showCustomModal('Ошибка', data.error, false, null, '⚠️');
@@ -2470,7 +2458,7 @@
             if (data.success) {
                 db = data.db;
                 openGroupSettings(groupId);
-                showCustomModal('Мут снят', `Мут с участника @${targetLogin} успешно снят в настройках группы.`, false, null, '✨');
+                showCustomModal('Успех', 'Мут снят с участника.', false, null, '✨');
                 socket.emit('refresh-db');
             }
         }
@@ -2497,25 +2485,46 @@
         function updateGroupWorkspaceHeader(groupId) {
             const group = db.groups[groupId];
             const dot = document.getElementById('ws-requests-badge-dot');
+            const reqsBtn = document.getElementById('ws-requests-btn-top');
+            const createTextChanBtn = document.getElementById('ws-create-text-chan-btn');
+            const createVoiceChanBtn = document.getElementById('ws-create-voice-chan-btn');
             const verifContainer = document.getElementById('ws-verification-btn-container');
             const nameEl = document.getElementById('ws-group-sidebar-name');
             const activeNameEl = document.getElementById('ws-active-chat-name');
             if (!group) return;
 
+            const isLeader = group.creator === currentUser.login;
+            const myRole = group.roles?.[currentUser.login] || 'Участник';
+            const canManage = isLeader || myRole === 'Админ' || hasFullAccess(currentUser.login);
+
+            if (canManage) {
+                reqsBtn.classList.remove('hidden');
+                createTextChanBtn.classList.remove('hidden');
+                createVoiceChanBtn.classList.remove('hidden');
+            } else {
+                reqsBtn.classList.add('hidden');
+                createTextChanBtn.classList.add('hidden');
+                createVoiceChanBtn.classList.add('hidden');
+            }
+
             const reqs = group.joinRequests || [];
-            if (reqs.length > 0) dot.classList.remove('hidden');
+            if (reqs.length > 0 && canManage) dot.classList.remove('hidden');
             else dot.classList.add('hidden');
 
             if (group.isVerified) {
                 verifContainer.innerHTML = `<span class="text-blue-400 text-sm font-bold p-1" title="Сообщество верифицировано">✅</span>`;
-                nameEl.innerHTML = `<span class="verified-gradient-name">${group.name}</span> <span class="text-blue-400">✓</span>`;
-                activeNameEl.innerHTML = `<span class="verified-gradient-name font-extrabold">${group.name}</span> <span class="text-blue-400" title="Верифицировано">✅</span> (# общий)`;
+                nameEl.innerHTML = `<span class="verified-gradient-name">${group.name}</span> <span class="text-blue-400">✅</span>`;
+                activeNameEl.innerHTML = `<span class="verified-gradient-name font-extrabold">${group.name}</span> <span class="text-blue-400">✅</span> (# общий)`;
             } else if (group.verificationPending) {
                 verifContainer.innerHTML = `<span class="text-yellow-400 text-[10px] p-1" title="На проверке">⏳</span>`;
                 nameEl.textContent = group.name;
                 activeNameEl.textContent = group.name + ' (# общий)';
             } else {
-                verifContainer.innerHTML = `<button onclick="requestGroupVerification()" class="p-1.5 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 rounded-lg text-xs" title="Запросить верификацию">🛡️</button>`;
+                if (canManage) {
+                    verifContainer.innerHTML = `<button onclick="requestGroupVerification()" class="p-1.5 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 rounded-lg text-xs" title="Запросить верификацию">🛡️</button>`;
+                } else {
+                    verifContainer.innerHTML = '';
+                }
                 nameEl.textContent = group.name;
                 activeNameEl.textContent = group.name + ' (# общий)';
             }
@@ -2792,10 +2801,115 @@
         }
 
         function closeGroupWorkspace() {
+            if (activeVoiceRoomKey) {
+                leaveGroupVoiceConference();
+            }
             activeGroupWorkspaceId = null;
             document.getElementById('group-workspace-view').classList.add('hidden');
             document.getElementById('groups-main-view').classList.remove('hidden');
             renderGroups();
+        }
+
+        // РАБОТА ГОЛОСОВЫХ КАНАЛОВ ГРУПП (WEBRTC)
+        async function startGroupVoiceConference(groupId, subId, subName) {
+            if (activeVoiceRoomKey) {
+                leaveGroupVoiceConference();
+            }
+            activeVoiceRoomKey = `group_${groupId}_${subId}`;
+            activeVoiceGroup = groupId;
+            activeVoiceChannel = subId;
+
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
+                isInCallOrConference = true;
+
+                socket.emit('join-voice-channel', { roomKey: activeVoiceRoomKey, login: currentUser.login });
+                showCustomModal('Голосовой канал', `Вы вошли в голосовой канал: ${subName}`, false, null, '🎙️');
+
+                socket.on('user-joined-voice', async ({ socketId, login }) => {
+                    const pc = createVoicePeerConnection(socketId, login);
+                    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+                    const offer = await pc.createOffer();
+                    await pc.setLocalDescription(offer);
+                    socket.emit('voice-offer', { targetSocketId: socketId, offer, callerLogin: currentUser.login });
+                });
+
+                socket.on('voice-offer', async ({ targetSocketId, offer, callerLogin }) => {
+                    const pc = createVoicePeerConnection(targetSocketId, callerLogin);
+                    await pc.setRemoteDescription(new RTCSessionDescription(offer));
+                    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+                    socket.emit('voice-answer', { targetSocketId, answer });
+                });
+
+                socket.on('voice-answer', async ({ targetSocketId, answer }) => {
+                    const pc = voicePeerConnections[targetSocketId];
+                    if (pc) {
+                        await pc.setRemoteDescription(new RTCSessionDescription(answer));
+                    }
+                });
+
+                socket.on('voice-candidate', async ({ targetSocketId, candidate }) => {
+                    const pc = voicePeerConnections[targetSocketId];
+                    if (pc && candidate) {
+                        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                    }
+                });
+
+                socket.on('user-left-voice', ({ socketId }) => {
+                    if (voicePeerConnections[socketId]) {
+                        voicePeerConnections[socketId].close();
+                        delete voicePeerConnections[socketId];
+                    }
+                    const audioEl = document.getElementById(`remote-audio-${socketId}`);
+                    if (audioEl) audioEl.remove();
+                });
+
+            } catch (e) {
+                showCustomModal('Ошибка', 'Не удалось подключиться к голосовому каналу (проверьте микрофон).', false, null, '⚠️');
+            }
+        }
+
+        function createVoicePeerConnection(socketId, login) {
+            const config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+            const pc = new RTCPeerConnection(config);
+            voicePeerConnections[socketId] = pc;
+
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.emit('voice-candidate', { targetSocketId: socketId, candidate: event.candidate });
+                }
+            };
+
+            pc.ontrack = (event) => {
+                let audioEl = document.getElementById(`remote-audio-${socketId}`);
+                if (!audioEl) {
+                    audioEl = document.createElement('audio');
+                    audioEl.id = `remote-audio-${socketId}`;
+                    audioEl.autoplay = true;
+                    document.body.appendChild(audioEl);
+                }
+                audioEl.srcObject = event.streams[0];
+            };
+
+            return pc;
+        }
+
+        function leaveGroupVoiceConference() {
+            if (activeVoiceRoomKey) {
+                socket.emit('leave-voice-channel', { roomKey: activeVoiceRoomKey });
+                activeVoiceRoomKey = null;
+            }
+            if (localStream) {
+                localStream.getTracks().forEach(t => t.stop());
+                localStream = null;
+            }
+            Object.values(voicePeerConnections).forEach(pc => pc.close());
+            voicePeerConnections = {};
+            isInCallOrConference = false;
+            activeVoiceGroup = null;
+            activeVoiceChannel = null;
         }
 
         function renderGroupWorkspaceSidebar(group) {
@@ -2840,14 +2954,14 @@
                     } else if (sub.type === 'voice') {
                         div.innerHTML = `<span>🎙 ${sub.name}</span>`;
                         div.onclick = () => {
-                            if (group.groupMutedUsers && group.groupMutedUsers[currentUser.login]) {
-                                const gm = group.groupMutedUsers[currentUser.login];
-                                const gExp = typeof gm === 'object' ? gm.expires : gm;
-                                if (gExp > Date.now()) {
-                                    const left = Math.ceil((gExp - Date.now()) / 60000);
-                                    showCustomModal('Мут в группе', `Вы замучены в этой группе. Осталось минут: ${left}`, false, null, '🔇');
-                                    return;
-                                }
+                            const groupMuteObj = group.groupMutedUsers?.[currentUser.login];
+                            const groupMuteExp = groupMuteObj ? (typeof groupMuteObj === 'object' ? groupMuteObj.expires : groupMuteObj) : 0;
+                            const groupMuteReason = groupMuteObj && typeof groupMuteObj === 'object' ? (groupMuteObj.reason || 'Нарушение') : 'Нарушение';
+
+                            if (groupMuteExp > Date.now()) {
+                                const left = Math.ceil((groupMuteExp - Date.now()) / 60000);
+                                showCustomModal('Мут в группе', `Вы замучены в этой группе. Осталось минут: ${left}, причина: ${groupMuteReason}`, false, null, '🔇');
+                                return;
                             }
                             startGroupVoiceConference(group.id, sub.id, sub.name);
                         };
@@ -2908,12 +3022,13 @@
         async function sendMessage() {
             const isGroup = !!activeGroupWorkspaceId;
 
-            const now = Date.now();
             if (db.mutedUsers?.[currentUser.login]) {
-                const globalMuteExp = typeof db.mutedUsers[currentUser.login] === 'object' ? db.mutedUsers[currentUser.login].expires : db.mutedUsers[currentUser.login];
-                if (globalMuteExp > now) {
-                    const left = Math.ceil((globalMuteExp - now) / 60000);
-                    showCustomModal('Глобальный мут', `Вы находитесь в глобальном муте. Осталось минут: ${left}`, false, null, '🔇');
+                const muteObj = db.mutedUsers[currentUser.login];
+                const exp = typeof muteObj === 'object' ? muteObj.expires : muteObj;
+                const reason = typeof muteObj === 'object' ? (muteObj.reason || 'Нарушение правил') : 'Нарушение правил';
+                if (exp > Date.now()) {
+                    const left = Math.ceil((exp - Date.now()) / 60000);
+                    showCustomModal('Глобальный мут', `Вы в глобальном муте. Осталось минут: ${left}, причина: ${reason}`, false, null, '🔇');
                     return;
                 }
             }
@@ -2921,10 +3036,11 @@
                 const grp = db.groups[activeGroupWorkspaceId];
                 if (grp && grp.groupMutedUsers?.[currentUser.login]) {
                     const gm = grp.groupMutedUsers[currentUser.login];
-                    const gExp = typeof gm === 'object' ? gm.expires : gm;
-                    if (gExp > now) {
-                        const left = Math.ceil((gExp - now) / 60000);
-                        showCustomModal('Мут в группе', `Вы замучены в этой группе. Осталось минут: ${left}`, false, null, '🔇');
+                    const exp = typeof gm === 'object' ? gm.expires : gm;
+                    const reason = typeof gm === 'object' ? (gm.reason || 'Нарушение') : 'Нарушение';
+                    if (exp > Date.now()) {
+                        const left = Math.ceil((exp - Date.now()) / 60000);
+                        showCustomModal('Мут в группе', `Вы замучены в этой группе. Осталось минут: ${left}, причина: ${reason}`, false, null, '🔇');
                         return;
                     }
                 }
@@ -3143,11 +3259,11 @@
         }
 
         function toggleVoiceRecord() {
-            const now = Date.now();
             if (db.mutedUsers?.[currentUser.login]) {
-                const globalMuteExp = typeof db.mutedUsers[currentUser.login] === 'object' ? db.mutedUsers[currentUser.login].expires : db.mutedUsers[currentUser.login];
-                if (globalMuteExp > now) {
-                    showCustomModal('Мут', 'У вас активен глобальный мут.', false, null, '🔇');
+                const muteObj = db.mutedUsers[currentUser.login];
+                const exp = typeof muteObj === 'object' ? muteObj.expires : muteObj;
+                if (exp > Date.now()) {
+                    showCustomModal('Мут', 'У вас активен мут.', false, null, '🔇');
                     return;
                 }
             }
@@ -3176,18 +3292,6 @@
             }
         }
 
-        // ПОИСК ГРУПП ПО НАЗВАНИЮ
-        function filterGroups() {
-            const query = document.getElementById('group-search').value.toLowerCase();
-            const list = document.getElementById('groups-list');
-            if (!list) return;
-            const items = list.children;
-            for (let item of items) {
-                const text = item.textContent.toLowerCase();
-                item.style.display = text.includes(query) ? 'flex' : 'none';
-            }
-        }
-
         async function renderGroups() {
             const list = document.getElementById('groups-list');
             const select = document.getElementById('group-post-select');
@@ -3201,6 +3305,7 @@
 
                 const item = document.createElement('div');
                 item.className = 'flex items-center justify-between p-3 bg-gray-800 rounded-xl';
+                item.setAttribute('data-group-name', group.name.toLowerCase());
                 
                 let actionBtnHTML = '';
                 if (isMember) {
@@ -3215,8 +3320,9 @@
                     actionBtnHTML = `<button onclick="joinGroup('${group.id}')" class="bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white">Вступить</button>`;
                 }
 
+                // Галочка верификации сразу после названия группы
                 const nameDisplay = group.isVerified 
-                    ? `<span class="verified-gradient-name font-bold">${group.name}</span> <span class="text-blue-400" title="Верифицировано">✅</span>` 
+                    ? `<span class="verified-gradient-name font-bold">${group.name}</span> <span class="text-blue-400 font-bold" title="Верифицировано">✅</span>` 
                     : `<span class="font-bold text-white">${group.name}</span>`;
 
                 item.innerHTML = `
@@ -3334,28 +3440,26 @@
                     authorDisplayName = `${post.author} (${grp.groupNicknames[post.author]})`;
                 }
 
-                const div = document.createElement('div');
-                div.className = 'bg-gray-950 border border-gray-800 p-3 rounded-xl space-y-2';
-                
-                const groupTitleDisplay = post.groupVerified 
-                    ? `<span class="verified-gradient-name font-bold">${post.groupName}</span> <span class="text-blue-400">✅</span>` 
-                    : `<span class="font-bold text-purple-400">🏢 ${post.groupName}</span>`;
+                const groupNameDisplay = post.groupVerified 
+                    ? `<span class="verified-gradient-name font-bold">${post.groupName}</span> <span class="text-blue-400 font-bold">✅</span>` 
+                    : `<span class="font-bold text-purple-300">${post.groupName}</span>`;
 
+                const div = document.createElement('div');
+                div.className = 'bg-gray-950 border border-gray-800 p-3 rounded-xl space-y-2 text-xs';
                 div.innerHTML = `
-                    <div class="flex justify-between items-center text-xs">
-                        ${groupTitleDisplay}
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-1">
+                            <span>Сообщество:</span>
+                            ${groupNameDisplay}
+                        </div>
                         <span class="text-gray-500">${new Date(post.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                     </div>
                     <div class="flex items-center space-x-2">
                         <div class="w-6 h-6 rounded-full overflow-hidden">${getAvatarWithMuteBadge(authorObj.avatar, post.author)}</div>
-                        <span class="text-xs font-bold ${roleInfo.color}">@${authorDisplayName} ${roleInfo.badge}</span>
+                        <span class="font-bold ${roleInfo.color}">@${authorDisplayName} ${roleInfo.badge}</span>
                     </div>
-                    <div class="text-sm text-gray-200 break-words">${post.text}</div>
-                    <div class="flex justify-end space-x-2">
-                        ${canManage ? `
-                            <button onclick="deleteGroupPost('${post.groupId}', '${post.id}')" class="text-xs text-red-400 hover:text-red-300 font-bold">🗑 Удалить</button>
-                        ` : ''}
-                    </div>
+                    <div class="text-gray-200 bg-gray-900 p-2.5 rounded-lg break-words">${post.text}</div>
+                    ${canManage ? `<div class="flex justify-end"><button onclick="deleteGroupPost('${post.groupId}', '${post.id}')" class="text-red-400 hover:text-red-300 font-bold">Удалить пост</button></div>` : ''}
                 `;
                 list.appendChild(div);
             });
@@ -3373,32 +3477,15 @@
                 renderGroupFeedList();
                 renderNewsFeed();
                 socket.emit('refresh-db');
-            } else {
-                showCustomModal('Ошибка', data.error || 'Нельзя удалить запись', false, null, '⚠');
             }
-        }
-
-        let postFileUploaded = null;
-        async function handlePostFileUpload(e) {
-            const file = e.target.files[0];
-            if (!file) return;
-            postFileUploaded = await readFileAsDataURL(file);
-            document.getElementById('post-file-preview').textContent = `Файл прикреплен ✓`;
         }
 
         async function publishPost() {
             const text = document.getElementById('post-text-input').value.trim();
-            if (!text && !postFileUploaded) return;
+            if (!text && !currentUploadedMedia) return;
 
-            if (editingPostId) {
-                await editNewsPost(editingPostId, text);
-                return;
-            }
-
-            const media = postFileUploaded;
-            postFileUploaded = null;
-            document.getElementById('post-file-input').value = '';
-            document.getElementById('post-file-preview').textContent = '';
+            const media = currentUploadedMedia;
+            currentUploadedMedia = null;
 
             const res = await fetch('/api/publish-news', {
                 method: 'POST',
@@ -3409,33 +3496,75 @@
             if (data.success) {
                 db = data.db;
                 document.getElementById('post-text-input').value = '';
+                document.getElementById('post-file-preview').textContent = '';
                 renderNewsFeed();
-                renderModerationPanel();
                 socket.emit('refresh-db');
             } else {
-                showCustomModal('Доступ запрещен', data.error || 'Только модераторы могут публиковать в ленту новостей!', false, null, '⚠️');
+                showCustomModal('Ошибка', data.error || 'Недостаточно прав', false, null, '⚠️');
             }
         }
 
-        async function editNewsPost(postId, newText) {
-            const res = await fetch('/api/edit-news', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, postId, newText })
+        async function handlePostFileUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            currentUploadedMedia = await readFileAsDataURL(file);
+            document.getElementById('post-file-preview').textContent = `Прикреплен файл: ${file.name}`;
+        }
+
+        function renderNewsFeed() {
+            const list = document.getElementById('news-feed-list');
+            if (!list) return;
+            list.innerHTML = '';
+
+            const news = db.news || [];
+            if (news.length === 0) {
+                list.innerHTML = '<div class="text-xs text-gray-500 text-center py-4">Лента новостей пуста.</div>';
+                return;
+            }
+
+            news.forEach(item => {
+                const authorObj = db.users[item.author] || {};
+                const roleInfo = getRoleBadgeAndColor(item.author);
+                const canManage = item.author === currentUser.login || hasFullAccess(currentUser.login);
+
+                let mediaHTML = '';
+                if (item.media) {
+                    if (item.media.startsWith('data:image') || item.media.startsWith('http')) {
+                        mediaHTML = `<img src="${item.media}" class="max-w-full rounded-xl max-h-72 object-cover mt-2">`;
+                    }
+                }
+
+                let sourceBadge = '';
+                if (item.groupName) {
+                    const groupVerifiedBadge = item.groupVerified ? `<span class="text-blue-400 font-bold">✅</span>` : '';
+                    sourceBadge = `<div class="text-xs text-purple-300 font-semibold mb-1">📢 Из сообщества: <span class="verified-gradient-name">${item.groupName}</span> ${groupVerifiedBadge}</div>`;
+                }
+
+                const div = document.createElement('div');
+                div.className = 'bg-gray-900 border border-gray-800 p-4 rounded-2xl shadow-xl space-y-3';
+                div.innerHTML = `
+                    ${sourceBadge}
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 rounded-full overflow-hidden">${getAvatarWithMuteBadge(authorObj.avatar, item.author)}</div>
+                            <div>
+                                <div class="font-bold flex items-center space-x-1">
+                                    <span class="${roleInfo.color}">@${item.author}</span>
+                                    <span>${roleInfo.badge}</span>
+                                </div>
+                                <div class="text-xs text-gray-400">${new Date(item.timestamp).toLocaleString()}</div>
+                            </div>
+                        </div>
+                        ${canManage ? `<button onclick="deleteNews('${item.id}')" class="text-red-400 hover:text-red-300 text-xs font-bold">🗑 Удалить</button>` : ''}
+                    </div>
+                    <div class="text-gray-100 text-sm break-words">${item.text}</div>
+                    ${mediaHTML}
+                `;
+                list.appendChild(div);
             });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                editingPostId = null;
-                document.getElementById('post-text-input').value = '';
-                renderNewsFeed();
-                socket.emit('refresh-db');
-            } else {
-                showCustomModal('Ошибка', data.error || 'Не удалось отредактировать новость', false, null, '⚠️');
-            }
         }
 
-        async function deleteNewsPost(postId) {
+        async function deleteNews(postId) {
             const res = await fetch('/api/delete-news', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -3446,123 +3575,46 @@
                 db = data.db;
                 renderNewsFeed();
                 socket.emit('refresh-db');
-            } else {
-                showCustomModal('Ошибка', data.error || 'Нельзя удалить запись', false, null, '⚠');
             }
-        }
-
-        // ИСПРАВЛЕННОЕ ОТОБРАЖЕНИЕ В НОВОСТЯХ (СНАЧАЛА НАЗВАНИЕ ГРУППЫ СТИЛИЗОВАННОЕ, ПОТОМ ИМЯ И НИК)
-        function renderNewsFeed() {
-            const list = document.getElementById('news-feed-list');
-            if (!list) return;
-            list.innerHTML = '';
-            const posts = db.news || [];
-
-            if (posts.length === 0) {
-                list.innerHTML = '<div class="text-xs text-gray-500 text-center py-4">Нет записей в ленте новостей.</div>';
-                return;
-            }
-
-            posts.forEach(post => {
-                const authorObj = db.users[post.author] || {};
-                const roleInfo = getRoleBadgeAndColor(post.author);
-                const canManage = post.author === currentUser.login || hasFullAccess(currentUser.login);
-
-                let mediaHTML = '';
-                if (post.media) {
-                    mediaHTML = `<img src="${post.media}" class="w-full rounded-2xl max-h-96 object-cover mt-2">`;
-                }
-
-                // Проверяем, является ли пост объявлением из группы
-                let headerContent = '';
-                if (post.groupName) {
-                    const groupTitle = post.groupVerified 
-                        ? `<span class="verified-gradient-name font-bold text-sm">${post.groupName}</span> <span class="text-blue-400" title="Верифицировано">✅</span>` 
-                        : `<span class="font-bold text-white text-sm">🏢 ${post.groupName}</span>`;
-                    
-                    headerContent = `
-                        <div class="flex flex-col space-y-1 pb-2 border-b border-gray-800">
-                            <div class="flex items-center space-x-2">${groupTitle}</div>
-                            <div class="flex items-center space-x-2 text-xs">
-                                <div class="w-6 h-6 rounded-full overflow-hidden">${getAvatarWithMuteBadge(authorObj.avatar, post.author)}</div>
-                                <span class="font-bold ${roleInfo.color}">@${post.author}</span>
-                                ${roleInfo.badge && !isUserMutedAnywhere(post.author) ? `<span class="text-[10px] bg-purple-600/30 text-purple-300 px-1.5 py-0.5 rounded-md">${roleInfo.title}</span>` : ''}
-                            </div>
-                        </div>
-                    `;
-                } else {
-                    headerContent = `
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center space-x-3">
-                                <div class="w-10 h-10 rounded-full overflow-hidden">${getAvatarWithMuteBadge(authorObj.avatar, post.author)}</div>
-                                <div>
-                                    <div class="font-bold flex items-center space-x-2">
-                                        <span class="${roleInfo.color}">@${post.author}</span>
-                                        ${roleInfo.badge && !isUserMutedAnywhere(post.author) ? `<span class="text-[10px] bg-purple-600/30 text-purple-300 px-1.5 py-0.5 rounded-md">${roleInfo.title}</span>` : ''}
-                                    </div>
-                                    <div class="text-xs text-gray-500">${new Date(post.timestamp).toLocaleString()}</div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                }
-
-                const card = document.createElement('div');
-                card.className = 'bg-gray-900 border border-gray-800 p-4 rounded-2xl space-y-3 shadow-xl';
-                card.innerHTML = `
-                    ${headerContent}
-                    <div class="text-sm text-gray-200 break-words whitespace-pre-wrap">${post.text}</div>
-                    ${mediaHTML}
-                    <div class="flex justify-end space-x-3 pt-2 text-xs text-gray-400">
-                        <span>${new Date(post.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                        ${hasFullAccess(currentUser.login) || post.author === currentUser.login ? `<button onclick="editingPostId='${post.id}'; document.getElementById('post-text-input').value=\`${post.text || ''}\`; document.getElementById('post-text-input').focus();" class="text-purple-400 font-bold hover:underline">✏️ Редактировать</button>` : ''}
-                        ${canManage ? `<button onclick="deleteNewsPost('${post.id}')" class="text-red-400 font-bold hover:underline">🗑 Удалить</button>` : ''}
-                    </div>
-                `;
-                list.appendChild(card);
-            });
         }
 
         async function loadInternetNews() {
-            const list = document.getElementById('internet-news-list');
-            if (!list) return;
-            list.innerHTML = '<div class="text-xs text-gray-400 animate-pulse">Загрузка актуальных новостей...</div>';
             try {
                 const res = await fetch('/api/internet-news');
                 const data = await res.json();
-                if (data.success && data.news) {
+                if (data.success) {
+                    const list = document.getElementById('internet-news-list');
+                    if (!list) return;
                     list.innerHTML = '';
-                    data.news.forEach(item => {
+                    data.news.forEach(n => {
                         const div = document.createElement('div');
                         div.className = 'bg-gray-950 p-3 rounded-xl border border-gray-800 text-xs space-y-1';
                         div.innerHTML = `
-                            <div class="font-bold text-purple-300">${item.title}</div>
-                            <div class="flex justify-between text-[10px] text-gray-400">
-                                <span>${item.by}</span>
-                                <span>👍 ${item.score}</span>
+                            <a href="${n.url}" target="_blank" class="font-bold text-purple-300 hover:underline block">${n.title}</a>
+                            <div class="text-[10px] text-gray-400 flex justify-between">
+                                <span>Источник: ${n.by}</span>
+                                <span>👍 ${n.score} • ${n.time}</span>
                             </div>
                         `;
                         list.appendChild(div);
                     });
                 }
-            } catch (e) {
-                list.innerHTML = '<div class="text-xs text-gray-500">Не удалось загрузить новости.</div>';
-            }
+            } catch (e) {}
         }
 
         function fillProfileData() {
-            const avPreview = document.getElementById('profile-avatar-preview');
-            const muteOverlay = document.getElementById('profile-mute-badge-overlay');
-            if (avPreview) avPreview.src = getAvatar(currentUser.avatar);
-            if (muteOverlay) {
-                if (isUserMutedAnywhere(currentUser.login)) muteOverlay.classList.remove('hidden');
-                else muteOverlay.classList.add('hidden');
-            }
+            if (!currentUser) return;
             document.getElementById('profile-username').textContent = `@${currentUser.login}`;
             document.getElementById('profile-name-input').value = currentUser.name || '';
             document.getElementById('profile-bio-input').value = currentUser.bio || '';
             document.getElementById('profile-email-input').value = currentUser.email || '';
-            document.getElementById('profile-link-box').value = `${location.origin}/#${currentUser.login}`;
+            document.getElementById('profile-avatar-preview').src = getAvatar(currentUser.avatar);
+            document.getElementById('profile-link-box').textContent = `${location.origin}/#${currentUser.login}`;
+
+            const isMuted = isUserMutedAnywhere(currentUser.login);
+            const overlay = document.getElementById('profile-mute-badge-overlay');
+            if (isMuted) overlay.classList.remove('hidden');
+            else overlay.classList.add('hidden');
         }
 
         async function saveProfile() {
@@ -3570,12 +3622,6 @@
             const bio = document.getElementById('profile-bio-input').value.trim();
             const email = document.getElementById('profile-email-input').value.trim();
             const password = document.getElementById('profile-password-input').value;
-            const confirm = document.getElementById('profile-password-confirm').value;
-
-            if (password && password !== confirm) {
-                showCustomModal('Ошибка', 'Пароли не совпадают!', false, null, '⚠️');
-                return;
-            }
 
             const fileInput = document.getElementById('profile-avatar-file');
             let avatar = currentUser.avatar;
@@ -3586,314 +3632,17 @@
             const res = await fetch('/api/update-profile', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, name, bio, email, avatar, password })
+                body: JSON.stringify({ login: currentUser.login, name, bio, email, avatar, password: password || undefined })
             });
             const data = await res.json();
             if (data.success) {
                 currentUser = data.user;
                 db = data.db;
+                showCustomModal('Успех', 'Профиль успешно обновлен!', false, null, '✨');
                 initApp();
-                showCustomModal('Успех', 'Профиль успешно сохранен!', false, null, '✨');
-            }
-        }
-
-        // РАБОЧИЕ WEBRTC ЗВОНКИ И КОНФЕРЕНЦИИ
-        async function startDirectCall() {
-            if (!activeChat || activeChat.type !== 'user') return;
-            callTargetUser = activeChat.id;
-            document.getElementById('call-modal-header-title').textContent = '🎙 Аудиосвязь';
-            document.getElementById('call-partner-name').textContent = activeChat.id;
-            document.getElementById('call-status-text').textContent = 'Вызов абонента...';
-            document.getElementById('single-call-modal').classList.remove('hidden');
-            isInCallOrConference = true;
-            activeVoiceGroup = null;
-            activeVoiceChannel = null;
-            startOutgoingRingtone();
-            iceCandidateQueue[callTargetUser] = [];
-
-            try {
-                const noiseSup = document.getElementById('noise-suppression-checkbox')?.checked ?? true;
-                localStream = await navigator.mediaDevices.getUserMedia({ audio: { noiseSuppression: noiseSup, echoCancellation: true } });
-                
-                if (appSettings.pttMode === 'ptt') {
-                    localStream.getTracks().forEach(t => t.enabled = false);
-                }
-
-                const pc = createPeerConnection(callTargetUser);
-                peerConnections[callTargetUser] = pc;
-
-                const offer = await pc.createOffer();
-                await pc.setLocalDescription(offer);
-                socket.emit('call-user', { targetLogin: callTargetUser, offer, callerLogin: currentUser.login });
-
-                connectionTimeout = setTimeout(() => {
-                    if (document.getElementById('call-status-text').textContent.includes('Вызов')) {
-                        showCustomModal('Нет ответа', 'Абонент не ответил на вызов.', false, null, '📞');
-                        hangUpCall();
-                    }
-                }, 15000);
-
-            } catch (e) {
-                hangUpCall();
-            }
-        }
-
-        async function startDirectCallTo(friendLogin) {
-            openUserChat(friendLogin);
-            setTimeout(() => startDirectCall(), 300);
-        }
-
-        function startGroupCallConference() {
-            if (!activeGroupWorkspaceId) return;
-            startGroupVoiceConference(activeGroupWorkspaceId, 'main', 'Общий');
-        }
-
-        async function startGroupVoiceConference(groupId, channelId, channelName) {
-            activeVoiceGroup = groupId;
-            activeVoiceChannel = channelId;
-            isInCallOrConference = true;
-            callTargetUser = null;
-
-            document.getElementById('call-modal-header-title').textContent = `🎙 Канал: ${channelName}`;
-            document.getElementById('call-partner-name').textContent = `Группа #${groupId}`;
-            document.getElementById('call-status-text').textContent = 'Подключение к конференции...';
-            document.getElementById('single-call-modal').classList.remove('hidden');
-
-            try {
-                const noiseSup = document.getElementById('noise-suppression-checkbox')?.checked ?? true;
-                localStream = await navigator.mediaDevices.getUserMedia({ audio: { noiseSuppression: noiseSup, echoCancellation: true } });
-                
-                if (appSettings.pttMode === 'ptt') {
-                    localStream.getTracks().forEach(t => t.enabled = false);
-                }
-
-                socket.emit('join-voice-channel', { groupId, channelId, login: currentUser.login });
-                document.getElementById('call-status-text').textContent = 'Вы в голосовом канале';
-            } catch (e) {
-                showCustomModal('Ошибка', 'Не удалось получить доступ к микрофону для конференции', false, null, '⚠️');
-                hangUpCall();
-            }
-        }
-
-        function createPeerConnection(remoteLogin) {
-            const pc = new RTCPeerConnection({
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:stun1.l.google.com:19302' }
-                ]
-            });
-
-            if (localStream) {
-                localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-            }
-
-            pc.ontrack = e => {
-                let audioEl = document.getElementById(`remote-audio-${remoteLogin}`);
-                if (!audioEl) {
-                    audioEl = document.createElement('audio');
-                    audioEl.id = `remote-audio-${remoteLogin}`;
-                    audioEl.autoplay = true;
-                    audioEl.playsInline = true;
-                    document.getElementById('remote-audio-container').appendChild(audioEl);
-                }
-                audioEl.srcObject = e.streams[0];
-                audioEl.play().catch(() => {});
-                document.getElementById('call-status-text').textContent = 'Разговор идет';
-            };
-
-            pc.onicecandidate = e => {
-                if (e.candidate) {
-                    socket.emit('webrtc-candidate', { targetLogin: remoteLogin, candidate: e.candidate, groupId: activeVoiceGroup, channelId: activeVoiceChannel });
-                }
-            };
-
-            pc.oniceconnectionstatechange = () => {
-                if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
-                    pc.close();
-                    delete peerConnections[remoteLogin];
-                    document.getElementById(`remote-audio-${remoteLogin}`)?.remove();
-                }
-            };
-
-            return pc;
-        }
-
-        socket.on('incoming-call', async ({ callerLogin, offer }) => {
-            incomingCallerLogin = callerLogin;
-            incomingOffer = offer;
-            startIncomingRingtone();
-            document.getElementById('incoming-caller-title').textContent = `Входящий вызов от @${callerLogin}`;
-            document.getElementById('incoming-caller-avatar').src = getAvatar(db.users[callerLogin]?.avatar);
-            document.getElementById('incoming-call-modal').classList.remove('hidden');
-        });
-
-        async function acceptIncomingCall() {
-            stopIncomingRingtone();
-            if (connectionTimeout) clearTimeout(connectionTimeout);
-            document.getElementById('incoming-call-modal').classList.add('hidden');
-            document.getElementById('call-partner-name').textContent = incomingCallerLogin || 'Вызов';
-            document.getElementById('call-status-text').textContent = 'Соединение установлено';
-            document.getElementById('single-call-modal').classList.remove('hidden');
-            isInCallOrConference = true;
-            callTargetUser = incomingCallerLogin;
-            iceCandidateQueue[callTargetUser] = [];
-
-            try {
-                const noiseSup = document.getElementById('noise-suppression-checkbox')?.checked ?? true;
-                localStream = await navigator.mediaDevices.getUserMedia({ audio: { noiseSuppression: noiseSup, echoCancellation: true } });
-                
-                if (appSettings.pttMode === 'ptt') {
-                    localStream.getTracks().forEach(t => t.enabled = false);
-                }
-
-                const pc = createPeerConnection(callTargetUser);
-                peerConnections[callTargetUser] = pc;
-
-                await pc.setRemoteDescription(new RTCSessionDescription(incomingOffer));
-                
-                const q = iceCandidateQueue[callTargetUser] || [];
-                while (q.length > 0) {
-                    const candidate = q.shift();
-                    try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) {}
-                }
-
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                socket.emit('accept-call', { targetLogin: callTargetUser, answer, accepterLogin: currentUser.login });
-
-            } catch (e) {
-                hangUpCall();
-            }
-        }
-
-        socket.on('call-accepted', async ({ answer, accepterLogin }) => {
-            stopOutgoingRingtone();
-            stopIncomingRingtone();
-            if (connectionTimeout) clearTimeout(connectionTimeout);
-            document.getElementById('incoming-call-modal').classList.add('hidden');
-            document.getElementById('call-status-text').textContent = 'Разговор идет';
-            
-            const target = accepterLogin || callTargetUser;
-            const pc = peerConnections[target];
-            if (pc && answer) {
-                await pc.setRemoteDescription(new RTCSessionDescription(answer));
-                const q = iceCandidateQueue[target] || [];
-                while (q.length > 0) {
-                    const candidate = q.shift();
-                    try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) {}
-                }
-            }
-        });
-
-        socket.on('voice-channel-users', async ({ users }) => {
-            for (const otherLogin of users) {
-                if (otherLogin === currentUser.login || peerConnections[otherLogin]) continue;
-                try {
-                    const pc = createPeerConnection(otherLogin);
-                    peerConnections[otherLogin] = pc;
-                    const offer = await pc.createOffer();
-                    await pc.setLocalDescription(offer);
-                    socket.emit('voice-offer', { targetLogin: otherLogin, offer, senderLogin: currentUser.login });
-                } catch (e) {}
-            }
-        });
-
-        socket.on('voice-offer', async ({ senderLogin, offer }) => {
-            try {
-                let pc = peerConnections[senderLogin];
-                if (!pc) {
-                    pc = createPeerConnection(senderLogin);
-                    peerConnections[senderLogin] = pc;
-                }
-                await pc.setRemoteDescription(new RTCSessionDescription(offer));
-                const answer = await pc.createAnswer();
-                await pc.setLocalDescription(answer);
-                socket.emit('voice-answer', { targetLogin: senderLogin, answer, senderLogin: currentUser.login });
-            } catch (e) {}
-        });
-
-        socket.on('voice-answer', async ({ senderLogin, answer }) => {
-            const pc = peerConnections[senderLogin];
-            if (pc) {
-                await pc.setRemoteDescription(new RTCSessionDescription(answer));
-            }
-        });
-
-        socket.on('call-rejected', () => {
-            showCustomModal('Вызов отклонен', 'Собеседник отклонил вызов.', false, null, '📞');
-            hangUpCall();
-        });
-
-        socket.on('call-hangup', ({ login }) => {
-            if (login && peerConnections[login]) {
-                peerConnections[login].close();
-                delete peerConnections[login];
-                document.getElementById(`remote-audio-${login}`)?.remove();
+                socket.emit('refresh-db');
             } else {
-                hangUpCall();
-            }
-        });
-
-        socket.on('webrtc-candidate', async ({ candidate, senderLogin }) => {
-            const target = senderLogin || callTargetUser;
-            const pc = peerConnections[target];
-            if (candidate) {
-                if (pc && pc.remoteDescription && pc.remoteDescription.type) {
-                    try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) {}
-                } else {
-                    if (!iceCandidateQueue[target]) iceCandidateQueue[target] = [];
-                    iceCandidateQueue[target].push(candidate);
-                }
-            }
-        });
-
-        function rejectIncomingCall() {
-            stopIncomingRingtone();
-            if (connectionTimeout) clearTimeout(connectionTimeout);
-            document.getElementById('incoming-call-modal').classList.add('hidden');
-            if (incomingCallerLogin) socket.emit('reject-call', { targetLogin: incomingCallerLogin });
-        }
-
-        function hangUpCall() {
-            stopOutgoingRingtone();
-            stopIncomingRingtone();
-            if (connectionTimeout) clearTimeout(connectionTimeout);
-            if (localStream) {
-                localStream.getTracks().forEach(t => t.stop());
-                localStream = null;
-            }
-            Object.keys(peerConnections).forEach(login => {
-                peerConnections[login].close();
-                document.getElementById(`remote-audio-${login}`)?.remove();
-            });
-            peerConnections = {};
-            iceCandidateQueue = {};
-
-            if (callTargetUser) socket.emit('hangup-call', { targetLogin: callTargetUser });
-            if (incomingCallerLogin) socket.emit('hangup-call', { targetLogin: incomingCallerLogin });
-            if (activeVoiceGroup) {
-                socket.emit('leave-voice-channel', { groupId: activeVoiceGroup, channelId: activeVoiceChannel, login: currentUser.login });
-            }
-
-            document.getElementById('single-call-modal').classList.add('hidden');
-            document.getElementById('incoming-call-modal').classList.add('hidden');
-            document.getElementById('remote-audio-container').innerHTML = '';
-            isInCallOrConference = false;
-            callTargetUser = null;
-            incomingCallerLogin = null;
-            activeVoiceGroup = null;
-            activeVoiceChannel = null;
-        }
-
-        function toggleMyCallMute() {
-            if (localStream) {
-                const audioTrack = localStream.getAudioTracks()[0];
-                if (audioTrack) {
-                    audioTrack.enabled = !audioTrack.enabled;
-                    const btn = document.getElementById('btn-call-mute');
-                    btn.textContent = audioTrack.enabled ? 'Микрофон' : '🔇 Выключен';
-                    btn.className = audioTrack.enabled ? 'flex-1 bg-gray-800 hover:bg-gray-700 text-white py-2 rounded-xl text-xs font-bold transition' : 'flex-1 bg-red-600 text-white py-2 rounded-xl text-xs font-bold transition';
-                }
+                showCustomModal('Ошибка', data.error || 'Не удалось обновить профиль', false, null, '⚠️');
             }
         }
     </script>
