@@ -371,7 +371,10 @@ app.post('/api/delete-group', async (req, res) => {
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
     const isLeader = group.creator === login;
-    if (!isLeader && !hasFullAccess(login)) {
+    const globalRole = getUserGlobalRole(login);
+    const isWarrenOrMainMod = login.toLowerCase() === 'warren' || globalRole === 'main_moderator';
+
+    if (!isLeader && !isWarrenOrMainMod && !hasFullAccess(login)) {
         return res.json({ success: false, error: 'Недостаточно прав!' });
     }
     delete db.groups[groupId];
@@ -393,6 +396,39 @@ app.post('/api/update-group', async (req, res) => {
     await saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db, group });
+});
+
+app.post('/api/leave-group', async (req, res) => {
+    const { groupId, login } = req.body;
+    const group = db.groups[groupId];
+    if (!group) return res.json({ success: false, error: 'Группа не найдена' });
+    if (!group.members.includes(login)) return res.json({ success: false, error: 'Вы не участник группы' });
+
+    if (group.creator === login) {
+        // Лидер покидает группу: передаем лидерство ближайшему админу или первому участнику
+        const otherMembers = group.members.filter(m => m !== login);
+        if (otherMembers.length === 0) {
+            delete db.groups[groupId];
+            await saveDb();
+            io.emit('update-db', db);
+            return res.json({ success: true, db });
+        }
+        let nextLeader = otherMembers.find(m => group.roles?.[m] === 'Админ');
+        if (!nextLeader) {
+            nextLeader = otherMembers[0];
+        }
+        group.creator = nextLeader;
+        group.roles[nextLeader] = 'Лидер';
+    }
+
+    group.members = group.members.filter(m => m !== login);
+    if (group.roles) delete group.roles[login];
+    if (group.groupMutedUsers) delete group.groupMutedUsers[login];
+    if (group.groupNicknames) delete group.groupNicknames[login];
+
+    await saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
 });
 
 app.post('/api/group-mute-member', async (req, res) => {
