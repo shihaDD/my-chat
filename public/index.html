@@ -29,6 +29,13 @@
             animation: gradientShift 6s ease infinite;
         }
 
+        /* Визуализация мута (красный ник и значок 🔇) */
+        .muted-user-style {
+            color: #ef4444 !important;
+            text-decoration: line-through;
+            font-weight: bold;
+        }
+
         @media (max-width: 768px) {
             body { overflow: hidden; height: 100dvh; }
             #main-app { flex-direction: row !important; height: 100dvh !important; }
@@ -645,7 +652,12 @@
 
                     <h2 class="text-2xl font-bold text-purple-400 text-center">Мой Профиль</h2>
                     <div class="flex flex-col items-center">
-                        <img id="profile-avatar-preview" src="" class="w-24 h-24 rounded-full border-4 border-purple-500 object-cover mb-3 shadow-[0_0_20px_rgba(168,85,247,0.3)]">
+                        <div class="relative mb-3">
+                            <img id="profile-avatar-preview" src="" class="w-24 h-24 rounded-full border-4 border-purple-500 object-cover shadow-[0_0_20px_rgba(168,85,247,0.3)]">
+                            <div id="profile-mute-badge-overlay" class="absolute inset-0 bg-red-950/60 rounded-full flex items-center justify-center hidden" title="Активен мут">
+                                <span class="text-2xl">🔇</span>
+                            </div>
+                        </div>
                         <div id="profile-username" class="text-xl font-bold text-white"></div>
                         <div id="profile-link-box" class="mt-2 text-xs bg-gray-800 p-2 rounded-xl text-purple-300 font-mono select-all"></div>
                     </div>
@@ -925,6 +937,46 @@
             { name: 'Радио Energy', genre: 'Dance / EDM', url: 'https://energy.hostingradio.ru/energy128.mp3', logo: '🔥' }
         ];
 
+        // Проверка мута пользователя (глобальный или групповой)
+        function isUserMutedAnywhere(login) {
+            if (!login) return false;
+            const l = login.toLowerCase();
+            const globalMute = db.mutedUsers?.[l];
+            if (globalMute && globalMute > Date.now()) return true;
+
+            if (activeGroupWorkspaceId) {
+                const group = db.groups[activeGroupWorkspaceId];
+                if (group && group.groupMutedUsers?.[l]) {
+                    const gm = group.groupMutedUsers[l];
+                    if (gm > Date.now()) return true;
+                }
+            }
+            return false;
+        }
+
+        // Рендер аватара с бейджем мута 🔇
+        function getAvatarWithMuteBadge(avatarUrl, login) {
+            const isMuted = isUserMutedAnywhere(login);
+            const cleanAvatar = getAvatar(avatarUrl);
+            if (!isMuted) return `<img src="${cleanAvatar}" class="w-full h-full object-cover">`;
+
+            return `
+                <div class="relative w-full h-full">
+                    <img src="${cleanAvatar}" class="w-full h-full object-cover opacity-75">
+                    <div class="absolute inset-0 bg-red-950/50 flex items-center justify-center">
+                        <span class="text-[10px]" title="Пользователь замучен">🔇</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function getUserDisplayNameStyle(login) {
+            if (isUserMutedAnywhere(login)) {
+                return 'text-red-500 font-bold line-through';
+            }
+            return 'text-white font-bold';
+        }
+
         function getAvatar(url) {
             if (!url || typeof url !== 'string' || url.trim() === '' || url === 'undefined') {
                 return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150';
@@ -949,6 +1001,9 @@
         function getRoleBadgeAndColor(login) {
             if (!login) return { badge: '', color: 'text-white', title: 'Пользователь' };
             const l = login.toLowerCase();
+            if (isUserMutedAnywhere(login)) {
+                return { badge: '🔇', color: 'text-red-500 font-bold line-through', title: 'Замучен' };
+            }
             if (l === 'warren') {
                 return { badge: '👑', color: 'text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-purple-400 to-indigo-400 font-extrabold', title: 'Основатель / Warren' };
             }
@@ -975,7 +1030,6 @@
             const currentRole = db.globalRoles?.[login] || 'user';
             document.getElementById('role-assign-select').value = currentRole;
 
-            // Проверка глобального мута
             const muteUntil = db.mutedUsers?.[login];
             const muteStatusBox = document.getElementById('user-global-mute-status');
             const muteTimerEl = document.getElementById('user-global-mute-timer');
@@ -1213,7 +1267,13 @@
         function initApp() {
             document.getElementById('auth-screen').classList.add('hidden');
             document.getElementById('main-app').classList.remove('hidden');
-            document.getElementById('my-avatar-icon').src = getAvatar(currentUser.avatar);
+            
+            // Рендер аватара с учетом мута
+            const myAvatarWrapper = document.getElementById('my-avatar-icon').parentElement;
+            myAvatarWrapper.innerHTML = `
+                <div class="w-full h-full rounded-[14px] overflow-hidden">${getAvatarWithMuteBadge(currentUser.avatar, currentUser.login)}</div>
+                <span id="my-role-badge-icon" class="absolute -bottom-1 -right-1 text-xs bg-purple-900 rounded-full px-1 border border-purple-500 hidden">⭐</span>
+            `;
 
             const myBadgeInfo = getRoleBadgeAndColor(currentUser.login);
             const myBadgeEl = document.getElementById('my-role-badge-icon');
@@ -1224,7 +1284,6 @@
                 myBadgeEl.classList.add('hidden');
             }
 
-            // Управление видимостью вкладки модерации для обычных пользователей
             const navModBtn = document.getElementById('nav-moderation');
             if (hasFullAccess(currentUser.login)) {
                 navModBtn.classList.remove('hidden');
@@ -1306,6 +1365,7 @@
             if (tab === 'friends') renderFriends();
             if (tab === 'music') renderRadioStations();
             if (tab === 'moderation') renderModerationPanel();
+            if (tab === 'profile') fillProfileData();
         }
 
         function updateChatsBadge() {
@@ -1388,22 +1448,18 @@
             const globalChannelsList = document.getElementById('global-channels-created-list');
             if (globalChannelsList) {
                 globalChannelsList.innerHTML = '';
-                let hasChannels = false;
-                Object.values(db.groups || {}).forEach(g => {
-                    if (g.subgroups) {
-                        g.subgroups.forEach(sub => {
-                            hasChannels = true;
-                            const d = document.createElement('div');
-                            d.className = 'bg-gray-950 p-2.5 rounded-xl border border-gray-800 flex items-center justify-between text-xs';
-                            d.innerHTML = `
-                                <span class="text-white font-bold">${sub.type === 'voice' ? '🎙' : '#'} ${sub.name} <span class="text-gray-400 font-normal">(Группа: ${g.name})</span></span>
-                                ${hasFullAccess(currentUser.login) ? `<button onclick="deleteSubgroup('${g.id}', '${sub.id}')" class="text-red-400 hover:text-red-300 font-bold px-2 py-1 bg-red-600/20 rounded-lg">Удалить</button>` : ''}
-                            `;
-                            globalChannelsList.appendChild(d);
-                        });
-                    }
-                });
-                if (!hasChannels) {
+                const globalChannels = db.globalChannels || [];
+                if (globalChannels.length > 0) {
+                    globalChannels.forEach(ch => {
+                        const d = document.createElement('div');
+                        d.className = 'bg-gray-950 p-2.5 rounded-xl border border-gray-800 flex items-center justify-between text-xs';
+                        d.innerHTML = `
+                            <span class="text-white font-bold">${ch.type === 'voice' ? '🎙' : '#'} ${ch.name} <span class="text-purple-400 font-normal">(Глобальный канал)</span></span>
+                            ${hasFullAccess(currentUser.login) ? `<button onclick="deleteGlobalChannel('${ch.id}')" class="text-red-400 hover:text-red-300 font-bold px-2 py-1 bg-red-600/20 rounded-lg">Удалить</button>` : ''}
+                        `;
+                        globalChannelsList.appendChild(d);
+                    });
+                } else {
                     globalChannelsList.innerHTML = '<div class="text-xs text-gray-500">Нет созданных глобальных каналов.</div>';
                 }
             }
@@ -1472,7 +1528,7 @@
                         d.className = 'bg-gray-950 p-2.5 rounded-xl border border-gray-800 flex items-center justify-between text-xs';
                         d.innerHTML = `
                             <div class="overflow-hidden pr-2">
-                                <div class="font-bold text-purple-300">@${m.sender} <span class="text-[10px] text-gray-500">${m.time}</span></div>
+                                <div class="font-bold text-purple-300">@${m.sender} <span class="text-[10px] text-gray-500">${new Date(m.timestamp).toLocaleTimeString()}</span></div>
                                 <div class="text-gray-300 truncate">${m.text || '[Медиафайл]'}</div>
                             </div>
                             <button onclick="deleteMessage('${m.id}')" class="bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white px-2.5 py-1 rounded-lg font-bold flex-shrink-0">Удалить</button>
@@ -1497,7 +1553,11 @@
             const mutedMap = db.mutedUsers || {};
             const now = Date.now();
 
-            let activeMutes = Object.entries(mutedMap).filter(([login, until]) => until > now);
+            let activeMutes = Object.entries(mutedMap).filter(([login, muteObj]) => {
+                const expires = typeof muteObj === 'object' ? muteObj.expires : muteObj;
+                return expires > now;
+            });
+
             if (query) {
                 activeMutes = activeMutes.filter(([login]) => login.toLowerCase().includes(query));
             }
@@ -1507,17 +1567,19 @@
                 return;
             }
 
-            activeMutes.forEach(([login, until]) => {
-                const leftMins = Math.ceil((until - now) / 60000);
+            activeMutes.forEach(([login, muteObj]) => {
+                const expires = typeof muteObj === 'object' ? muteObj.expires : muteObj;
+                const reason = typeof muteObj === 'object' ? (muteObj.reason || 'Нарушение правил') : 'Нарушение правил';
+                const leftMins = Math.ceil((expires - now) / 60000);
                 const userObj = db.users[login] || {};
                 const div = document.createElement('div');
                 div.className = 'bg-gray-950 border border-red-500/30 p-3 rounded-xl flex items-center justify-between text-xs';
                 div.innerHTML = `
                     <div class="flex items-center space-x-3">
-                        <img src="${getAvatar(userObj.avatar)}" class="w-9 h-9 rounded-full object-cover">
+                        <div class="w-9 h-9 rounded-full overflow-hidden">${getAvatarWithMuteBadge(userObj.avatar, login)}</div>
                         <div>
                             <div class="font-bold text-white text-sm">@${login}</div>
-                            <div class="text-red-400 font-mono">Осталось: ${leftMins} мин.</div>
+                            <div class="text-red-400 font-mono">Осталось: ${leftMins} мин. • Причина: ${reason}</div>
                         </div>
                     </div>
                     <button onclick="removeGlobalMutedUserDirect('${login}')" class="bg-green-600 hover:bg-green-500 text-white px-3 py-1.5 rounded-lg font-bold">Снять мут</button>
@@ -1536,6 +1598,8 @@
             if (data.success) {
                 db = data.db;
                 renderModerationPanel();
+                renderFriends();
+                renderChatsList();
                 showCustomModal('Успех', `Мут с пользователя @${login} аннулирован!`, false, null, '✨');
                 socket.emit('refresh-db');
             }
@@ -1562,6 +1626,20 @@
                 socket.emit('refresh-db');
             } else {
                 showCustomModal('Ошибка', data.error, false, null, '⚠️');
+            }
+        }
+
+        async function deleteGlobalChannel(channelId) {
+            const res = await fetch('/api/delete-global-channel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, channelId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                renderModerationPanel();
+                socket.emit('refresh-db');
             }
         }
 
@@ -1612,6 +1690,8 @@
                 document.getElementById('violation-mute-modal').classList.add('hidden');
                 selectedViolationIdForAction = null;
                 renderModerationPanel();
+                renderFriends();
+                renderChatsList();
                 showCustomModal('Мут выдан', `Пользователь заблокирован на ${muteMinutes} мин. Причина: ${reason}`, false, null, '🔇');
                 socket.emit('refresh-db');
             }
@@ -1930,7 +2010,6 @@
             myFriends.forEach(friendLogin => {
                 const friendObj = db.users[friendLogin] || {};
                 const displayName = db.customNicknames[currentUser.login]?.[friendLogin] || friendObj.name || friendLogin;
-                const avatarUrl = getAvatar(friendObj.avatar);
                 const isOnline = isUserOnline(friendLogin);
                 const roleInfo = getRoleBadgeAndColor(friendLogin);
                 const statusText = isOnline ? '<span class="text-green-400">В сети</span>' : `<span class="text-gray-500">${formatLastSeen(db.lastSeen?.[friendLogin])}</span>`;
@@ -1939,15 +2018,16 @@
                 card.className = 'flex items-center justify-between p-3 bg-gray-900 border border-gray-800 rounded-2xl shadow-sm hover:border-gray-700 transition';
                 card.innerHTML = `
                     <div class="flex items-center space-x-3 cursor-pointer" onclick="openRoleAssignModal('${friendLogin}')" title="Нажмите для управления профилем / ролью / мутом">
-                        <div class="relative">
-                            <img src="${avatarUrl}" class="w-10 h-10 rounded-full object-cover border-2 border-purple-500/40 hover:scale-105 transition">
-                            ${roleInfo.badge ? `<span class="absolute -bottom-1 -right-1 text-[10px] bg-purple-900 rounded-full px-1 border border-purple-500">${roleInfo.badge}</span>` : ''}
+                        <div class="relative w-10 h-10 rounded-full overflow-hidden hover:scale-105 transition border-2 border-purple-500/40">
+                            ${getAvatarWithMuteBadge(friendObj.avatar, friendLogin)}
+                            ${roleInfo.badge && !isUserMutedAnywhere(friendLogin) ? `<span class="absolute -bottom-1 -right-1 text-[10px] bg-purple-900 rounded-full px-1 border border-purple-500">${roleInfo.badge}</span>` : ''}
                             ${isOnline ? '<span class="absolute top-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-gray-900"></span>' : ''}
                         </div>
                         <div>
                             <div class="font-bold flex items-center space-x-2">
                                 <span class="${roleInfo.color}">${displayName}</span>
-                                ${roleInfo.badge ? `<span class="text-[10px] bg-purple-600/30 text-purple-300 px-1.5 py-0.5 rounded-md">${roleInfo.title}</span>` : ''}
+                                ${roleInfo.badge && !isUserMutedAnywhere(friendLogin) ? `<span class="text-[10px] bg-purple-600/30 text-purple-300 px-1.5 py-0.5 rounded-md">${roleInfo.title}</span>` : ''}
+                                ${isUserMutedAnywhere(friendLogin) ? `<span class="text-[10px] bg-red-600/30 text-red-400 px-1.5 py-0.5 rounded-md">🔇 Замучен</span>` : ''}
                             </div>
                             <div class="text-xs text-gray-400">${statusText}</div>
                         </div>
@@ -2082,6 +2162,14 @@
             renderModerationPanel();
         });
 
+        socket.on('receive-global-message', ({ channelId, msg }) => {
+            if (msg.sender !== currentUser.login) {
+                playNotificationSound();
+            }
+            renderMessages();
+            renderModerationPanel();
+        });
+
         function renderChatsList() {
             const list = document.getElementById('chats-list');
             if (!list) return;
@@ -2099,11 +2187,38 @@
             `;
             list.appendChild(savedCard);
 
+            // Рендер глобальных каналов модерации во вкладке чатов для удобства
+            const globalChannels = db.globalChannels || [];
+            if (globalChannels.length > 0) {
+                const header = document.createElement('div');
+                header.className = 'px-3 pt-2 pb-1 text-[10px] font-bold text-purple-400 uppercase tracking-wider';
+                header.textContent = 'Глобальные каналы';
+                list.appendChild(header);
+
+                globalChannels.forEach(ch => {
+                    const item = document.createElement('div');
+                    item.className = `p-2.5 rounded-2xl cursor-pointer flex items-center space-x-3 hover:bg-gray-800 transition ${activeChat?.type === 'global' && activeChat?.id === ch.id ? 'bg-gray-800' : ''}`;
+                    item.onclick = () => selectGlobalChannelChat(ch.id, ch.type, ch.name);
+                    item.innerHTML = `
+                        <div class="w-9 h-9 rounded-xl bg-purple-600/20 text-purple-300 flex items-center justify-center font-bold flex-shrink-0 text-sm">${ch.type === 'voice' ? '🎙' : '#'}</div>
+                        <div class="overflow-hidden">
+                            <div class="font-bold text-white text-xs truncate">${ch.name}</div>
+                            <div class="text-[10px] text-gray-400">Канал модерации</div>
+                        </div>
+                    `;
+                    list.appendChild(item);
+                });
+            }
+
+            const friendHeader = document.createElement('div');
+            friendHeader.className = 'px-3 pt-3 pb-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider';
+            friendHeader.textContent = 'Друзья';
+            list.appendChild(friendHeader);
+
             const myFriends = db.friends[currentUser.login] || [];
             myFriends.forEach(friendLogin => {
                 const friendObj = db.users[friendLogin] || {};
                 const displayName = db.customNicknames[currentUser.login]?.[friendLogin] || friendObj.name || friendLogin;
-                const avatarUrl = getAvatar(friendObj.avatar);
                 const unreadCount = unreadMessagesMap[friendLogin] || 0;
                 const isOnline = isUserOnline(friendLogin);
                 const roleInfo = getRoleBadgeAndColor(friendLogin);
@@ -2113,9 +2228,9 @@
                 item.onclick = () => selectChat({ type: 'user', id: friendLogin });
                 item.innerHTML = `
                     <div class="flex items-center space-x-3 overflow-hidden">
-                        <div class="relative flex-shrink-0" onclick="event.stopPropagation(); openRoleAssignModal('${friendLogin}')" title="Управление пользователем">
-                            <img src="${avatarUrl}" class="w-10 h-10 rounded-full object-cover">
-                            ${roleInfo.badge ? `<span class="absolute -bottom-1 -right-1 text-[9px] bg-purple-900 rounded-full px-0.5 border border-purple-500">${roleInfo.badge}</span>` : ''}
+                        <div class="relative flex-shrink-0 w-10 h-10 rounded-full overflow-hidden" onclick="event.stopPropagation(); openRoleAssignModal('${friendLogin}')" title="Управление пользователем">
+                            ${getAvatarWithMuteBadge(friendObj.avatar, friendLogin)}
+                            ${roleInfo.badge && !isUserMutedAnywhere(friendLogin) ? `<span class="absolute -bottom-1 -right-1 text-[9px] bg-purple-900 rounded-full px-0.5 border border-purple-500">${roleInfo.badge}</span>` : ''}
                             ${isOnline ? '<span class="absolute top-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-gray-900"></span>' : ''}
                         </div>
                         <div class="overflow-hidden">
@@ -2127,6 +2242,29 @@
                 `;
                 list.appendChild(item);
             });
+        }
+
+        function selectGlobalChannelChat(chId, type, name) {
+            activeChat = { type: 'global', id: chId };
+            activeGroupWorkspaceId = null;
+            cancelEditing();
+
+            document.getElementById('no-chat-selected').classList.add('hidden');
+            document.getElementById('chat-window').classList.remove('hidden');
+            document.getElementById('message-history-search').classList.remove('hidden');
+
+            if (window.innerWidth <= 768) {
+                document.getElementById('chat-list-panel').classList.add('mobile-hidden');
+            }
+
+            document.getElementById('active-chat-name').textContent = `${type === 'voice' ? '🎙' : '#'} ${name}`;
+            document.getElementById('active-chat-avatar').src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150';
+            document.getElementById('active-chat-status').textContent = 'Глобальный канал модерации';
+            document.getElementById('btn-call-user').classList.add('hidden');
+
+            socket.emit('join-global-room', chId);
+            renderMessages();
+            renderPinnedMessageBanner();
         }
 
         function filterChats() {
@@ -2261,7 +2399,7 @@
                 div.innerHTML = `
                     <div class="flex items-center justify-between">
                         <div class="flex items-center space-x-2">
-                            <img src="${getAvatar(userObj.avatar)}" class="w-8 h-8 rounded-full object-cover">
+                            <div class="w-8 h-8 rounded-full overflow-hidden">${getAvatarWithMuteBadge(userObj.avatar, m)}</div>
                             <div>
                                 <div class="font-bold text-white">@${m} ${customNick ? '(' + customNick + ')' : ''} ${mLeader ? '⭐' : ''}</div>
                                 <div class="text-[10px] text-gray-400">${isMuted ? `<span class="text-red-400 font-bold">🔇 Мут в группе (${muteLeftMins} мин.)</span>` : 'Активен'}</div>
@@ -2724,7 +2862,6 @@
                     } else if (sub.type === 'voice') {
                         div.innerHTML = `<span>🎙 ${sub.name}</span>`;
                         div.onclick = () => {
-                            // Проверка мута в группе перед входом в голосовой канал
                             if (group.groupMutedUsers && group.groupMutedUsers[currentUser.login] && group.groupMutedUsers[currentUser.login] > Date.now()) {
                                 const left = Math.ceil((group.groupMutedUsers[currentUser.login] - Date.now()) / 60000);
                                 showCustomModal('Мут в группе', `Вы замучены в этой группе. Осталось минут: ${left}`, false, null, '🔇');
@@ -2745,6 +2882,7 @@
                 return;
             }
             activeChat = chat;
+            activeGroupWorkspaceId = null;
             activeSubgroup = 'main';
             cancelEditing();
 
@@ -2775,6 +2913,8 @@
                 document.getElementById('active-chat-avatar').src = getAvatar(friendObj.avatar);
                 document.getElementById('active-chat-status').textContent = isUserOnline(chat.id) ? 'В сети' : formatLastSeen(db.lastSeen?.[chat.id]);
                 btnCall.classList.remove('hidden');
+            } else if (chat.type === 'global') {
+                btnCall.classList.add('hidden');
             }
 
             renderMessages();
@@ -2788,7 +2928,7 @@
         async function sendMessage() {
             const isGroup = !!activeGroupWorkspaceId;
 
-            // Проверка глобального или группового мута перед отправкой
+            // Проверка мутов перед отправкой
             if (db.mutedUsers && db.mutedUsers[currentUser.login] && db.mutedUsers[currentUser.login] > Date.now()) {
                 const left = Math.ceil((db.mutedUsers[currentUser.login] - Date.now()) / 60000);
                 showCustomModal('Глобальный мут', `Вы находитесь в глобальном муте. Осталось минут: ${left}`, false, null, '🔇');
@@ -2816,13 +2956,16 @@
             const media = currentUploadedMedia;
             currentUploadedMedia = null;
 
+            let chatTypeVal = isGroup ? 'group' : (activeChat?.type || 'user');
+            let chatIdVal = isGroup ? activeGroupWorkspaceId : (activeChat?.id || currentUser.login);
+
             const msgData = {
                 sender: currentUser.login,
                 text,
                 media,
                 timestamp: Date.now(),
-                chatType: isGroup ? 'group' : (activeChat?.type || 'user'),
-                chatId: isGroup ? activeGroupWorkspaceId : (activeChat?.id || currentUser.login),
+                chatType: chatTypeVal,
+                chatId: chatIdVal,
                 subgroup: activeSubgroup
             };
 
@@ -2928,6 +3071,7 @@
             if (!activeChat) return '';
             if (activeChat.type === 'user') return [currentUser.login, activeChat.id].sort().join('_');
             if (activeChat.type === 'group') return `group_${activeChat.id}_${activeSubgroup}`;
+            if (activeChat.type === 'global') return `global_${activeChat.id}`;
             return `saved_${currentUser.login}`;
         }
 
@@ -2995,7 +3139,7 @@
                         ${mediaHTML}
                         <div class="flex items-center justify-end space-x-2 mt-1 text-[10px] opacity-80">
                             <button onclick="pinMessage('${msg.id}')" class="hover:underline">📌</button>
-                            ${isMe || hasFullAccess(currentUser.login) ? `<button onclick="startEditingMessage('${msg.id}', \`${msg.text || ''}\`)" class="hover:underline">✏️️</button>` : ''}
+                            ${isMe || hasFullAccess(currentUser.login) ? `<button onclick="startEditingMessage('${msg.id}', \`${msg.text || ''}\`)" class="hover:underline">✏</button>` : ''}
                             ${canManage ? `<button onclick="deleteMessage('${msg.id}')" class="hover:underline text-red-300">🗑️</button>` : ''}
                         </div>
                     </div>
@@ -3013,7 +3157,6 @@
         }
 
         function toggleVoiceRecord() {
-            // Проверка мута
             if (db.mutedUsers && db.mutedUsers[currentUser.login] && db.mutedUsers[currentUser.login] > Date.now()) {
                 showCustomModal('Мут', 'У вас активен мут.', false, null, '🔇');
                 return;
@@ -3197,7 +3340,7 @@
                         <span class="text-gray-500">${new Date(post.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                     </div>
                     <div class="flex items-center space-x-2">
-                        <img src="${getAvatar(authorObj.avatar)}" class="w-6 h-6 rounded-full object-cover">
+                        <div class="w-6 h-6 rounded-full overflow-hidden">${getAvatarWithMuteBadge(authorObj.avatar, post.author)}</div>
                         <span class="text-xs font-bold ${roleInfo.color}">@${authorDisplayName} ${roleInfo.badge}</span>
                     </div>
                     <div class="text-sm text-gray-200 break-words">${post.text}</div>
@@ -3305,7 +3448,7 @@
                 renderNewsFeed();
                 socket.emit('refresh-db');
             } else {
-                showCustomModal('Ошибка', data.error || 'Нельзя удалить запись', false, null, '⚠️');
+                showCustomModal('Ошибка', data.error || 'Нельзя удалить запись', false, null, '⚠️️');
             }
         }
 
@@ -3335,11 +3478,11 @@
                 card.innerHTML = `
                     <div class="flex items-center justify-between">
                         <div class="flex items-center space-x-3">
-                            <img src="${getAvatar(authorObj.avatar)}" class="w-10 h-10 rounded-full object-cover">
+                            <div class="w-10 h-10 rounded-full overflow-hidden">${getAvatarWithMuteBadge(authorObj.avatar, post.author)}</div>
                             <div>
                                 <div class="font-bold flex items-center space-x-2">
                                     <span class="${roleInfo.color}">@${post.author}</span>
-                                    ${roleInfo.badge ? `<span class="text-[10px] bg-purple-600/30 text-purple-300 px-1.5 py-0.5 rounded-md">${roleInfo.title}</span>` : ''}
+                                    ${roleInfo.badge && !isUserMutedAnywhere(post.author) ? `<span class="text-[10px] bg-purple-600/30 text-purple-300 px-1.5 py-0.5 rounded-md">${roleInfo.title}</span>` : ''}
                                 </div>
                                 <div class="text-xs text-gray-500">${new Date(post.timestamp).toLocaleString()}</div>
                             </div>
@@ -3384,7 +3527,13 @@
         }
 
         function fillProfileData() {
-            document.getElementById('profile-avatar-preview').src = getAvatar(currentUser.avatar);
+            const avPreview = document.getElementById('profile-avatar-preview');
+            const muteOverlay = document.getElementById('profile-mute-badge-overlay');
+            if (avPreview) avPreview.src = getAvatar(currentUser.avatar);
+            if (muteOverlay) {
+                if (isUserMutedAnywhere(currentUser.login)) muteOverlay.classList.remove('hidden');
+                else muteOverlay.classList.add('hidden');
+            }
             document.getElementById('profile-username').textContent = `@${currentUser.login}`;
             document.getElementById('profile-name-input').value = currentUser.name || '';
             document.getElementById('profile-bio-input').value = currentUser.bio || '';
@@ -3437,7 +3586,12 @@
             try {
                 const noiseSup = document.getElementById('noise-suppression-checkbox')?.checked ?? true;
                 localStream = await navigator.mediaDevices.getUserMedia({ audio: { noiseSuppression: noiseSup, echoCancellation: true } });
-                peerConnection = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+                peerConnection = new RTCPeerConnection({
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                });
                 localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
                 peerConnection.ontrack = e => {
@@ -3446,7 +3600,7 @@
                 };
 
                 peerConnection.onicecandidate = e => {
-                    if (e.candidate) socket.emit('ice-candidate', { to: callTargetUser, candidate: e.candidate });
+                    if (e.candidate) socket.emit('webrtc-candidate', { targetLogin: callTargetUser, candidate: e.candidate });
                 };
 
                 peerConnection.oniceconnectionstatechange = () => {
@@ -3458,9 +3612,8 @@
 
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
-                socket.emit('call-user', { to: callTargetUser, offer, from: currentUser.login });
+                socket.emit('call-user', { targetLogin: callTargetUser, offer, callerLogin: currentUser.login });
 
-                // Таймаут подключения (15 секунд)
                 connectionTimeout = setTimeout(() => {
                     if (document.getElementById('call-status-text').textContent.includes('Вызов')) {
                         showCustomModal('Нет ответа', 'Абонент не ответил на вызов.', false, null, '📞');
@@ -3483,38 +3636,33 @@
             const group = db.groups[activeGroupWorkspaceId];
             if (!group) return;
 
-            // Проверка мута
             if (group.groupMutedUsers && group.groupMutedUsers[currentUser.login] && group.groupMutedUsers[currentUser.login] > Date.now()) {
                 const left = Math.ceil((group.groupMutedUsers[currentUser.login] - Date.now()) / 60000);
                 showCustomModal('Мут в группе', `Вы замучены в этой группе. Осталось минут: ${left}`, false, null, '🔇');
                 return;
             }
 
-            const targets = group.members.filter(m => m !== currentUser.login);
             document.getElementById('call-partner-name').textContent = `Группа: ${group.name}`;
             document.getElementById('call-status-text').textContent = 'Подключение к конференции...';
             document.getElementById('single-call-modal').classList.remove('hidden');
             isInCallOrConference = true;
-            socket.emit('start-group-conference', { groupId: group.id, targets, from: currentUser.login });
         }
 
         function startGroupConference(groupId, channelId) {
             const group = db.groups[groupId];
             if (!group) return;
-            const targets = group.members.filter(m => m !== currentUser.login);
             document.getElementById('call-partner-name').textContent = `Канал: ${channelId}`;
             document.getElementById('call-status-text').textContent = 'Подключение к голосовому каналу...';
             document.getElementById('single-call-modal').classList.remove('hidden');
             isInCallOrConference = true;
-            socket.emit('start-group-conference', { groupId, channelId, targets, from: currentUser.login });
         }
 
-        socket.on('incoming-call', async ({ from, offer, isGroup, groupId }) => {
-            incomingCallerLogin = from;
+        socket.on('incoming-call', async ({ callerLogin, offer }) => {
+            incomingCallerLogin = callerLogin;
             incomingOffer = offer;
             startIncomingRingtone();
-            document.getElementById('incoming-caller-title').textContent = isGroup ? `Голосовой вызов из группы` : `Входящий вызов от @${from}`;
-            document.getElementById('incoming-caller-avatar').src = getAvatar(db.users[from]?.avatar);
+            document.getElementById('incoming-caller-title').textContent = `Входящий вызов от @${callerLogin}`;
+            document.getElementById('incoming-caller-avatar').src = getAvatar(db.users[callerLogin]?.avatar);
             document.getElementById('incoming-call-modal').classList.remove('hidden');
         });
 
@@ -3522,7 +3670,7 @@
             stopIncomingRingtone();
             if (connectionTimeout) clearTimeout(connectionTimeout);
             document.getElementById('incoming-call-modal').classList.add('hidden');
-            document.getElementById('call-partner-name').textContent = incomingCallerLogin || 'Конференция';
+            document.getElementById('call-partner-name').textContent = incomingCallerLogin || 'Вызов';
             document.getElementById('call-status-text').textContent = 'Соединение установлено';
             document.getElementById('single-call-modal').classList.remove('hidden');
             isInCallOrConference = true;
@@ -3530,7 +3678,12 @@
             try {
                 const noiseSup = document.getElementById('noise-suppression-checkbox')?.checked ?? true;
                 localStream = await navigator.mediaDevices.getUserMedia({ audio: { noiseSuppression: noiseSup, echoCancellation: true } });
-                peerConnection = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+                peerConnection = new RTCPeerConnection({
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
+                });
                 localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
                 peerConnection.ontrack = e => {
@@ -3539,7 +3692,7 @@
                 };
 
                 peerConnection.onicecandidate = e => {
-                    if (e.candidate && incomingCallerLogin) socket.emit('ice-candidate', { to: incomingCallerLogin, candidate: e.candidate });
+                    if (e.candidate && incomingCallerLogin) socket.emit('webrtc-candidate', { targetLogin: incomingCallerLogin, candidate: e.candidate });
                 };
 
                 peerConnection.oniceconnectionstatechange = () => {
@@ -3553,18 +3706,14 @@
                     await peerConnection.setRemoteDescription(new RTCSessionDescription(incomingOffer));
                     const answer = await peerConnection.createAnswer();
                     await peerConnection.setLocalDescription(answer);
-                    if (incomingCallerLogin) socket.emit('call-accepted', { to: incomingCallerLogin, answer });
-                } else if (incomingCallerLogin) {
-                    const offer = await peerConnection.createOffer();
-                    await peerConnection.setLocalDescription(offer);
-                    socket.emit('call-user', { to: incomingCallerLogin, offer, from: currentUser.login });
+                    if (incomingCallerLogin) socket.emit('accept-call', { targetLogin: incomingCallerLogin, answer, accepterLogin: currentUser.login });
                 }
             } catch (e) {
                 hangUpCall();
             }
         }
 
-        socket.on('call-answered', async ({ answer }) => {
+        socket.on('call-accepted', async ({ answer }) => {
             stopOutgoingRingtone();
             stopIncomingRingtone();
             if (connectionTimeout) clearTimeout(connectionTimeout);
@@ -3575,21 +3724,26 @@
             }
         });
 
-        socket.on('ice-candidate', async ({ candidate }) => {
+        socket.on('call-rejected', () => {
+            showCustomModal('Вызов отклонен', 'Собеседник отклонил вызов.', false, null, '📞');
+            hangUpCall();
+        });
+
+        socket.on('call-hangup', () => {
+            hangUpCall();
+        });
+
+        socket.on('webrtc-candidate', async ({ candidate }) => {
             if (peerConnection && candidate) {
                 try { await peerConnection.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) {}
             }
-        });
-
-        socket.on('hang-up', () => {
-            hangUpCall();
         });
 
         function rejectIncomingCall() {
             stopIncomingRingtone();
             if (connectionTimeout) clearTimeout(connectionTimeout);
             document.getElementById('incoming-call-modal').classList.add('hidden');
-            if (incomingCallerLogin) socket.emit('hang-up', { to: incomingCallerLogin });
+            if (incomingCallerLogin) socket.emit('reject-call', { targetLogin: incomingCallerLogin });
         }
 
         function hangUpCall() {
@@ -3604,8 +3758,8 @@
                 peerConnection.close();
                 peerConnection = null;
             }
-            if (callTargetUser) socket.emit('hang-up', { to: callTargetUser });
-            if (incomingCallerLogin) socket.emit('hang-up', { to: incomingCallerLogin });
+            if (callTargetUser) socket.emit('hangup-call', { targetLogin: callTargetUser });
+            if (incomingCallerLogin) socket.emit('hangup-call', { targetLogin: incomingCallerLogin });
 
             document.getElementById('single-call-modal').classList.add('hidden');
             document.getElementById('incoming-call-modal').classList.add('hidden');
