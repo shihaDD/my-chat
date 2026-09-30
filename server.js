@@ -1,7 +1,6 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const path = require('path');
 const mongoose = require('mongoose');
 
 const app = express();
@@ -12,7 +11,6 @@ const io = new Server(server, {
 
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/messenger_db';
 
@@ -153,6 +151,8 @@ function containsMat(text) {
     const matRegex = /(ху[йяёеию]|пизд|бля[дт]|ебат|ебал|ебну|сук[аиу]|mraz|мраз[ью]|уёб|выёб|заёб|поёб|наёб|отёб|гандон|гондон|мудак|пидор|педик|пидар|чмо|шлюх|бляд|сук[аи]|мандавош|манда|епт|епрст)/i;
     return matRegex.test(text);
 }
+
+// --- API ЭНДПОИНТЫ ---
 
 app.get('/api/internet-news', async (req, res) => {
     const internetNews = [
@@ -351,18 +351,18 @@ app.post('/api/remove-friend', async (req, res) => {
 });
 
 app.post('/api/create-group', async (req, res) => {
-    const { name, isClosed } = req.body;
-    const creator = req.body.creator || req.body.login;
-    if (!name || !creator) return res.json({ success: false, error: 'Недостаточно данных' });
+    const { name, isClosed, creator, login } = req.body;
+    const author = creator || login;
+    if (!name || !author) return res.json({ success: false, error: 'Недостаточно данных' });
 
     const groupId = 'group_' + Date.now();
     db.groups[groupId] = {
         id: groupId,
         name: name.trim(),
-        creator: creator,
+        creator: author,
         avatar: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150',
-        members: [creator],
-        roles: { [creator]: 'Лидер' },
+        members: [author],
+        roles: { [author]: 'Лидер' },
         customRoles: {
             'Админ': { canPost: true, canDelete: true, canVoice: true, canDuplicateNews: true },
             'Участник': { canPost: false, canDelete: false, canVoice: true, canDuplicateNews: false }
@@ -872,32 +872,6 @@ app.post('/api/publish-news', async (req, res) => {
     res.json({ success: true, db });
 });
 
-app.post('/api/edit-news', async (req, res) => {
-    const { login, postId, newText } = req.body;
-    const post = (db.news || []).find(p => p.id === postId);
-    if (!post) return res.json({ success: false, error: 'Новость не найдена' });
-    if (post.author !== login && !hasFullAccess(login)) {
-        return res.json({ success: false, error: 'Недостаточно прав' });
-    }
-    post.text = newText;
-    saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
-});
-
-app.post('/api/delete-news', async (req, res) => {
-    const { login, postId } = req.body;
-    const post = (db.news || []).find(p => p.id === postId);
-    if (!post) return res.json({ success: false, error: 'Новость не найдена' });
-    if (post.author !== login && !hasFullAccess(login)) {
-        return res.json({ success: false, error: 'Недостаточно прав' });
-    }
-    db.news = db.news.filter(p => p.id !== postId);
-    saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
-});
-
 app.post('/api/publish-group-post', async (req, res) => {
     const { groupId, login, text, announcement } = req.body;
     const group = db.groups[groupId];
@@ -938,43 +912,6 @@ app.post('/api/publish-group-post', async (req, res) => {
         });
     }
 
-    if (containsMat(text)) {
-        if (!db.violations) db.violations = [];
-        db.violations.push({
-            id: 'viol_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
-            author: login,
-            text,
-            timestamp: Date.now(),
-            source: 'group_post',
-            groupName: group.name,
-            groupId,
-            groupPostId: postId
-        });
-    }
-
-    saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
-});
-
-app.post('/api/delete-group-post', async (req, res) => {
-    const { login, groupId, postId } = req.body;
-    const group = db.groups[groupId];
-    if (!group) return res.json({ success: false, error: 'Группа не найдена' });
-
-    const post = (group.posts || []).find(p => p.id === postId);
-    if (!post) return res.json({ success: false, error: 'Пост не найден' });
-
-    const isLeader = group.creator === login;
-    const myRole = group.roles?.[login];
-    const rolePerms = group.customRoles?.[myRole];
-    const canDelete = isLeader || myRole === 'Админ' || (rolePerms && rolePerms.canDelete) || post.author === login || hasFullAccess(login);
-
-    if (!canDelete) {
-        return res.json({ success: false, error: 'Недостаточно прав для удаления поста' });
-    }
-
-    group.posts = group.posts.filter(p => p.id !== postId);
     saveDb();
     io.emit('update-db', db);
     res.json({ success: true, db });
@@ -998,40 +935,9 @@ app.post('/api/resolve-violation-action', async (req, res) => {
             text: viol.text,
             timestamp: Date.now()
         });
-    } else if (action === 'edit') {
-        viol.text = newText;
-        if (!db.news) db.news = [];
-        db.news.unshift({
-            id: 'news_' + Date.now(),
-            author: viol.author,
-            groupName: viol.groupName || '',
-            groupVerified: viol.groupId ? !!db.groups[viol.groupId]?.isVerified : false,
-            text: newText,
-            timestamp: Date.now()
-        });
-    } else if (action === 'mute') {
-        if (!db.mutedUsers) db.mutedUsers = {};
-        const mins = parseInt(muteMinutes) || 60;
-        const clampedMins = Math.min(Math.max(mins, 1), 9999);
-        db.mutedUsers[viol.author.toLowerCase()] = {
-            expires: Date.now() + (clampedMins * 60 * 1000),
-            reason: reason || 'Нарушение правил'
-        };
     } else if (action === 'delete') {
         if (viol.messageId && viol.storeKey && db.messagesStore[viol.storeKey]) {
             db.messagesStore[viol.storeKey] = db.messagesStore[viol.storeKey].filter(m => m.id !== viol.messageId);
-        }
-        if (viol.postId) {
-            db.news = db.news.filter(n => n.id !== viol.postId);
-        }
-        if (viol.groupId && viol.groupPostId && db.groups[viol.groupId]) {
-            const grp = db.groups[viol.groupId];
-            if (grp.posts) {
-                grp.posts = grp.posts.filter(p => p.id !== viol.groupPostId);
-            }
-        }
-        if (viol.text && db.news) {
-            db.news = db.news.filter(n => n.text !== viol.text);
         }
     }
 
@@ -1041,85 +947,360 @@ app.post('/api/resolve-violation-action', async (req, res) => {
     res.json({ success: true, db });
 });
 
-io.on('connection', (socket) => {
-    socket.on('register', (login) => {
-        if (login) {
-            socket.userLogin = login.toLowerCase();
-            socket.join(socket.userLogin);
-            db.lastSeen[socket.userLogin] = Date.now();
+// --- ВЕБ-ИНТЕРФЕЙС (ФРОНТЕНД) ---
+
+app.get('/', (req, res) => {
+    res.send(`
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Современный Мессенджер</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body class="bg-gray-900 text-white h-screen flex flex-col font-sans">
+    <!-- Экран авторизации -->
+    <div id="auth-screen" class="flex-1 flex items-center justify-center">
+        <div class="bg-gray-800 p-8 rounded-2xl w-96 border border-gray-700 shadow-xl">
+            <h2 id="auth-title" class="text-2xl font-bold mb-6 text-center text-purple-400">Вход в мессенджер</h2>
+            <form id="auth-form" onsubmit="handleAuth(event)" class="space-y-4">
+                <input type="text" id="login-input" placeholder="Логин" required class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 focus:outline-none focus:border-purple-500">
+                <input type="text" id="name-input" placeholder="Имя (для регистрации)" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 focus:outline-none focus:border-purple-500 hidden">
+                <input type="password" id="password-input" placeholder="Пароль" required class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 focus:outline-none focus:border-purple-500">
+                <button type="submit" id="auth-btn" class="w-full bg-purple-600 hover:bg-purple-700 font-bold py-3 rounded-xl transition">Войти</button>
+            </form>
+            <button onclick="toggleAuthMode()" class="w-full mt-4 text-xs text-gray-400 hover:text-white transition" id="toggle-auth-text">Нет аккаунта? Зарегистрироваться</button>
+        </div>
+    </div>
+
+    <!-- Основной интерфейс -->
+    <div id="main-app" class="hidden flex-1 flex overflow-hidden">
+        <!-- Левая панель с вкладками и списком групп -->
+        <div class="w-80 bg-gray-800 border-r border-gray-700 flex flex-col">
+            <div class="p-4 border-b border-gray-700 flex justify-between items-center">
+                <span id="current-username" class="font-bold text-purple-400 text-sm truncate"></span>
+                <button onclick="logout()" class="text-xs bg-red-600/30 hover:bg-red-600/50 text-red-300 px-3 py-1.5 rounded-lg transition">Выйти</button>
+            </div>
+            <div class="p-4 border-b border-gray-700">
+                <input type="text" id="group-search-input" oninput="renderGroupsList()" placeholder="Поиск групп..." class="w-full bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-purple-500">
+                <button onclick="openCreateGroupModal()" class="w-full mt-2 bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 py-2 rounded-xl text-xs font-bold transition">Создать группу</button>
+            </div>
+            <div id="groups-list" class="flex-1 overflow-y-auto p-4 space-y-2">
+                <!-- Список сообществ -->
+            </div>
+        </div>
+
+        <!-- Рабочая область -->
+        <div class="flex-1 flex flex-col bg-gray-900" id="chat-workspace">
+            <div class="flex-1 flex items-center justify-center text-gray-500">Выберите сообщество для общения</div>
+        </div>
+    </div>
+
+    <!-- Модальное окно создания группы -->
+    <div id="create-group-modal" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+        <div class="bg-gray-800 p-6 rounded-2xl w-96 border border-gray-700">
+            <h3 class="text-lg font-bold mb-4 text-purple-400">Создать сообщество</h3>
+            <input type="text" id="new-group-name" placeholder="Название группы" class="w-full bg-gray-900 border border-gray-700 rounded-xl px-4 py-2 mb-4 focus:outline-none focus:border-purple-500">
+            <div class="flex justify-end space-x-2">
+                <button onclick="closeCreateGroupModal()" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-xl text-xs">Отмена</button>
+                <button onclick="createGroup()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-xl text-xs font-bold">Создать</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const socket = io();
+        let currentUser = null;
+        let db = { groups: {}, users: {}, messagesStore: {} };
+        let isRegisterMode = false;
+        let activeGroupId = null;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const savedLogin = localStorage.getItem('messenger_login');
+            if (savedLogin) {
+                fetch('/api/restore-session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ login: savedLogin })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success) {
+                        currentUser = data.user;
+                        db = data.db;
+                        enterApp();
+                    }
+                });
+            }
+        });
+
+        socket.on('update-db', (serverDb) => {
+            db = serverDb;
+            renderGroupsList();
+            if (activeGroupId) {
+                renderGroupWorkspace(activeGroupId);
+            }
+        });
+
+        socket.on('receive-group-message', ({ groupId, msg, subgroup }) => {
+            const storeKey = \`group_\${groupId}_\${subgroup || 'main'}\`;
+            if (!db.messagesStore[storeKey]) db.messagesStore[storeKey] = [];
+            db.messagesStore[storeKey].push(msg);
+            if (activeGroupId === groupId) {
+                renderGroupMessages(groupId, subgroup);
+            }
+        });
+
+        function toggleAuthMode() {
+            isRegisterMode = !isRegisterMode;
+            document.getElementById('auth-title').innerText = isRegisterMode ? 'Регистрация' : 'Вход в мессенджер';
+            document.getElementById('auth-btn').innerText = isRegisterMode ? 'Зарегистрироваться' : 'Войти';
+            document.getElementById('name-input').classList.toggle('hidden', !isRegisterMode);
+            document.getElementById('toggle-auth-text').innerText = isRegisterMode ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Зарегистрироваться';
         }
-    });
 
-    socket.on('refresh-db', () => {
-        io.emit('update-db', db);
-    });
+        function handleAuth(e) {
+            e.preventDefault();
+            const login = document.getElementById('login-input').value.trim();
+            const password = document.getElementById('password-input').value.trim();
+            const name = document.getElementById('name-input').value.trim();
 
-    socket.on('join-group-room', (groupId) => {
-        socket.join(`group_${groupId}`);
-    });
+            const endpoint = isRegisterMode ? '/api/register' : '/api/login';
+            const body = isRegisterMode ? { login, name, password } : { login, password };
 
-    socket.on('call-user', ({ targetLogin, offer, callerLogin }) => {
-        io.to(targetLogin.toLowerCase()).emit('incoming-call', { callerLogin, offer });
-    });
-
-    socket.on('accept-call', ({ targetLogin, answer, accepterLogin }) => {
-        io.to(targetLogin.toLowerCase()).emit('call-accepted', { answer, accepterLogin });
-    });
-
-    socket.on('reject-call', ({ targetLogin }) => {
-        io.to(targetLogin.toLowerCase()).emit('call-rejected');
-    });
-
-    socket.on('hangup-call', ({ targetLogin }) => {
-        io.to(targetLogin.toLowerCase()).emit('call-hangup');
-    });
-
-    socket.on('webrtc-candidate', ({ targetLogin, candidate }) => {
-        io.to(targetLogin.toLowerCase()).emit('webrtc-candidate', { candidate });
-    });
-
-    socket.on('join-voice-channel', ({ groupId, channelId, login }) => {
-        const roomKey = `voice_${groupId}_${channelId}`;
-        socket.join(roomKey);
-        socket.roomKey = roomKey;
-        const clients = io.sockets.adapter.rooms.get(roomKey);
-        const socketsInRoom = clients ? Array.from(clients).filter(id => id !== socket.id) : [];
-        socket.emit('voice-channel-users', { users: socketsInRoom });
-        socket.to(roomKey).emit('user-joined-voice', { socketId: socket.id, login });
-    });
-
-    socket.on('leave-voice-channel', ({ groupId, channelId }) => {
-        const roomKey = `voice_${groupId}_${channelId}`;
-        socket.leave(roomKey);
-        socket.to(roomKey).emit('user-left-voice', { socketId: socket.id });
-        socket.roomKey = null;
-    });
-
-    socket.on('voice-offer', ({ targetSocketId, offer, senderLogin }) => {
-        io.to(targetSocketId).emit('voice-offer', { offer, senderLogin, senderSocketId: socket.id });
-    });
-
-    socket.on('voice-answer', ({ targetSocketId, answer, senderSocketId }) => {
-        io.to(targetSocketId).emit('voice-answer', { answer, senderSocketId: socket.id });
-    });
-
-    socket.on('voice-candidate', ({ targetSocketId, candidate }) => {
-        io.to(targetSocketId).emit('voice-candidate', { candidate, senderSocketId: socket.id });
-    });
-
-    socket.on('disconnect', () => {
-        if (socket.userLogin) {
-            db.lastSeen[socket.userLogin] = Date.now();
+            fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    currentUser = data.user;
+                    db = data.db;
+                    localStorage.setItem('messenger_login', currentUser.login);
+                    enterApp();
+                } else {
+                    alert(data.error);
+                }
+            });
         }
-        if (socket.roomKey) {
-            socket.to(socket.roomKey).emit('user-left-voice', { socketId: socket.id });
+
+        function enterApp() {
+            document.getElementById('auth-screen').classList.add('hidden');
+            document.getElementById('main-app').classList.remove('hidden');
+            document.getElementById('current-username').innerText = currentUser.name || currentUser.login;
+            socket.emit('register', currentUser.login);
+            renderGroupsList();
         }
-    });
+
+        function logout() {
+            localStorage.removeItem('messenger_login');
+            currentUser = null;
+            document.getElementById('main-app').classList.add('hidden');
+            document.getElementById('auth-screen').classList.remove('hidden');
+        }
+
+        function renderGroupsList() {
+            const groupsListEl = document.getElementById('groups-list');
+            if (!groupsListEl) return;
+            const searchQuery = (document.getElementById('group-search-input')?.value || '').toLowerCase();
+            
+            let html = '';
+            const groupsArray = Object.values(db.groups || {});
+            
+            if (groupsArray.length === 0) {
+                groupsListEl.innerHTML = \`<div class="text-xs text-gray-500 text-center py-4">Нет доступных групп</div>\`;
+                return;
+            }
+
+            const filtered = groupsArray.filter(g => g.name.toLowerCase().includes(searchQuery));
+            if (filtered.length === 0) {
+                groupsListEl.innerHTML = \`<div class="text-xs text-gray-500 text-center py-4">Группы не найдены</div>\`;
+                return;
+            }
+
+            filtered.forEach(g => {
+                const isMember = g.members && g.members.includes(currentUser.login);
+                html += \`
+                    <div class="bg-gray-800/60 border border-gray-700/50 p-3 rounded-xl flex items-center justify-between hover:border-purple-500/50 transition">
+                        <div class="flex items-center space-x-3 cursor-pointer flex-1" onclick="openGroupWorkspace('\${g.id}')">
+                            <img src="\${g.avatar}" class="w-10 h-10 rounded-xl object-cover border border-purple-500/30">
+                            <div>
+                                <div class="font-bold text-white text-sm flex items-center space-x-1">
+                                    <span>\${g.name}</span>
+                                    \${g.isVerified ? '<span class="text-blue-400 text-xs">✔</span>' : ''}
+                                    \${g.isClosed ? '<span class="text-yellow-400 text-xs">🔒</span>' : ''}
+                                </div>
+                                <div class="text-xs text-gray-400">Участников: \${g.members ? g.members.length : 0}</div>
+                            </div>
+                        </div>
+                        <div>
+                            \${isMember ? 
+                                \`<button onclick="openGroupWorkspace('\${g.id}')" class="bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 px-3 py-1.5 rounded-lg text-xs font-bold transition">Открыть</button>\` :
+                                (g.isClosed ? 
+                                    \`<button onclick="requestJoinGroup('\${g.id}')" class="bg-yellow-600/30 hover:bg-yellow-600/50 text-yellow-300 px-3 py-1.5 rounded-lg text-xs font-bold transition">Заявка</button>\` :
+                                    \`<button onclick="joinGroup('\${g.id}')" class="bg-green-600/30 hover:bg-green-600/50 text-green-300 px-3 py-1.5 rounded-lg text-xs font-bold transition">Вступить</button>\`
+                                )
+                            }
+                        </div>
+                    </div>
+                \`;
+            });
+            groupsListEl.innerHTML = html;
+        }
+
+        function openCreateGroupModal() {
+            document.getElementById('create-group-modal').classList.remove('hidden');
+        }
+
+        function closeCreateGroupModal() {
+            document.getElementById('create-group-modal').classList.add('hidden');
+        }
+
+        function createGroup() {
+            const name = document.getElementById('new-group-name').value.trim();
+            if (!name) return alert('Введите название группы');
+
+            fetch('/api/create-group', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name, creator: currentUser.login })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    db = data.db;
+                    closeCreateGroupModal();
+                    document.getElementById('new-group-name').value = '';
+                    renderGroupsList();
+                } else {
+                    alert(data.error);
+                }
+            });
+        }
+
+        function joinGroup(groupId) {
+            fetch('/api/join-group', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, login: currentUser.login })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    db = data.db;
+                    renderGroupsList();
+                    openGroupWorkspace(groupId);
+                } else {
+                    alert(data.error);
+                }
+            });
+        }
+
+        function requestJoinGroup(groupId) {
+            fetch('/api/request-join-group', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, login: currentUser.login })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Заявка на вступление отправлена администраторам группы.');
+                } else {
+                    alert(data.error);
+                }
+            });
+        }
+
+        function openGroupWorkspace(groupId) {
+            activeGroupId = groupId;
+            socket.emit('join-group-room', groupId);
+            renderGroupWorkspace(groupId);
+        }
+
+        function renderGroupWorkspace(groupId, subgroup = 'main') {
+            const g = db.groups[groupId];
+            if (!g) return;
+            const workspace = document.getElementById('chat-workspace');
+            const storeKey = \`group_\${groupId}_\${subgroup}\`;
+            const messages = db.messagesStore[storeKey] || [];
+
+            let messagesHtml = messages.map(m => \`
+                <div class="mb-3">
+                    <div class="text-xs text-purple-400 font-bold">\${m.sender}</div>
+                    <div class="bg-gray-800 p-3 rounded-xl mt-1 text-sm text-white inline-block max-w-lg">\${m.text}</div>
+                </div>
+            \`).join('');
+
+            workspace.innerHTML = \`
+                <div class="p-4 border-b border-gray-700 flex items-center justify-between bg-gray-800/40">
+                    <div class="flex items-center space-x-3">
+                        <img src="\${g.avatar}" class="w-10 h-10 rounded-xl object-cover">
+                        <span class="font-bold text-white">\${g.name}</span>
+                    </div>
+                </div>
+                <div id="messages-container" class="flex-1 p-4 overflow-y-auto space-y-2">\${messagesHtml}</div>
+                <div class="p-4 border-t border-gray-700 bg-gray-800/40 flex space-x-2">
+                    <input type="text" id="chat-input" placeholder="Введите сообщение..." onkeydown="if(event.key==='Enter') sendMessage('\${groupId}', '\${subgroup}')" class="flex-1 bg-gray-900 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-purple-500">
+                    <button onclick="sendMessage('\${groupId}', '\${subgroup}')" class="bg-purple-600 hover:bg-purple-700 px-6 py-2.5 rounded-xl font-bold text-sm transition">Отправить</button>
+                </div>
+            \`;
+            const container = document.getElementById('messages-container');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function renderGroupMessages(groupId, subgroup = 'main') {
+            const storeKey = \`group_\${groupId}_\${subgroup}\`;
+            const messages = db.messagesStore[storeKey] || [];
+            const container = document.getElementById('messages-container');
+            if (!container) return;
+
+            container.innerHTML = messages.map(m => \`
+                <div class="mb-3">
+                    <div class="text-xs text-purple-400 font-bold">\${m.sender}</div>
+                    <div class="bg-gray-800 p-3 rounded-xl mt-1 text-sm text-white inline-block max-w-lg">\${m.text}</div>
+                </div>
+            \`).join('');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function sendMessage(groupId, subgroup = 'main') {
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            fetch('/api/send-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sender: currentUser.login,
+                    text,
+                    chatType: 'group',
+                    chatId: groupId,
+                    subgroup
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    input.value = '';
+                } else {
+                    alert(data.error);
+                }
+            });
+        }
+    </script>
+</body>
+</html>
+    `);
 });
 
 const PORT = process.env.PORT || 3000;
 initDatabase().then(() => {
     server.listen(PORT, () => {
-        console.log(`Сервер запущен на порту ${PORT}`);
+        console.log(`Приложение успешно запущено! Откройте в браузере: http://localhost:${PORT}`);
     });
 });
