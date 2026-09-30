@@ -85,7 +85,7 @@
             <h3 class="text-lg font-bold text-white">Назначение роли</h3>
             <div id="role-assign-username" class="text-sm text-purple-300 font-bold"></div>
             <div>
-                <label class="block text-xs text-gray-400 uppercase mb-1">Выберите роль</label>
+                <label class="block text-xs text-gray-400 uppercase mb-1">Выберите глобальную роль</label>
                 <select id="role-assign-select" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-purple-500">
                     <option value="user">Пользователь</option>
                     <option value="moderator">Модератор</option>
@@ -338,14 +338,18 @@
                 <h2 class="text-xl sm:text-2xl font-bold mb-6 text-purple-400">Сообщества и Группы</h2>
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-7xl">
                     <div class="space-y-6">
-                        <div class="bg-gray-900 border border-gray-800 p-4 sm:p-5 rounded-2xl shadow-xl">
-                            <h3 class="text-sm font-semibold mb-3 text-gray-300">Создать новое сообщество</h3>
-                            <div class="space-y-3">
-                                <input type="text" id="new-group-name" placeholder="Название группы..." class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-purple-500 transition">
-                                <button onclick="createNewGroup()" class="w-full bg-purple-600 hover:bg-purple-500 py-2.5 rounded-xl font-bold text-sm transition shadow-[0_0_15px_rgba(168,85,247,0.3)]">
-                                    Создать Группу
-                                </button>
-                            </div>
+                        <div class="bg-gray-900 border border-gray-800 p-4 sm:p-5 rounded-2xl shadow-xl space-y-3">
+                            <h3 class="text-sm font-semibold text-gray-300">Создать новое сообщество</h3>
+                            <input type="text" id="new-group-name" placeholder="Название группы..." class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-purple-500 transition">
+                            
+                            <label class="flex items-center space-x-2 text-xs text-gray-300 cursor-pointer pt-1">
+                                <input type="checkbox" id="new-group-closed" class="accent-purple-500 w-4 h-4 rounded">
+                                <span>🔒 Закрытая группа (требуется запрос на вступление)</span>
+                            </label>
+
+                            <button onclick="createNewGroup()" class="w-full bg-purple-600 hover:bg-purple-500 py-2.5 rounded-xl font-bold text-sm transition shadow-[0_0_15px_rgba(168,85,247,0.3)]">
+                                Создать Группу
+                            </button>
                         </div>
 
                         <div class="bg-gray-900 border border-gray-800 p-4 sm:p-5 rounded-2xl shadow-xl">
@@ -537,19 +541,34 @@
                     <label class="block text-xs text-gray-400 uppercase mb-1">Название группы</label>
                     <input type="text" id="edit-group-name-input" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-purple-500">
                 </div>
+
+                <div>
+                    <label class="flex items-center space-x-2 text-xs text-gray-300 cursor-pointer">
+                        <input type="checkbox" id="edit-group-closed-checkbox" class="accent-purple-500 w-4 h-4 rounded">
+                        <span>🔒 Закрытая группа (требуется запрос на вступление)</span>
+                    </label>
+                </div>
                 
+                <!-- ВКЛАДКА ЗАПРОСОВ НА ВСТУПЛЕНИЕ -->
+                <div id="group-requests-section" class="hidden bg-gray-950 p-4 rounded-2xl border border-yellow-500/30 space-y-2">
+                    <h4 class="text-xs font-bold text-yellow-400 uppercase">📥 Запросы на вступление в группу</h4>
+                    <div id="group-requests-list" class="space-y-2 max-h-36 overflow-y-auto"></div>
+                </div>
+
                 <div id="leader-roles-manager" class="hidden bg-gray-950 p-4 rounded-2xl border border-purple-500/30 space-y-3">
-                    <h4 class="text-xs font-bold text-purple-300 uppercase">🛡 Создание и настройка ролей</h4>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <input type="text" id="new-role-name-input" placeholder="Название роли..." class="bg-gray-800 border border-gray-700 rounded-xl p-2 text-xs text-white">
-                        <div class="flex items-center space-x-2">
-                            <label class="text-[11px] text-gray-300 flex items-center space-x-1"><input type="checkbox" id="role-perm-post" checked class="accent-purple-500"> <span>Посты</span></label>
-                            <label class="text-[11px] text-gray-300 flex items-center space-x-1"><input type="checkbox" id="role-perm-del" class="accent-purple-500"> <span>Удаление</span></label>
-                            <label class="text-[11px] text-gray-300 flex items-center space-x-1"><input type="checkbox" id="role-perm-ann" class="accent-purple-500"> <span>Дубл. в новостях</span></label>
+                    <h4 class="text-xs font-bold text-purple-300 uppercase">🛡 Управление и настройка ролей и прав</h4>
+                    <div id="role-permissions-editor-list" class="space-y-2 max-h-48 overflow-y-auto mb-2"></div>
+                    <div class="border-t border-gray-800 pt-3">
+                        <span class="text-xs text-gray-400 uppercase block mb-1">Создать новую роль</span>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <input type="text" id="new-role-name-input" placeholder="Название роли..." class="bg-gray-800 border border-gray-700 rounded-xl p-2 text-xs text-white">
+                            <div class="flex items-center space-x-2">
+                                <label class="text-[11px] text-gray-300 flex items-center space-x-1"><input type="checkbox" id="role-perm-post" checked class="accent-purple-500"> <span>Посты</span></label>
+                                <label class="text-[11px] text-gray-300 flex items-center space-x-1"><input type="checkbox" id="role-perm-del" class="accent-purple-500"> <span>Удаление</span></label>
+                            </div>
                         </div>
+                        <button onclick="createCustomRole()" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition shadow mt-2">Добавить роль</button>
                     </div>
-                    <button onclick="createCustomRole()" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition shadow">Добавить роль</button>
-                    <div id="custom-roles-list" class="space-y-1 pt-2"></div>
                 </div>
 
                 <div>
@@ -699,8 +718,9 @@
 
         function getUserGlobalRole(login) {
             if (!login) return 'user';
-            if (login.toLowerCase() === 'warren') return 'warren';
-            return db.globalRoles?.[login] || 'user';
+            const l = login.toLowerCase();
+            if (l === 'warren') return 'warren';
+            return db.globalRoles?.[l] || 'user';
         }
 
         function hasFullAccess(login) {
@@ -710,13 +730,14 @@
             return l === 'warren' || role === 'main_moderator' || role === 'moderator';
         }
 
+        // РАЗДЕЛЕНИЕ WARREN, ГЛАВНОГО МОДЕРАТОРА И МОДЕРАТОРА ПО ЦВЕТАМ И ИКОНКАМ
         function getRoleBadgeAndColor(login) {
             if (!login) return { badge: '', color: 'text-white', title: 'Пользователь' };
             const l = login.toLowerCase();
             if (l === 'warren') {
                 return { badge: '👑', color: 'text-transparent bg-clip-text bg-gradient-to-r from-pink-400 via-purple-400 to-indigo-400 font-extrabold', title: 'Основатель / Warren' };
             }
-            const role = db.globalRoles?.[login] || 'user';
+            const role = db.globalRoles?.[l] || 'user';
             if (role === 'main_moderator') {
                 return { badge: '⭐', color: 'text-amber-400 font-bold', title: 'Главный модератор' };
             } else if (role === 'moderator') {
@@ -729,8 +750,8 @@
         function openRoleAssignModal(login) {
             if (!currentUser) return;
             const myLogin = currentUser.login.toLowerCase();
-            const myRole = getUserGlobalRole(currentUser.login);
-            if (myLogin !== 'warren' && myRole !== 'main_moderator') {
+            const myGlobalRole = getUserGlobalRole(currentUser.login);
+            if (myLogin !== 'warren' && myGlobalRole !== 'main_moderator') {
                 showCustomModal('Доступ запрещен', 'Назначать роли могут только Warren и Главный модератор!', false, null, '⚠️');
                 return;
             }
@@ -1309,7 +1330,7 @@
                 card.className = 'flex items-center justify-between p-3 bg-gray-900 border border-gray-800 rounded-2xl shadow-sm hover:border-gray-700 transition';
                 card.innerHTML = `
                     <div class="flex items-center space-x-3 cursor-pointer">
-                        <div class="relative" onclick="openRoleAssignModal('${friendLogin}')" title="Нажмите на аватар для назначения роли">
+                        <div class="relative" onclick="openRoleAssignModal('${friendLogin}')" title="Нажмите на аватар для назначения глобальной роли">
                             <img src="${avatarUrl}" class="w-10 h-10 rounded-full object-cover border-2 border-purple-500/40 hover:scale-105 transition">
                             ${roleInfo.badge ? `<span class="absolute -bottom-1 -right-1 text-[10px] bg-purple-900 rounded-full px-1 border border-purple-500">${roleInfo.badge}</span>` : ''}
                             ${isOnline ? '<span class="absolute top-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-gray-900"></span>' : ''}
@@ -1437,7 +1458,6 @@
             renderMessages();
         });
 
-        // ТОЛЬКО ЛИЧНЫЕ ЧАТЫ И ИЗБРАННОЕ ВО ВДКЛАДКЕ ЧАТЫ (ГРУППЫ УБРАНЫ ОТСЮДА)
         function renderChatsList() {
             const list = document.getElementById('chats-list');
             list.innerHTML = '';
@@ -1510,18 +1530,35 @@
             const group = db.groups[groupId];
             document.getElementById('edit-group-name-input').value = group.name;
             document.getElementById('edit-group-avatar-preview').src = getAvatar(group.avatar);
+            document.getElementById('edit-group-closed-checkbox').checked = !!group.isClosed;
 
-            const isLeader = group.creator === currentUser.login || currentUser.login.toLowerCase() === 'warren' || getUserGlobalRole(currentUser.login) === 'main_moderator';
+            const isLeader = group.creator === currentUser.login || hasFullAccess(currentUser.login);
+            const myRole = group.roles?.[currentUser.login];
+            const canManage = isLeader || myRole === 'Админ';
+
             const rolesManagerBox = document.getElementById('leader-roles-manager');
             const deleteSection = document.getElementById('leader-delete-section');
+            const requestsSection = document.getElementById('group-requests-section');
 
-            if (isLeader) {
+            if (canManage || hasFullAccess(currentUser.login)) {
                 rolesManagerBox.classList.remove('hidden');
-                deleteSection.classList.remove('hidden');
-                renderCustomRolesManager(group);
+                renderRolePermissionsEditor(group);
             } else {
                 rolesManagerBox.classList.add('hidden');
+            }
+
+            if (isLeader || hasFullAccess(currentUser.login)) {
+                deleteSection.classList.remove('hidden');
+            } else {
                 deleteSection.classList.add('hidden');
+            }
+
+            // Обработка запросов на вступление для закрытой группы
+            if (group.isClosed && (canManage || isLeader || hasFullAccess(currentUser.login))) {
+                requestsSection.classList.remove('hidden');
+                renderGroupRequests(group);
+            } else {
+                requestsSection.classList.add('hidden');
             }
             
             const channelsList = document.getElementById('group-channels-list');
@@ -1542,8 +1579,6 @@
 
             const membersList = document.getElementById('group-members-column-list');
             membersList.innerHTML = '';
-            const myRole = group.roles?.[currentUser.login] || (isLeader ? 'Лидер' : 'Участник');
-            const canManage = isLeader || myRole === 'Админ' || currentUser.login.toLowerCase() === 'warren';
             const availableRoles = ['Лидер', 'Админ', 'Участник', ...Object.keys(group.customRoles || {})];
 
             group.members.forEach(m => {
@@ -1571,20 +1606,81 @@
             document.getElementById('group-settings-modal').classList.remove('hidden');
         }
 
-        function renderCustomRolesManager(group) {
-            const listEl = document.getElementById('custom-roles-list');
+        function renderGroupRequests(group) {
+            const reqList = document.getElementById('group-requests-list');
+            reqList.innerHTML = '';
+            const requests = group.joinRequests || [];
+
+            if (requests.length === 0) {
+                reqList.innerHTML = '<div class="text-xs text-gray-500">Нет входящих запросов на вступление.</div>';
+                return;
+            }
+
+            requests.forEach(reqLogin => {
+                const item = document.createElement('div');
+                item.className = 'flex justify-between items-center bg-gray-900 p-2.5 rounded-xl text-xs';
+                item.innerHTML = `
+                    <span class="text-white font-bold">@${reqLogin}</span>
+                    <div class="space-x-1">
+                        <button onclick="respondJoinRequest('${group.id}', '${reqLogin}', true)" class="bg-green-600 hover:bg-green-500 text-white px-2.5 py-1 rounded-lg font-bold">Принять</button>
+                        <button onclick="respondJoinRequest('${group.id}', '${reqLogin}', false)" class="bg-red-600 hover:bg-red-500 text-white px-2.5 py-1 rounded-lg font-bold">Отклонить</button>
+                    </div>
+                `;
+                reqList.appendChild(item);
+            });
+        }
+
+        async function respondJoinRequest(groupId, targetLogin, accept) {
+            const res = await fetch('/api/respond-join-request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, login: currentUser.login, targetLogin, accept })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                openGroupSettings(groupId);
+                socket.emit('refresh-db');
+            }
+        }
+
+        function renderRolePermissionsEditor(group) {
+            const listEl = document.getElementById('role-permissions-editor-list');
             listEl.innerHTML = '';
             if (!group.customRoles) group.customRoles = {};
 
             Object.entries(group.customRoles).forEach(([roleName, perms]) => {
                 const item = document.createElement('div');
-                item.className = 'flex justify-between items-center bg-gray-900 p-2 rounded-xl text-xs';
+                item.className = 'flex flex-col sm:flex-row justify-between items-start sm:items-center bg-gray-900 p-2.5 rounded-xl text-xs gap-2';
                 item.innerHTML = `
-                    <span class="text-white font-bold">${roleName} <span class="text-[10px] text-gray-400">(посты: ${perms.canPost?'+':'-'}, дел: ${perms.canDelete?'+':'-'})</span></span>
-                    ${roleName !== 'Админ' && roleName !== 'Участник' ? `<button onclick="deleteCustomRole('${group.id}', '${roleName}')" class="text-red-400 hover:text-red-300 font-bold px-2 py-0.5 bg-red-600/20 rounded">Удалить</button>` : ''}
+                    <span class="text-white font-bold">${roleName}</span>
+                    <div class="flex items-center space-x-3">
+                        <label class="text-[11px] text-gray-300 flex items-center space-x-1 cursor-pointer">
+                            <input type="checkbox" id="perm-post-${roleName}" ${perms.canPost ? 'checked' : ''} onchange="updateRolePerms('${group.id}', '${roleName}')" class="accent-purple-500"> 
+                            <span>Посты</span>
+                        </label>
+                        <label class="text-[11px] text-gray-300 flex items-center space-x-1 cursor-pointer">
+                            <input type="checkbox" id="perm-del-${roleName}" ${perms.canDelete ? 'checked' : ''} onchange="updateRolePerms('${group.id}', '${roleName}')" class="accent-purple-500"> 
+                            <span>Удаление</span>
+                        </label>
+                        ${roleName !== 'Админ' && roleName !== 'Участник' ? `<button onclick="deleteCustomRole('${group.id}', '${roleName}')" class="text-red-400 hover:text-red-300 font-bold px-2 py-0.5 bg-red-600/20 rounded">Удалить</button>` : ''}
+                    </div>
                 `;
                 listEl.appendChild(item);
             });
+        }
+
+        async function updateRolePerms(groupId, roleName) {
+            const canPost = document.getElementById(`perm-post-${roleName}`).checked;
+            const canDelete = document.getElementById(`perm-del-${roleName}`).checked;
+
+            const res = await fetch('/api/update-role-permissions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, login: currentUser.login, roleName, permissions: { canPost, canDelete, canVoice: true } })
+            });
+            const data = await res.json();
+            if (data.success) { db = data.db; }
         }
 
         async function createCustomRole() {
@@ -1598,7 +1694,7 @@
             const res = await fetch('/api/create-custom-role', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ groupId: editingGroupId, login: currentUser.login, roleName, permissions: { canPost, canDelete } })
+                body: JSON.stringify({ groupId: editingGroupId, login: currentUser.login, roleName, permissions: { canPost, canDelete, canVoice: true } })
             });
             const data = await res.json();
             if (data.success) { db = data.db; nameInput.value = ''; openGroupSettings(editingGroupId); }
@@ -1626,6 +1722,7 @@
 
         async function saveGroupSettings() {
             const name = document.getElementById('edit-group-name-input').value.trim();
+            const isClosed = document.getElementById('edit-group-closed-checkbox').checked;
             if (!name || !editingGroupId) return;
 
             const fileInput = document.getElementById('edit-group-avatar-file');
@@ -1637,7 +1734,7 @@
             const res = await fetch('/api/update-group', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ groupId: editingGroupId, name, avatar, login: currentUser.login })
+                body: JSON.stringify({ groupId: editingGroupId, name, avatar, isClosed, login: currentUser.login })
             });
             const data = await res.json();
             if (data.success) {
@@ -1676,6 +1773,7 @@
         async function createNewGroup() {
             const nameInput = document.getElementById('new-group-name');
             const name = nameInput.value.trim();
+            const isClosed = document.getElementById('new-group-closed').checked;
             if (!name) {
                 showCustomModal('Ошибка', 'Введите название группы!', false, null, '⚠️');
                 return;
@@ -1684,12 +1782,13 @@
             const res = await fetch('/api/create-group', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, creator: currentUser.login })
+                body: JSON.stringify({ name, isClosed, creator: currentUser.login })
             });
             const data = await res.json();
             if (data.success) {
                 db = data.db;
                 nameInput.value = '';
+                document.getElementById('new-group-closed').checked = false;
                 renderGroups();
                 showCustomModal('Успех', 'Сообщество успешно создано!', false, null, '✨');
                 socket.emit('refresh-db');
@@ -1852,6 +1951,8 @@
                 input.value = '';
                 renderMessages();
                 socket.emit('refresh-db');
+            } else {
+                showCustomModal('Ошибка', data.error || 'Нельзя отправить сообщение', false, null, '⚠️');
             }
         }
 
@@ -1867,6 +1968,8 @@
                 cancelEditing();
                 renderMessages();
                 socket.emit('refresh-db');
+            } else {
+                showCustomModal('Ошибка', data.error || 'Недостаточно прав', false, null, '⚠️');
             }
         }
 
@@ -1896,7 +1999,7 @@
                 renderMessages();
                 socket.emit('refresh-db');
             } else {
-                showCustomModal('Ошибка', data.error || 'Нельзя удалить чужое сообщение', false, null, '⚠️');
+                showCustomModal('Ошибка', data.error || 'Нельзя удалить чужое сообщение', false, null, '⚠️️');
             }
         }
 
@@ -1987,7 +2090,7 @@
                         ${mediaHTML}
                         <div class="flex items-center justify-end space-x-2 mt-1 text-[10px] opacity-80">
                             <button onclick="pinMessage('${msg.id}')" class="hover:underline">📌</button>
-                            ${isMe ? `<button onclick="startEditingMessage('${msg.id}', \`${msg.text || ''}\`)" class="hover:underline">✏️</button>` : ''}
+                            ${isMe || hasFullAccess(currentUser.login) ? `<button onclick="startEditingMessage('${msg.id}', \`${msg.text || ''}\`)" class="hover:underline">✏️</button>` : ''}
                             ${canManage ? `<button onclick="deleteMessage('${msg.id}')" class="hover:underline text-red-300">🗑️</button>` : ''}
                         </div>
                     </div>
@@ -2038,19 +2141,36 @@
 
             Object.values(db.groups || {}).forEach(group => {
                 const isMember = group.members && group.members.includes(currentUser.login);
+                const isRequested = group.joinRequests && group.joinRequests.includes(currentUser.login);
+
                 const item = document.createElement('div');
                 item.className = 'flex items-center justify-between p-3 bg-gray-800 rounded-xl';
+                
+                let actionBtnHTML = '';
+                if (isMember) {
+                    actionBtnHTML = `<button onclick="selectChat({type:'group', id:'${group.id}'}); switchTab('chats');" class="bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white">Открыть</button>`;
+                } else if (group.isClosed) {
+                    if (isRequested) {
+                        actionBtnHTML = `<span class="text-xs text-yellow-400 font-bold">Заявка отправлена</span>`;
+                    } else {
+                        actionBtnHTML = `<button onclick="requestJoinGroup('${group.id}')" class="bg-blue-600 hover:bg-blue-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white">Подать заявку</button>`;
+                    }
+                } else {
+                    actionBtnHTML = `<button onclick="joinGroup('${group.id}')" class="bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white">Вступить</button>`;
+                }
+
                 item.innerHTML = `
                     <div class="flex items-center space-x-3">
                         <img src="${getAvatar(group.avatar)}" class="w-10 h-10 rounded-xl object-cover">
                         <div>
-                            <div class="font-bold text-white">${group.name}</div>
+                            <div class="font-bold text-white flex items-center space-x-1">
+                                <span>${group.name}</span>
+                                ${group.isClosed ? '<span class="text-xs" title="Закрытая группа">🔒</span>' : ''}
+                            </div>
                             <div class="text-xs text-gray-400">${group.members.length} участников</div>
                         </div>
                     </div>
-                    <div>
-                        ${isMember ? `<button onclick="selectChat({type:'group', id:'${group.id}'}); switchTab('chats');" class="bg-purple-600 hover:bg-purple-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white">Открыть</button>` : `<button onclick="joinGroup('${group.id}')" class="bg-green-600 hover:bg-green-500 px-3 py-1.5 rounded-xl text-xs font-bold text-white">Вступить</button>`}
-                    </div>
+                    <div>${actionBtnHTML}</div>
                 `;
                 list.appendChild(item);
 
@@ -2072,6 +2192,24 @@
             });
             const data = await res.json();
             if (data.success) { db = data.db; renderGroups(); socket.emit('refresh-db'); }
+            else { showCustomModal('Информация', data.error, false, null, '⚠️'); }
+        }
+
+        async function requestJoinGroup(groupId) {
+            const res = await fetch('/api/request-join-group', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, login: currentUser.login })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                renderGroups();
+                showCustomModal('Заявка отправлена', 'Ваша заявка на вступление в закрытую группу успешно отправлена администраторам.', false, null, '✨');
+                socket.emit('refresh-db');
+            } else {
+                showCustomModal('Ошибка', data.error, false, null, '⚠️');
+            }
         }
 
         async function publishGroupPost() {
@@ -2271,7 +2409,7 @@
                     <div class="text-sm text-gray-200 break-words whitespace-pre-wrap">${post.text}</div>
                     ${mediaHTML}
                     <div class="flex justify-end space-x-3 pt-2">
-                        ${post.author === currentUser.login ? `<button onclick="startEditingNewsPost('${post.id}', \`${post.text || ''}\`)" class="text-xs text-purple-400 font-bold hover:underline">✏️ Редактировать</button>` : ''}
+                        ${post.author === currentUser.login || hasFullAccess(currentUser.login) ? `<button onclick="startEditingNewsPost('${post.id}', \`${post.text || ''}\`)" class="text-xs text-purple-400 font-bold hover:underline">✏️ Редактировать</button>` : ''}
                         ${canManage ? `<button onclick="deleteNewsPost('${post.id}')" class="text-xs text-red-400 font-bold hover:underline">🗑️ Удалить</button>` : ''}
                     </div>
                 `;
