@@ -1013,7 +1013,6 @@ app.post('/api/resolve-violation-action', async (req, res) => {
                 grp.posts = grp.posts.filter(p => p.id !== viol.groupPostId);
             }
         }
-        // Также зачищаем из новостей, если текст совпадает или дублирован
         if (viol.text && db.news) {
             db.news = db.news.filter(n => n.text !== viol.text);
         }
