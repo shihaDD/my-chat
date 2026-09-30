@@ -73,6 +73,7 @@
             .chat-list-panel.mobile-hidden { transform: translateX(-100%); }
             .active-chat-panel { width: 100% !important; position: absolute !important; height: 100% !important; z-index: 5; }
             .mobile-back-btn { display: inline-block !important; }
+            .verified-gradient-name { font-size: 0.95rem !important; }
         }
     </style>
 </head>
@@ -132,6 +133,20 @@
             <div id="group-requests-list-modal" class="space-y-2 max-h-60 overflow-y-auto"></div>
             <div class="flex justify-end pt-2">
                 <button onclick="document.getElementById('group-requests-modal').classList.add('hidden')" class="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2 rounded-xl text-xs font-bold shadow">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО УПРАВЛЕНИЯ УЧАСТНИКАМИ ГРУППЫ -->
+    <div id="group-members-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+        <div class="bg-gray-900 border border-purple-500/50 p-5 sm:p-6 rounded-3xl w-[95%] max-w-xl shadow-[0_0_35px_rgba(168,85,247,0.3)] space-y-4 relative max-h-[85vh] flex flex-col">
+            <button onclick="document.getElementById('group-members-modal').classList.add('hidden')" class="absolute top-4 right-4 text-gray-400 hover:text-white text-lg font-bold">✕</button>
+            <h3 class="text-lg font-bold text-white flex items-center space-x-2">
+                <span>👥 Участники группы</span>
+            </h3>
+            <div id="group-members-list-modal" class="space-y-3 overflow-y-auto flex-1 pr-1"></div>
+            <div class="flex justify-end pt-2 border-t border-gray-800">
+                <button onclick="document.getElementById('group-members-modal').classList.add('hidden')" class="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2 rounded-xl text-xs font-bold shadow">Закрыть</button>
             </div>
         </div>
     </div>
@@ -432,9 +447,8 @@
                                     📥
                                     <span id="ws-requests-badge-dot" class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-gray-900 hidden shadow-[0_0_6px_rgba(239,68,68,0.8)]"></span>
                                 </button>
-                                <div id="ws-verification-btn-container">
-                                    <button id="ws-verification-action-btn" onclick="requestGroupVerification()" class="p-1.5 bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 rounded-lg text-xs" title="Запросить верификацию">🛡️</button>
-                                </div>
+                                <div id="ws-verification-btn-container"></div>
+                                <button onclick="openGroupMembersModal()" class="p-1.5 bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 rounded-lg text-xs" title="Список участников">👥</button>
                                 <button onclick="openActiveGroupSettings()" class="text-xs text-gray-400 hover:text-white p-1" title="Настройки">⚙️</button>
                             </div>
                         </div>
@@ -544,7 +558,7 @@
             <div id="tab-content-moderation" class="flex-1 p-4 sm:p-6 overflow-y-auto hidden space-y-6">
                 <div class="max-w-4xl mx-auto space-y-6">
                     <h2 class="text-xl sm:text-2xl font-bold text-purple-400 flex items-center space-x-2">
-                        <span>🛡️️ Отдел Модерации</span>
+                        <span>🛡 Отдел Модерации</span>
                     </h2>
 
                     <div class="flex border-b border-gray-800 space-x-4">
@@ -573,6 +587,10 @@
                                     </select>
                                     <button onclick="createGlobalChannel()" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-xl text-xs font-bold">Создать канал</button>
                                 </div>
+                            </div>
+                            <div class="pt-2">
+                                <span class="text-xs font-bold text-gray-400 uppercase block mb-2">Созданные глобальные каналы:</span>
+                                <div id="global-channels-created-list" class="space-y-2"></div>
                             </div>
                             <div id="mod-chats-monitor-list" class="space-y-2 max-h-96 overflow-y-auto"></div>
                         </div>
@@ -796,7 +814,7 @@
     </div>
 
     <!-- ВХОДЯЩИЙ ВЫЗОВ -->
-    <div id="incoming-call-modal" class="fixed bottom-6 right-6 z-50 bg-gray-900 border border-green-500/60 p-5 rounded-3xl w-80 shadow-[0_0_40px_rgba(34,197,94,0.4)] text-center space-y-4 hidden">
+    <div id="incoming-call-modal" class="fixed inset-x-4 bottom-6 md:inset-x-auto md:right-6 z-[9999] bg-gray-900 border border-green-500/60 p-5 rounded-3xl w-auto md:w-80 shadow-[0_0_40px_rgba(34,197,94,0.4)] text-center space-y-4 hidden">
         <div class="relative w-16 h-16 mx-auto">
             <div class="absolute inset-0 rounded-full bg-green-500/20 animate-ping"></div>
             <img id="incoming-caller-avatar" src="" class="w-16 h-16 rounded-full object-cover border-2 border-green-500 relative z-10 shadow-[0_0_15px_rgba(34,197,94,0.5)]">
@@ -812,7 +830,7 @@
     </div>
 
     <!-- АКТИВНЫЙ ЗВОНОК -->
-    <div id="single-call-modal" class="fixed bottom-6 right-6 z-50 w-80 bg-gray-900 border border-purple-500/60 rounded-3xl shadow-[0_0_35px_rgba(168,85,247,0.4)] p-5 flex flex-col space-y-4 hidden">
+    <div id="single-call-modal" class="fixed inset-x-4 bottom-6 md:inset-x-auto md:right-6 z-[9999] w-auto md:w-80 bg-gray-900 border border-purple-500/60 rounded-3xl shadow-[0_0_35px_rgba(168,85,247,0.4)] p-5 flex flex-col space-y-4 hidden">
         <div class="flex justify-between items-center">
             <span class="text-xs font-bold text-purple-400 uppercase">🎙 Аудиосвязь</span>
             <button onclick="hangUpCall()" class="text-gray-400 hover:text-white font-bold text-sm">✕</button>
@@ -845,7 +863,7 @@
         const socket = io();
 
         let currentUser = null;
-        let db = { users: {}, messagesStore: {}, friendRequests: {}, outgoingRequests: {}, friends: [], news: [], customNicknames: {}, groups: {}, lastSeen: {}, pinnedMessages: {}, globalRoles: {}, violations: [], groupPostRequests: {}, verificationRequests: [], mutedUsers: {} };
+        let db = { users: {}, messagesStore: {}, friendRequests: {}, outgoingRequests: {}, friends: [], news: [], customNicknames: {}, groups: {}, lastSeen: {}, pinnedMessages: {}, globalRoles: {}, violations: [], groupPostRequests: {}, verificationRequests: {}, mutedUsers: {} };
         let activeChat = null;
         let activeGroupWorkspaceId = null;
         let currentUploadedMedia = null;
@@ -1296,13 +1314,36 @@
                 }
             }
 
-            // Доступ к созданию каналов в разделе Общение только для warren и main_moderator
             const warrenCreator = document.getElementById('warren-channel-creator');
             if (warrenCreator) {
                 if (currentUser && hasFullAccess(currentUser.login)) {
                     warrenCreator.classList.remove('hidden');
                 } else {
                     warrenCreator.classList.add('hidden');
+                }
+            }
+
+            // Рендер списка созданных глобальных каналов в разделе Модерация -> Общение
+            const globalChannelsList = document.getElementById('global-channels-created-list');
+            if (globalChannelsList) {
+                globalChannelsList.innerHTML = '';
+                let hasChannels = false;
+                Object.values(db.groups || {}).forEach(g => {
+                    if (g.subgroups) {
+                        g.subgroups.forEach(sub => {
+                            hasChannels = true;
+                            const d = document.createElement('div');
+                            d.className = 'bg-gray-950 p-2.5 rounded-xl border border-gray-800 flex items-center justify-between text-xs';
+                            d.innerHTML = `
+                                <span class="text-white font-bold">${sub.type === 'voice' ? '🎙' : '#'} ${sub.name} <span class="text-gray-400 font-normal">(Группа: ${g.name})</span></span>
+                                ${hasFullAccess(currentUser.login) ? `<button onclick="deleteSubgroup('${g.id}', '${sub.id}')" class="text-red-400 hover:text-red-300 font-bold px-2 py-1 bg-red-600/20 rounded-lg">Удалить</button>` : ''}
+                            `;
+                            globalChannelsList.appendChild(d);
+                        });
+                    }
+                });
+                if (!hasChannels) {
+                    globalChannelsList.innerHTML = '<div class="text-xs text-gray-500">Нет созданных глобальных каналов.</div>';
                 }
             }
 
@@ -1399,7 +1440,7 @@
                 nameInput.value = '';
                 renderModerationPanel();
                 renderGroups();
-                showCustomModal('Успех', 'Новый канал успешно создан!', false, null, '✨');
+                showCustomModal('Успех', 'Новый глобальный канал успешно создан!', false, null, '✨');
                 socket.emit('refresh-db');
             } else {
                 showCustomModal('Ошибка', data.error, false, null, '⚠️');
@@ -1450,7 +1491,7 @@
                 document.getElementById('violation-mute-modal').classList.add('hidden');
                 selectedViolationIdForAction = null;
                 renderModerationPanel();
-                showCustomModal('Мут выдан', 'Пользователь временно заблокирован в отправке сообщений.', false, null, '🔇');
+                showCustomModal('Мут выдан', 'Пользователь заблокирован и получил запрет на дублирование в ленте новостей.', false, null, '🔇');
                 socket.emit('refresh-db');
             }
         }
@@ -2090,6 +2131,128 @@
             document.getElementById('group-requests-modal').classList.remove('hidden');
         }
 
+        // МОДАЛЬНОЕ ОКНО УПРАВЛЕНИЯ УЧАСТНИКАМИ ГРУППЫ С МУТОМ И НИКНЕЙМАМИ
+        function openGroupMembersModal() {
+            const gId = activeGroupWorkspaceId;
+            if (!gId) return;
+            const group = db.groups[gId];
+            if (!group) return;
+
+            const listEl = document.getElementById('group-members-list-modal');
+            listEl.innerHTML = '';
+            
+            const isLeader = group.creator === currentUser.login;
+            const myRole = group.roles?.[currentUser.login] || (isLeader ? 'Лидер' : 'Участник');
+            const canManage = isLeader || myRole === 'Админ' || hasFullAccess(currentUser.login);
+            const availableRoles = ['Лидер', 'Админ', 'Участник', ...Object.keys(group.customRoles || {})];
+
+            group.members.forEach(m => {
+                const mLeader = group.creator === m;
+                const mRole = group.roles?.[m] || (mLeader ? 'Лидер' : 'Участник');
+                const customNick = group.groupNicknames?.[m] || '';
+                const isMuted = group.groupMutedUsers?.[m] && group.groupMutedUsers[m] > Date.now();
+                const userObj = db.users[m] || {};
+
+                const div = document.createElement('div');
+                div.className = 'bg-gray-950 border border-gray-800 p-3 rounded-2xl space-y-2 text-xs';
+                
+                let roleSelectHTML = `<span class="text-purple-400 font-bold">[${mRole}]</span>`;
+                if (canManage && !mLeader && m !== currentUser.login) {
+                    let opts = availableRoles.map(r => `<option value="${r}" ${mRole === r ? 'selected' : ''}>${r}</option>`).join('');
+                    roleSelectHTML = `<select onchange="changeMemberRole('${groupId}', '${m}', this.value)" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-purple-300">${opts}</select>`;
+                }
+
+                div.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center space-x-2">
+                            <img src="${getAvatar(userObj.avatar)}" class="w-8 h-8 rounded-full object-cover">
+                            <div>
+                                <div class="font-bold text-white">@${m} ${customNick ? '(' + customNick + ')' : ''} ${mLeader ? '⭐' : ''}</div>
+                                <div class="text-[10px] text-gray-400">${isMuted ? '<span class="text-red-400 font-bold">🔇 В муте в группе</span>' : 'Активен'}</div>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                            ${roleSelectHTML}
+                        </div>
+                    </div>
+                    ${canManage && !mLeader ? `
+                    <div class="flex items-center justify-between pt-2 border-t border-gray-800 flex-wrap gap-1">
+                        <div class="flex items-center space-x-1">
+                            <input type="text" id="group-nick-input-${m}" value="${customNick}" placeholder="Ник в группе..." class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-28">
+                            <button onclick="saveGroupNickname('${groupId}', '${m}')" class="bg-purple-600 hover:bg-purple-500 px-2 py-1 rounded text-white font-bold">Изменить ник</button>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                            ${isMuted ? 
+                                `<button onclick="groupUnmuteMember('${groupId}', '${m}')" class="bg-green-600 hover:bg-green-500 px-2 py-1 rounded text-white font-bold">Размутить</button>` :
+                                `<button onclick="groupMuteMemberModal('${groupId}', '${m}')" class="bg-red-600 hover:bg-red-500 px-2 py-1 rounded text-white font-bold">Мут</button>`
+                            }
+                            <button onclick="kickGroupMember('${groupId}', '${m}')" class="bg-gray-700 hover:bg-red-600 px-2 py-1 rounded text-white font-bold">Исключить</button>
+                        </div>
+                    </div>
+                    ` : ''}
+                `;
+                listEl.appendChild(div);
+            });
+
+            document.getElementById('group-members-modal').classList.remove('hidden');
+        }
+
+        async function saveGroupNickname(groupId, targetLogin) {
+            const input = document.getElementById(`group-nick-input-${targetLogin}`);
+            if (!input) return;
+            const nickname = input.value.trim();
+
+            const res = await fetch('/api/group-set-nickname', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, login: currentUser.login, targetLogin, nickname })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                openGroupMembersModal();
+                showCustomModal('Успех', 'Ник участника в группе изменен!', false, null, '✨');
+                socket.emit('refresh-db');
+            } else {
+                showCustomModal('Ошибка', data.error, false, null, '⚠️');
+            }
+        }
+
+        function groupMuteMemberModal(groupId, targetLogin) {
+            showCustomModal('Мут в группе', `Выдать мут пользователю @${targetLogin} в этой группе? (Запрет на отправку сообщений и голосовой чат)`, true, async (confirmed) => {
+                if (!confirmed) return;
+                const res = await fetch('/api/group-mute-member', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ groupId, login: currentUser.login, targetLogin, muteMinutes: 60 })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    db = data.db;
+                    openGroupMembersModal();
+                    showCustomModal('Мут выдан', 'Пользователь заблокирован в этой группе.', false, null, '🔇');
+                    socket.emit('refresh-db');
+                } else {
+                    showCustomModal('Ошибка', data.error, false, null, '⚠️');
+                }
+            }, '🔇');
+        }
+
+        async function groupUnmuteMember(groupId, targetLogin) {
+            const res = await fetch('/api/group-mute-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, login: currentUser.login, targetLogin, muteMinutes: 0 })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                openGroupMembersModal();
+                showCustomModal('Успех', 'Мут снят с участника.', false, null, '✨');
+                socket.emit('refresh-db');
+            }
+        }
+
         async function requestGroupVerification() {
             const gId = activeGroupWorkspaceId;
             if (!gId) return;
@@ -2149,6 +2312,26 @@
                 updateGroupWorkspaceHeader(groupId);
                 socket.emit('refresh-db');
             }
+        }
+
+        async function kickGroupMember(groupId, targetLogin) {
+            showCustomModal('Подтверждение', `Исключить @${targetLogin} из группы?`, true, async (confirmed) => {
+                if (!confirmed) return;
+                const res = await fetch('/api/kick-group-member', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ groupId, login: currentUser.login, targetLogin })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    db = data.db;
+                    openGroupSettings(groupId);
+                    openGroupMembersModal();
+                    socket.emit('refresh-db');
+                } else {
+                    showCustomModal('Ошибка', data.error, false, null, '⚠️️');
+                }
+            }, '⚠️');
         }
 
         function renderRolePermissionsEditor(group) {
@@ -2231,7 +2414,11 @@
                 body: JSON.stringify({ groupId, login: currentUser.login, targetLogin, newRole })
             });
             const data = await res.json();
-            if (data.success) { db = data.db; renderGroups(); }
+            if (data.success) {
+                db = data.db;
+                renderGroups();
+                openGroupMembersModal();
+            }
         }
 
         async function saveGroupSettings() {
@@ -2358,7 +2545,12 @@
                 body: JSON.stringify({ groupId, subId, login: currentUser.login })
             });
             const data = await res.json();
-            if (data.success) { db = data.db; openGroupWorkspace(groupId); }
+            if (data.success) {
+                db = data.db;
+                if (activeGroupWorkspaceId) openGroupWorkspace(groupId);
+                renderModerationPanel();
+                socket.emit('refresh-db');
+            }
         }
 
         function openGroupWorkspace(groupId) {
@@ -2647,6 +2839,14 @@
                 const roleInfo = getRoleBadgeAndColor(msg.sender);
                 const canManage = isMe || hasFullAccess(currentUser.login);
 
+                let senderDisplayName = msg.sender;
+                if (isGroup && activeGroupWorkspaceId) {
+                    const grp = db.groups[activeGroupWorkspaceId];
+                    if (grp && grp.groupNicknames && grp.groupNicknames[msg.sender]) {
+                        senderDisplayName = `${msg.sender} (${grp.groupNicknames[msg.sender]})`;
+                    }
+                }
+
                 const div = document.createElement('div');
                 div.className = `flex flex-col ${isMe ? 'items-end' : 'items-start'} space-y-1`;
                 
@@ -2661,7 +2861,7 @@
 
                 div.innerHTML = `
                     <div class="flex items-center space-x-2 text-xs text-gray-400">
-                        <span class="font-bold ${roleInfo.color}">@${msg.sender} ${roleInfo.badge}</span>
+                        <span class="font-bold ${roleInfo.color}">@${senderDisplayName} ${roleInfo.badge}</span>
                         <span>${new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                     </div>
                     <div class="p-3 rounded-2xl max-w-sm sm:max-w-md ${isMe ? 'bg-purple-600 text-white rounded-tr-none' : 'bg-gray-800 text-gray-100 rounded-tl-none'} shadow">
@@ -2775,7 +2975,7 @@
             });
             const data = await res.json();
             if (data.success) { db = data.db; renderGroups(); socket.emit('refresh-db'); }
-            else { showCustomModal('Информация', data.error, false, null, '⚠️️'); }
+            else { showCustomModal('Информация', data.error, false, null, '⚠'); }
         }
 
         async function requestJoinGroup(groupId) {
@@ -2851,6 +3051,12 @@
                 const roleInfo = getRoleBadgeAndColor(post.author);
                 const canManage = post.author === currentUser.login || hasFullAccess(currentUser.login);
 
+                let authorDisplayName = post.author;
+                const grp = db.groups[post.groupId];
+                if (grp && grp.groupNicknames && grp.groupNicknames[post.author]) {
+                    authorDisplayName = `${post.author} (${grp.groupNicknames[post.author]})`;
+                }
+
                 const div = document.createElement('div');
                 div.className = 'bg-gray-950 border border-gray-800 p-3 rounded-xl space-y-2';
                 div.innerHTML = `
@@ -2860,7 +3066,7 @@
                     </div>
                     <div class="flex items-center space-x-2">
                         <img src="${getAvatar(authorObj.avatar)}" class="w-6 h-6 rounded-full object-cover">
-                        <span class="text-xs font-bold ${roleInfo.color}">@${post.author} ${roleInfo.badge}</span>
+                        <span class="text-xs font-bold ${roleInfo.color}">@${authorDisplayName} ${roleInfo.badge}</span>
                     </div>
                     <div class="text-sm text-gray-200 break-words">${post.text}</div>
                     <div class="flex justify-end space-x-2">
@@ -2940,6 +3146,8 @@
                 document.getElementById('post-text-input').value = '';
                 renderNewsFeed();
                 socket.emit('refresh-db');
+            } else {
+                showCustomModal('Ошибка', data.error || 'Не удалось отредактировать новость', false, null, '⚠️');
             }
         }
 
@@ -3182,6 +3390,8 @@
 
         socket.on('call-answered', async ({ answer }) => {
             stopOutgoingRingtone();
+            stopIncomingRingtone();
+            document.getElementById('incoming-call-modal').classList.add('hidden');
             document.getElementById('call-status-text').textContent = 'Разговор идет';
             if (peerConnection && answer) {
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
