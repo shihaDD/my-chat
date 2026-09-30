@@ -775,7 +775,7 @@
                 </div>
 
                 <div id="leader-roles-manager" class="hidden bg-gray-950 p-4 rounded-2xl border border-purple-500/30 space-y-3">
-                    <h4 class="text-xs font-bold text-purple-300 uppercase">🛡 Пользовательские роли</h4>
+                    <h4 class="text-xs font-bold text-purple-300 uppercase">🛡 Пользовательские роли и права</h4>
                     <div id="role-permissions-editor-list" class="space-y-2 max-h-48 overflow-y-auto mb-2"></div>
                     <div class="border-t border-gray-800 pt-3">
                         <span class="text-xs text-gray-400 uppercase block mb-1">Создать новую роль</span>
@@ -785,6 +785,7 @@
                                 <label class="text-[11px] text-gray-300 flex items-center space-x-1"><input type="checkbox" id="role-perm-post" checked class="accent-purple-500"> <span>Посты</span></label>
                                 <label class="text-[11px] text-gray-300 flex items-center space-x-1"><input type="checkbox" id="role-perm-del" class="accent-purple-500"> <span>Удаление</span></label>
                                 <label class="text-[11px] text-gray-300 flex items-center space-x-1"><input type="checkbox" id="role-perm-news" class="accent-purple-500"> <span>Дублировать в новости</span></label>
+                                <label class="text-[11px] text-gray-300 flex items-center space-x-1"><input type="checkbox" id="role-perm-voice" checked class="accent-purple-500"> <span>Управление голосом (муты/кики)</span></label>
                             </div>
                         </div>
                         <button onclick="createCustomRole()" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-xl text-xs font-bold transition shadow mt-2">Добавить роль</button>
@@ -834,7 +835,7 @@
         </div>
     </div>
 
-    <!-- ВХОДЯЩИЙ ВЫЗОВ -->
+    <!-- ВХОДЯЩИЙ ВЫЗОВ (Всплывающее окно) -->
     <div id="incoming-call-modal" class="fixed inset-x-4 bottom-6 md:inset-x-auto md:right-6 z-[9999] bg-gray-900 border border-green-500/60 p-5 rounded-3xl w-auto md:w-80 shadow-[0_0_40px_rgba(34,197,94,0.4)] text-center space-y-4 hidden">
         <div class="relative w-16 h-16 mx-auto">
             <div class="absolute inset-0 rounded-full bg-green-500/20 animate-ping"></div>
@@ -941,14 +942,12 @@
             if (!login) return false;
             const l = login.toLowerCase();
             
-            // Проверка глобального мута
             const globalMute = db.mutedUsers?.[l];
             if (globalMute) {
                 const exp = typeof globalMute === 'object' ? globalMute.expires : globalMute;
                 if (exp > Date.now()) return true;
             }
 
-            // Проверка мута во всех группах пользователя
             if (db.groups) {
                 for (let group of Object.values(db.groups)) {
                     if (group.groupMutedUsers?.[l]) {
@@ -2192,6 +2191,8 @@
             renderModerationPanel();
             if (activeGroupWorkspaceId) {
                 updateGroupWorkspaceHeader(activeGroupWorkspaceId);
+                const grp = db.groups[activeGroupWorkspaceId];
+                if (grp) renderGroupWorkspaceSidebar(grp);
             }
         });
 
@@ -2703,6 +2704,10 @@
                             <input type="checkbox" id="perm-news-${roleName}" ${perms.canDuplicateNews ? 'checked' : ''} onchange="updateRolePerms('${group.id}', '${roleName}')" class="accent-purple-500"> 
                             <span>Дубл. в новости</span>
                         </label>
+                        <label class="text-[11px] text-gray-300 flex items-center space-x-1 cursor-pointer">
+                            <input type="checkbox" id="perm-voice-${roleName}" ${perms.canVoiceControl !== false ? 'checked' : ''} onchange="updateRolePerms('${group.id}', '${roleName}')" class="accent-purple-500"> 
+                            <span>Управление голосом</span>
+                        </label>
                         ${roleName !== 'Админ' && roleName !== 'Участник' ? `<button onclick="deleteCustomRole('${group.id}', '${roleName}')" class="text-red-400 hover:text-red-300 font-bold px-2 py-0.5 bg-red-600/20 rounded">Удалить</button>` : ''}
                     </div>
                 `;
@@ -2714,11 +2719,12 @@
             const canPost = document.getElementById(`perm-post-${roleName}`).checked;
             const canDelete = document.getElementById(`perm-del-${roleName}`).checked;
             const canDuplicateNews = document.getElementById(`perm-news-${roleName}`).checked;
+            const canVoiceControl = document.getElementById(`perm-voice-${roleName}`).checked;
 
             const res = await fetch('/api/update-role-permissions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ groupId, login: currentUser.login, roleName, permissions: { canPost, canDelete, canVoice: true, canDuplicateNews } })
+                body: JSON.stringify({ groupId, login: currentUser.login, roleName, permissions: { canPost, canDelete, canVoice: true, canDuplicateNews, canVoiceControl } })
             });
             const data = await res.json();
             if (data.success) { db = data.db; }
@@ -2732,11 +2738,12 @@
             const canPost = document.getElementById('role-perm-post').checked;
             const canDelete = document.getElementById('role-perm-del').checked;
             const canDuplicateNews = document.getElementById('role-perm-news').checked;
+            const canVoiceControl = document.getElementById('role-perm-voice').checked;
 
             const res = await fetch('/api/create-custom-role', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ groupId: editingGroupId, login: currentUser.login, roleName, permissions: { canPost, canDelete, canVoice: true, canDuplicateNews } })
+                body: JSON.stringify({ groupId: editingGroupId, login: currentUser.login, roleName, permissions: { canPost, canDelete, canVoice: true, canDuplicateNews, canVoiceControl } })
             });
             const data = await res.json();
             if (data.success) { db = data.db; nameInput.value = ''; openGroupSettings(editingGroupId); }
@@ -2749,7 +2756,7 @@
                 body: JSON.stringify({ groupId, login: currentUser.login, roleName })
             });
             const data = await res.json();
-            if (data.success) { db = data.db; openGroupSettings(groupId); }
+            if (data.success) { db = data.db; openGroupSettings(editingGroupId); }
         }
 
         async function changeMemberRole(groupId, targetLogin, newRole) {
@@ -2928,6 +2935,8 @@
             renderGroups();
         }
 
+        let voiceParticipantsMap = {}; // channelId -> array of logins
+
         async function startGroupVoiceConference(groupId, subId, subName) {
             if (activeVoiceRoomKey) {
                 leaveGroupVoiceConference();
@@ -2940,15 +2949,21 @@
                 localStream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: false });
                 isInCallOrConference = true;
 
-                socket.emit('join-voice-channel', { roomKey: activeVoiceRoomKey, login: currentUser.login });
+                socket.emit('join-voice-channel', { roomKey: activeVoiceRoomKey, login: currentUser.login, groupId, subId });
                 showCustomModal('Голосовой канал', `Вы вошли в голосовой канал: ${subName}`, false, null, '🎙️');
 
-                // Очищаем старые слушатели во избежание утечек и дублирования
                 socket.off('user-joined-voice');
                 socket.off('voice-offer');
                 socket.off('voice-answer');
                 socket.off('voice-candidate');
                 socket.off('user-left-voice');
+                socket.off('voice-participants-update');
+
+                socket.on('voice-participants-update', ({ channelKey, participants }) => {
+                    voiceParticipantsMap[subId] = participants || [];
+                    const grp = db.groups[activeGroupWorkspaceId];
+                    if (grp) renderGroupWorkspaceSidebar(grp);
+                });
 
                 socket.on('user-joined-voice', async ({ socketId, login }) => {
                     const pc = createVoicePeerConnection(socketId, login);
@@ -3025,7 +3040,7 @@
 
         function leaveGroupVoiceConference() {
             if (activeVoiceRoomKey) {
-                socket.emit('leave-voice-channel', { roomKey: activeVoiceRoomKey });
+                socket.emit('leave-voice-channel', { roomKey: activeVoiceRoomKey, groupId: activeVoiceGroup, subId: activeVoiceChannel });
                 activeVoiceRoomKey = null;
             }
             if (localStream) {
@@ -3037,7 +3052,49 @@
             isInCallOrConference = false;
             activeVoiceGroup = null;
             activeVoiceChannel = null;
+            renderGroupWorkspaceSidebar(db.groups[activeGroupWorkspaceId]);
         }
+
+        function canControlVoice(group, login) {
+            if (!group || !login) return false;
+            if (group.creator === login || hasFullAccess(login)) return true;
+            const role = group.roles?.[login] || 'Участник';
+            if (role === 'Админ') return true;
+            if (group.customRoles?.[role] && group.customRoles[role].canVoiceControl !== false) return true;
+            return false;
+        }
+
+        async function kickUserFromVoice(groupId, subId, targetLogin) {
+            const group = db.groups[groupId];
+            if (!canControlVoice(group, currentUser.login)) {
+                showCustomModal('Ошибка', 'Недостаточно прав для управления участниками канала', false, null, '⚠️️');
+                return;
+            }
+            socket.emit('admin-voice-action', { groupId, subId, targetLogin, action: 'kick', adminLogin: currentUser.login });
+            showCustomModal('Успех', `Пользователь @${targetLogin} кикнут из голосового канала`, false, null, '✨');
+        }
+
+        async function muteUserInVoice(groupId, subId, targetLogin) {
+            const group = db.groups[groupId];
+            if (!canControlVoice(group, currentUser.login)) {
+                showCustomModal('Ошибка', 'Недостаточно прав для выдачи мута в канале', false, null, '⚠️️');
+                return;
+            }
+            socket.emit('admin-voice-action', { groupId, subId, targetLogin, action: 'mute', adminLogin: currentUser.login });
+            showCustomModal('Мут', `Пользователю @${targetLogin} выдан мут в канале`, false, null, '🔇');
+        }
+
+        socket.on('forced-voice-action', ({ action, subId }) => {
+            if (action === 'kick' && activeVoiceChannel === subId) {
+                leaveGroupVoiceConference();
+                showCustomModal('Кик', 'Вас отключили от голосового канала', false, null, '⚠️');
+            } else if (action === 'mute' && activeVoiceChannel === subId) {
+                if (localStream) {
+                    localStream.getAudioTracks().forEach(t => t.enabled = false);
+                }
+                showCustomModal('Мут', 'Администратор заглушил ваш микрофон в канале', false, null, '🔇');
+            }
+        });
 
         function renderGroupWorkspaceSidebar(group) {
             const textChannels = document.getElementById('ws-sidebar-text-channels');
@@ -3067,9 +3124,10 @@
                     if (!hasAccess) return;
 
                     const div = document.createElement('div');
-                    div.className = `p-2 rounded-xl text-xs font-bold cursor-pointer transition flex items-center justify-between ${activeSubgroup === sub.id ? 'bg-purple-600/30 text-purple-300' : 'text-gray-300 hover:bg-gray-800'}`;
+                    div.className = `p-2 rounded-xl text-xs font-bold cursor-pointer transition flex flex-col space-y-1 ${activeSubgroup === sub.id ? 'bg-purple-600/30 text-purple-300' : 'text-gray-300 hover:bg-gray-800'}`;
+                    
                     if (sub.type === 'text') {
-                        div.innerHTML = `<span># ${sub.name}</span>`;
+                        div.innerHTML = `<div class="flex items-center justify-between"><span># ${sub.name}</span></div>`;
                         div.onclick = () => {
                             activeSubgroup = sub.id;
                             document.getElementById('ws-active-chat-name').textContent = group.name + ' (# ' + sub.name + ')';
@@ -3079,7 +3137,40 @@
                         };
                         textChannels.appendChild(div);
                     } else if (sub.type === 'voice') {
-                        div.innerHTML = `<span>🎙 ${sub.name}</span>`;
+                        const participants = voiceParticipantsMap[sub.id] || [];
+                        const isConnectedHere = activeVoiceChannel === sub.id;
+
+                        let participantsHTML = '';
+                        if (participants.length > 0) {
+                            participantsHTML = `<div class="pl-4 space-y-1 pt-1 border-t border-purple-500/20 mt-1">`;
+                            participants.forEach(pLogin => {
+                                const uObj = db.users[pLogin] || {};
+                                const canAdmin = canControlVoice(group, currentUser.login) && pLogin !== currentUser.login;
+                                participantsHTML += `
+                                    <div class="flex items-center justify-between text-[11px] text-gray-400 bg-gray-950/60 p-1 rounded">
+                                        <div class="flex items-center space-x-1.5 truncate">
+                                            <div class="w-4 h-4 rounded-full overflow-hidden flex-shrink-0">${getAvatarWithMuteBadge(uObj.avatar, pLogin)}</div>
+                                            <span class="truncate text-white">@${pLogin}</span>
+                                        </div>
+                                        ${canAdmin ? `
+                                            <div class="flex space-x-1">
+                                                <button onclick="event.stopPropagation(); muteUserInVoice('${group.id}', '${sub.id}', '${pLogin}')" class="text-red-400 hover:text-white px-1" title="Мут">🔇</button>
+                                                <button onclick="event.stopPropagation(); kickUserFromVoice('${group.id}', '${sub.id}', '${pLogin}')" class="text-red-400 hover:text-white px-1" title="Кик">❌</button>
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                `;
+                            });
+                            participantsHTML += `</div>`;
+                        }
+
+                        div.innerHTML = `
+                            <div class="flex items-center justify-between w-full">
+                                <span class="${isConnectedHere ? 'text-green-400 font-bold' : ''}">🎙 ${sub.name} ${participants.length > 0 ? '(' + participants.length + ')' : ''}</span>
+                                ${isConnectedHere ? '<span class="text-[10px] bg-green-600/30 text-green-300 px-1.5 py-0.5 rounded">В эфире</span>' : ''}
+                            </div>
+                            ${participantsHTML}
+                        `;
                         div.onclick = () => {
                             const groupMuteObj = group.groupMutedUsers?.[currentUser.login];
                             const groupMuteExp = groupMuteObj ? (typeof groupMuteObj === 'object' ? groupMuteObj.expires : groupMuteObj) : 0;
@@ -3769,7 +3860,7 @@
 
                 outgoingRingtoneInterval = setInterval(() => playPhoneRing(), 1500);
             }).catch(() => {
-                showCustomModal('Ошибка', 'Нет доступа к микрофону для звонка', false, null, '⚠️');
+                showCustomModal('Ошибка', 'Нет доступа к микрофону для звонка', false, null, '⚠️️');
                 hangUpCall();
             });
         }
