@@ -119,9 +119,9 @@
                     <span class="text-lg mb-0.5">🎵</span>
                     <span class="text-[10px] font-medium tracking-tight">TikTok</span>
                 </button>
-                <button onclick="switchTab('music')" id="nav-music" title="Музыка" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
-                    <span class="text-lg mb-0.5">🎧</span>
-                    <span class="text-[10px] font-medium tracking-tight">Музыка</span>
+                <button onclick="switchTab('music')" id="nav-music" title="Онлайн Радио" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
+                    <span class="text-lg mb-0.5">📻</span>
+                    <span class="text-[10px] font-medium tracking-tight">Радио</span>
                 </button>
             </div>
 
@@ -225,12 +225,11 @@
                 </div>
             </div>
 
-            <!-- Вкладка: СООБЩЕСТВА (ДВУХКОЛОНОЧНЫЙ МАКЕТ С ЛЕНТОЙ СПРАВА) -->
+            <!-- Вкладка: СООБЩЕСТВА -->
             <div id="tab-content-groups" class="flex-1 p-6 overflow-y-auto hidden">
                 <h2 class="text-2xl font-bold mb-6 text-purple-400">Сообщества и Группы</h2>
                 
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-7xl">
-                    <!-- ЛЕВАЯ КОЛОНКА: Создание, Список доступных и рекомендуемые -->
                     <div class="space-y-6">
                         <div class="bg-gray-900 border border-gray-800 p-5 rounded-2xl shadow-xl">
                             <h3 class="text-sm font-semibold mb-3 text-gray-300">Создать новое сообщество</h3>
@@ -253,7 +252,6 @@
                         </div>
                     </div>
 
-                    <!-- ПРАВАЯ КОЛОНКА: Лента постов сообществ -->
                     <div class="space-y-6">
                         <div class="bg-gray-900 border border-purple-500/30 p-5 rounded-2xl space-y-3 shadow-xl h-full flex flex-col">
                             <h3 class="text-sm font-bold text-purple-300 uppercase tracking-wider">📢 Лента постов сообществ</h3>
@@ -300,15 +298,12 @@
                 <div id="tiktok-feed" class="w-full max-w-sm h-full overflow-y-scroll snap-y-mandatory no-scrollbar relative"></div>
             </div>
 
-            <!-- Вкладка: МУЗЫКА -->
+            <!-- Вкладка: ОНЛАЙН РАДИО РОССИИ -->
             <div id="tab-content-music" class="flex-1 p-6 overflow-y-auto hidden">
                 <div class="max-w-3xl mx-auto space-y-6">
-                    <h2 class="text-2xl font-bold text-purple-400">Музыкальный плеер</h2>
-                    <div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl flex space-x-3 shadow-xl">
-                        <input type="text" id="music-search-input" onkeydown="if(event.key==='Enter') searchMusicTracks()" placeholder="Поиск треков или исполнителей..." class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-purple-500 transition">
-                        <button onclick="searchMusicTracks()" class="bg-purple-600 hover:bg-purple-500 px-6 py-2.5 rounded-xl font-bold transition shadow-[0_0_15px_rgba(168,85,247,0.3)]">Найти</button>
-                    </div>
-                    <div id="music-results-list" class="space-y-3"></div>
+                    <h2 class="text-2xl font-bold text-purple-400">📻 Онлайн Радио России</h2>
+                    <p class="text-xs text-gray-400">Выберите любимую радиостанцию для прослушивания в прямом эфире.</p>
+                    <div id="radio-stations-list" class="space-y-3"></div>
                 </div>
             </div>
 
@@ -407,6 +402,37 @@
             </div>
             <div class="pt-2 flex justify-end">
                 <button onclick="closeSettingsModal()" class="bg-purple-600 hover:bg-purple-500 px-6 py-2.5 rounded-xl font-bold text-white transition shadow-[0_0_15px_rgba(168,85,247,0.3)]">Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО НАСТРОЕК ГРУППЫ -->
+    <div id="group-settings-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+        <div class="bg-gray-900 border border-purple-500/50 p-6 rounded-3xl w-full max-w-lg shadow-[0_0_35px_rgba(168,85,247,0.3)] space-y-4">
+            <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+                <h3 class="text-xl font-bold text-white">⚙️ Настройки группы</h3>
+                <button onclick="document.getElementById('group-settings-modal').classList.add('hidden')" class="text-gray-400 hover:text-white text-lg font-bold">✕</button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs text-gray-400 uppercase mb-1">Название группы</label>
+                    <input type="text" id="edit-group-name-input" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-purple-500">
+                </div>
+                <div>
+                    <h4 class="text-xs font-bold text-purple-300 uppercase mb-2">Каналы группы</h4>
+                    <div id="group-channels-list" class="space-y-2 max-h-32 overflow-y-auto mb-2"></div>
+                    <div class="flex space-x-2">
+                        <input type="text" id="new-channel-name" placeholder="Название канала..." class="flex-1 bg-gray-800 border border-gray-700 rounded-xl p-2 text-xs text-white">
+                        <select id="new-channel-perm" class="bg-gray-800 border border-gray-700 rounded-xl p-2 text-xs text-white">
+                            <option value="all">Все</option>
+                            <option value="admins">Только админы</option>
+                        </select>
+                        <button onclick="createSubgroup()" class="bg-purple-600 hover:bg-purple-500 px-3 py-2 rounded-xl text-xs font-bold text-white">Создать</button>
+                    </div>
+                </div>
+            </div>
+            <div class="flex justify-end pt-2">
+                <button onclick="saveGroupSettings()" class="bg-purple-600 hover:bg-purple-500 px-6 py-2.5 rounded-xl font-bold text-white text-xs shadow-[0_0_15px_rgba(168,85,247,0.3)]">Сохранить</button>
             </div>
         </div>
     </div>
@@ -535,6 +561,17 @@
             { url: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4', author: '@cat_lover', desc: 'Милота дня 🐾 #cats' }
         ];
 
+        const radioStations = [
+            { name: 'Европа Плюс', genre: 'Поп / Хит', url: 'https://ep256.europaplus.ru/ep256_aac', logo: '🌐' },
+            { name: 'Авторадио', genre: 'Дорожное / Ретро', url: 'https://pub0102.101.ru:8443/stream/air/aac/64/101', logo: '🚗' },
+            { name: 'Наше Радио',genre: 'Рок', url: 'https://nashe3.hostingradio.ru/nashe-128.mp3', logo: '🎸' },
+            { name: 'Ретро ФМ', genre: '70-е, 80-е, 90-е', url: 'https://retro3.hostingradio.ru/retro-128.mp3', logo: '📻' },
+            { name: 'Дорожное радио', genre: 'Шансон / Эстрада', url: 'https://dorognoe.hostingradio.ru:8000/dorognoe128.mp3', logo: '🛣️' },
+            { name: 'Радио Максимум', genre: 'Альтернатива / Рок', url: 'https://maximum.hostingradio.ru/maximum128.mp3', logo: '⚡' },
+            { name: 'Comedy Radio', genre: 'Юмор / Развлечения', url: 'https://comedy.hostingradio.ru/comedy128.mp3', logo: '🎤' },
+            { name: 'Радио Energy', genre: 'Dance / EDM', url: 'https://energy.hostingradio.ru/energy128.mp3', logo: '🔥' }
+        ];
+
         let customModalCallback = null;
         function showCustomModal(title, text, isConfirm = false, callback = null, icon = '✨') {
             document.getElementById('custom-modal-title').textContent = title;
@@ -643,7 +680,7 @@
                 db = data.db;
                 initApp();
             } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠️');
+                showCustomModal('Ошибка входа', data.error, false, null, '⚠️');
             }
         }
 
@@ -655,7 +692,7 @@
             const confirm = document.getElementById('reg-password-confirm').value;
 
             if (password !== confirm) {
-                showCustomModal('Ошибка', 'Пароли не совпадают!', false, null, '⚠️');
+                showCustomModal('Ошибка регистрации', 'Пароли не совпадают!', false, null, '⚠️');
                 return;
             }
 
@@ -674,7 +711,7 @@
             if (data.success) {
                 showCustomModal('Успех', 'Регистрация успешна! Войдите под своим логином.', false, () => switchAuthTab('login'), '🎉');
             } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠️');
+                showCustomModal('Ошибка регистрации', data.error, false, null, '⚠️');
             }
         }
 
@@ -701,7 +738,7 @@
             initTikTokFeed();
             fillProfileData();
             loadAudioDevices();
-            searchMusicTracks();
+            renderRadioStations();
             setupPttListeners();
         }
 
@@ -724,7 +761,7 @@
             if (tab === 'friends') renderFriends();
             if (tab === 'groups') renderGroups();
             if (tab === 'news') { renderNewsFeed(); loadInternetNews(); }
-            if (tab === 'music') searchMusicTracks();
+            if (tab === 'music') renderRadioStations();
         }
 
         function openSettingsModal() {
@@ -817,7 +854,62 @@
             } catch (e) {}
         }
 
-        // ДРУЗЬЯ (МГНОВЕННЫЕ СОКЕТЫ)
+        // РАДИО СТАНЦИИ РОССИИ
+        function renderRadioStations() {
+            const list = document.getElementById('radio-stations-list');
+            list.innerHTML = '';
+            radioStations.forEach((station, idx) => {
+                const div = document.createElement('div');
+                div.className = 'bg-gray-900 border border-gray-800 p-4 rounded-2xl flex items-center justify-between shadow-xl';
+                div.innerHTML = `
+                    <div class="flex items-center space-x-3">
+                        <div class="w-12 h-12 rounded-xl bg-purple-600/30 border border-purple-500/50 flex items-center justify-center text-2xl">${station.logo}</div>
+                        <div>
+                            <div class="font-bold text-white">${station.name}</div>
+                            <div class="text-xs text-gray-400">${station.genre}</div>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <audio id="radio-audio-${idx}" src="${station.url}"></audio>
+                        <button onclick="toggleRadio(${idx})" id="radio-btn-${idx}" class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-xl text-xs font-bold text-white transition shadow-[0_0_15px_rgba(168,85,247,0.3)]">▶ Плей</button>
+                        <input type="range" min="0" max="1" step="0.05" value="0.8" oninput="setRadioVolume(${idx}, this.value)" class="w-20 accent-purple-500" title="Громкость">
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function toggleRadio(idx) {
+            // Остановить остальные
+            radioStations.forEach((_, i) => {
+                const a = document.getElementById(`radio-audio-${i}`);
+                const b = document.getElementById(`radio-btn-${i}`);
+                if (i !== idx && a) {
+                    a.pause();
+                    if (b) b.textContent = '▶ Плей';
+                }
+            });
+
+            const audio = document.getElementById(`radio-audio-${idx}`);
+            const btn = document.getElementById(`radio-btn-${idx}`);
+            if (audio.paused) {
+                audio.play().then(() => {
+                    btn.textContent = '⏸ Пауза';
+                }).catch(() => {
+                    showCustomModal('Ошибка', 'Не удалось запустить поток радиостанции', false, null, '⚠️');
+                });
+            } else {
+                audio.pause();
+                btn.textContent = '▶ Плей';
+            }
+        }
+
+        function setRadioVolume(idx, val) {
+            const audio = document.getElementById(`radio-audio-${idx}`);
+            if (audio) audio.volume = val;
+        }
+
+        // ДРУЗЬЯ
         function renderFriends() {
             const friendsListEl = document.getElementById('friends-list');
             friendsListEl.innerHTML = '';
@@ -1036,6 +1128,87 @@
         function openUserChat(friendLogin) {
             switchTab('chats');
             selectChat({ type: 'user', id: friendLogin });
+        }
+
+        let editingGroupId = null;
+        function openGroupSettings(groupId) {
+            editingGroupId = groupId;
+            const group = db.groups[groupId];
+            document.getElementById('edit-group-name-input').value = group.name;
+            
+            const channelsList = document.getElementById('group-channels-list');
+            channelsList.innerHTML = '';
+            if (group.subgroups && group.subgroups.length > 0) {
+                group.subgroups.forEach(sub => {
+                    const row = document.createElement('div');
+                    row.className = 'flex justify-between items-center bg-gray-800 p-2 rounded-xl text-xs';
+                    row.innerHTML = `
+                        <span class="text-white"># ${sub.name} <span class="text-gray-400">(${sub.permission === 'admins' ? 'Только админы' : 'Все'})</span></span>
+                        <button onclick="deleteSubgroup('${groupId}', '${sub.id}')" class="text-red-400 hover:text-red-300 font-bold">✕</button>
+                    `;
+                    channelsList.appendChild(row);
+                });
+            } else {
+                channelsList.innerHTML = '<div class="text-xs text-gray-500">Нет дополнительных каналов</div>';
+            }
+
+            document.getElementById('group-settings-modal').classList.remove('hidden');
+        }
+
+        async function saveGroupSettings() {
+            const name = document.getElementById('edit-group-name-input').value.trim();
+            if (!name || !editingGroupId) return;
+
+            const res = await fetch('/api/update-group', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId: editingGroupId, name, login: currentUser.login })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                document.getElementById('group-settings-modal').classList.add('hidden');
+                renderGroups();
+                if (activeChat && activeChat.id === editingGroupId) {
+                    selectChat(activeChat);
+                }
+            } else {
+                showCustomModal('Ошибка', data.error, false, null, '⚠️');
+            }
+        }
+
+        async function createSubgroup() {
+            const nameInput = document.getElementById('new-channel-name');
+            const name = nameInput.value.trim();
+            const permission = document.getElementById('new-channel-perm').value;
+            if (!name || !editingGroupId) return;
+
+            const res = await fetch('/api/create-subgroup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId: editingGroupId, name, permission, login: currentUser.login })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                nameInput.value = '';
+                openGroupSettings(editingGroupId);
+            } else {
+                showCustomModal('Ошибка', data.error, false, null, '⚠️');
+            }
+        }
+
+        async function deleteSubgroup(groupId, subId) {
+            const res = await fetch('/api/delete-subgroup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, subId, login: currentUser.login })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                openGroupSettings(groupId);
+            }
         }
 
         function selectChat(chat) {
@@ -1325,7 +1498,7 @@
             document.getElementById('typing-indicator').textContent = '';
         });
 
-        // СООБЩЕСТВА С УПРАВЛЕНИЕМ РОЛЯМИ И УДАЛЕНИЕМ
+        // СООБЩЕСТВА С УПРАВЛЕНИЕМ РОЛЯМИ И НАСТРОЙКАМИ
         function renderGroups() {
             const list = document.getElementById('groups-list');
             const recList = document.getElementById('recommended-groups-list');
@@ -1373,7 +1546,10 @@
                 card.innerHTML = `
                     <div class="flex items-center justify-between">
                         <div>
-                            <div class="font-bold text-white">${group.name}</div>
+                            <div class="font-bold text-white flex items-center space-x-2">
+                                <span>${group.name}</span>
+                                ${(isLeader || myRole === 'Админ') ? `<button onclick="openGroupSettings('${group.id}')" class="text-xs text-purple-400 hover:underline">⚙ Настройки</button>` : ''}
+                            </div>
                             <div class="text-xs text-gray-400">Роль: <span class="text-purple-400">${myRole}</span> | Участников: ${group.members.length}</div>
                         </div>
                         ${isMember ? `
@@ -1691,40 +1867,6 @@
             }
         }
 
-        // МУЗЫКА
-        async function searchMusicTracks() {
-            const query = document.getElementById('music-search-input').value.trim();
-            const list = document.getElementById('music-results-list');
-            list.innerHTML = '<div class="text-gray-400 text-center py-4">Поиск треков...</div>';
-
-            try {
-                const res = await fetch(`/api/music-search?q=${encodeURIComponent(query || 'popular')}`);
-                const data = await res.json();
-                list.innerHTML = '';
-                if (data.tracks && data.tracks.length > 0) {
-                    data.tracks.forEach(track => {
-                        const div = document.createElement('div');
-                        div.className = 'bg-gray-900 border border-gray-800 p-4 rounded-2xl flex items-center justify-between shadow-xl';
-                        div.innerHTML = `
-                            <div class="flex items-center space-x-3">
-                                <img src="${track.artwork || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=150'}" class="w-12 h-12 rounded-xl object-cover">
-                                <div>
-                                    <div class="font-bold text-white">${track.title}</div>
-                                    <div class="text-xs text-gray-400">${track.artist}</div>
-                                </div>
-                            </div>
-                            <audio controls src="${track.previewUrl}" class="h-10"></audio>
-                        `;
-                        list.appendChild(div);
-                    });
-                } else {
-                    list.innerHTML = '<div class="text-gray-500 text-center py-4">Треки не найдены.</div>';
-                }
-            } catch (e) {
-                list.innerHTML = '<div class="text-red-400 text-center py-4">Ошибка загрузки треков.</div>';
-            }
-        }
-
         // ТОЛЬКО ГОЛОСОВЫЕ ЗВОНКИ И КОНФЕРЕНЦИИ
         function startDirectCallTo(targetLogin) {
             openUserChat(targetLogin);
@@ -1740,13 +1882,20 @@
             document.getElementById('btn-accept-call').classList.add('hidden');
             document.getElementById('single-call-modal').classList.remove('hidden');
 
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            } catch (err) {
+                showCustomModal('Ошибка', 'Нет доступа к микрофону!', false, null, '⚠️');
+                return;
+            }
 
             peerConnection = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
             localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
 
             peerConnection.ontrack = e => {
-                document.getElementById('remote-audio').srcObject = e.streams[0];
+                const remoteAudio = document.getElementById('remote-audio');
+                remoteAudio.srcObject = e.streams[0];
+                remoteAudio.play().catch(() => {});
             };
 
             peerConnection.onicecandidate = e => {
@@ -1793,13 +1942,20 @@
         }
 
         async function acceptCallCore() {
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            } catch (err) {
+                showCustomModal('Ошибка', 'Нет доступа к микрофону!', false, null, '⚠️');
+                return;
+            }
 
             peerConnection = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
             localStream.getTracks().forEach(t => peerConnection.addTrack(t, localStream));
 
             peerConnection.ontrack = e => {
-                document.getElementById('remote-audio').srcObject = e.streams[0];
+                const remoteAudio = document.getElementById('remote-audio');
+                remoteAudio.srcObject = e.streams[0];
+                remoteAudio.play().catch(() => {});
             };
 
             peerConnection.onicecandidate = e => {
@@ -1846,7 +2002,7 @@
             document.getElementById('incoming-call-modal').classList.add('hidden');
         }
 
-        // ГОЛОСОВЫЕ КОНФЕРЕНЦИИ
+        // ГОЛОСОВЫЕ КОНФЕРЕНЦИИ С ИСПРАВЛЕННЫМ МИКРОФОНОМ
         function openGroupCallConfigModal() {
             if (!activeChat || activeChat.type !== 'group') return;
             const group = db.groups[activeChat.id];
@@ -1893,10 +2049,13 @@
             currentCallGroupId = groupId;
             document.getElementById('group-call-modal').classList.remove('hidden');
 
-            localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-            addAudioTile('local', localStream, 'Вы');
-
-            socket.emit('start-group-conference', { groupId, targets, from: currentUser.login });
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                addAudioTile('local', localStream, 'Вы');
+                socket.emit('start-group-conference', { groupId, targets, from: currentUser.login });
+            } catch (err) {
+                showCustomModal('Ошибка', 'Не удалось получить доступ к микрофону для конференции!', false, null, '⚠️');
+            }
         }
 
         socket.on('group-call-users', (users) => {
@@ -1911,7 +2070,9 @@
             const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
             groupPeerConnections[targetSocketId] = pc;
 
-            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+            if (localStream) {
+                localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+            }
 
             pc.ontrack = (e) => {
                 addAudioTile(targetSocketId, e.streams[0], targetLogin);
@@ -1993,11 +2154,13 @@
                 tile.innerHTML = `
                     <div class="w-16 h-16 rounded-full bg-purple-600/30 border border-purple-500 flex items-center justify-center text-2xl animate-pulse">🎙️</div>
                     <div class="text-white font-bold text-sm">${label}</div>
-                    <audio autoplay ${id === 'local' ? 'muted' : ''}></audio>
+                    <audio autoplay playsinline ${id === 'local' ? 'muted' : ''}></audio>
                 `;
                 grid.appendChild(tile);
             }
-            tile.querySelector('audio').srcObject = stream;
+            const audioEl = tile.querySelector('audio');
+            audioEl.srcObject = stream;
+            audioEl.play().catch(() => {});
         }
 
         // ПРОФИЛЬ
@@ -2042,7 +2205,7 @@
                     switchTab('chats');
                 }, '🎉');
             } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠️️');
+                showCustomModal('Ошибка', data.error, false, null, '⚠️');
             }
         }
     </script>
