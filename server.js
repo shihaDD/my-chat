@@ -43,7 +43,6 @@ function saveDb() {
     }
 }
 
-// Поиск музыки
 app.get('/api/music-search', async (req, res) => {
     const q = (req.query.q || 'popular').toLowerCase();
     const tracks = [
@@ -55,7 +54,6 @@ app.get('/api/music-search', async (req, res) => {
     res.json({ success: true, tracks });
 });
 
-// Актуальные новости из интернета
 app.get('/api/internet-news', async (req, res) => {
     const internetNews = [
         { title: 'Искусственный интеллект совершил прорыв в квантовых вычислениях', url: '#', score: 1250, by: 'TechNews', time: new Date().toLocaleString() },
@@ -231,31 +229,6 @@ app.post('/api/join-group', (req, res) => {
     res.json({ success: true, db });
 });
 
-app.post('/api/set-group-role', (req, res) => {
-    const { groupId, login, targetLogin, newRole } = req.body;
-    const group = db.groups[groupId];
-    if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
-
-    if (group.creator !== login) {
-        return res.json({ success: false, error: 'Только лидер может назначать роли!' });
-    }
-    if (!group.roles) group.roles = {};
-    group.roles[targetLogin] = newRole;
-    saveDb();
-    res.json({ success: true, db });
-});
-
-app.post('/api/kick-group-member', (req, res) => {
-    const { groupId, login, targetLogin } = req.body;
-    const group = db.groups[groupId];
-    if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
-
-    group.members = group.members.filter(m => m !== targetLogin);
-    if (group.roles) delete group.roles[targetLogin];
-    saveDb();
-    res.json({ success: true, db });
-});
-
 app.post('/api/create-group-post', (req, res) => {
     const { groupId, author, text, media } = req.body;
     const group = db.groups[groupId];
@@ -265,16 +238,6 @@ app.post('/api/create-group-post', (req, res) => {
     const time = new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     group.posts.unshift({ author, text: text || '', media: media || null, time, likes: 0, comments: [] });
     saveDb();
-    res.json({ success: true, db });
-});
-
-app.post('/api/group-post-like', (req, res) => {
-    const { groupId, postIndex } = req.body;
-    const group = db.groups[groupId];
-    if (group && group.posts && group.posts[postIndex]) {
-        group.posts[postIndex].likes = (group.posts[postIndex].likes || 0) + 1;
-        saveDb();
-    }
     res.json({ success: true, db });
 });
 
@@ -312,32 +275,6 @@ app.post('/api/send-group-message', (req, res) => {
     res.json({ success: true, db });
 });
 
-app.post('/api/edit-message', (req, res) => {
-    const { sender, receiver, msgIndex, newText } = req.body;
-    if (db.messagesStore[sender]?.[receiver]?.[msgIndex]) {
-        db.messagesStore[sender][receiver][msgIndex].text = newText;
-        db.messagesStore[sender][receiver][msgIndex].edited = true;
-    }
-    if (db.messagesStore[receiver]?.[sender]?.[msgIndex]) {
-        db.messagesStore[receiver][sender][msgIndex].text = newText;
-        db.messagesStore[receiver][sender][msgIndex].edited = true;
-    }
-    saveDb();
-    res.json({ success: true, db });
-});
-
-app.post('/api/delete-message', (req, res) => {
-    const { sender, receiver, msgIndex } = req.body;
-    if (db.messagesStore[sender]?.[receiver]) {
-        db.messagesStore[sender][receiver].splice(msgIndex, 1);
-    }
-    if (db.messagesStore[receiver]?.[sender]) {
-        db.messagesStore[receiver][sender].splice(msgIndex, 1);
-    }
-    saveDb();
-    res.json({ success: true, db });
-});
-
 app.post('/api/news', (req, res) => {
     const { author, text, media } = req.body;
     const time = new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -364,16 +301,6 @@ app.post('/api/news-dislike', (req, res) => {
     res.json({ success: true, db });
 });
 
-app.post('/api/news-comment', (req, res) => {
-    const { index, author, text } = req.body;
-    if (db.news[index]) {
-        if (!db.news[index].comments) db.news[index].comments = [];
-        db.news[index].comments.push({ author, text });
-        saveDb();
-    }
-    res.json({ success: true, db });
-});
-
 io.on('connection', (socket) => {
     socket.on('register', (login) => {
         socket.login = login;
@@ -381,7 +308,13 @@ io.on('connection', (socket) => {
     });
 
     socket.on('call-user', ({ to, offer, from }) => {
-        io.to(to).emit('incoming-call', { from, offer });
+        io.to(to).emit('incoming-call', { from, offer, isGroup: false });
+    });
+
+    socket.on('start-group-conference', ({ groupId, targets, from }) => {
+        targets.forEach(targetLogin => {
+            io.to(targetLogin).emit('incoming-call', { from, offer: null, isGroup: true, groupId });
+        });
     });
 
     socket.on('call-accepted', ({ to, answer }) => {
