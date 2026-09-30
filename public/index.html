@@ -104,18 +104,20 @@
         </div>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО ВЫБОРА МУТА -->
+    <!-- МОДАЛЬНОЕ ОКНО ВЫБОРА МУТА И ПРИЧИНЫ -->
     <div id="violation-mute-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
         <div class="bg-gray-900 border border-red-500/50 p-5 rounded-3xl w-[92%] max-w-sm shadow-2xl space-y-4 text-center">
             <h3 class="text-lg font-bold text-red-400">🔇 Выдача мута пользователю</h3>
-            <p class="text-xs text-gray-300">Выберите или введите длительность запрета на отправку сообщений (от 10 минут до 7 суток):</p>
-            <select id="violation-mute-select" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-sm text-white">
-                <option value="10">10 минут</option>
-                <option value="60">1 час</option>
-                <option value="360">6 часов</option>
-                <option value="1440">24 часа (1 сутки)</option>
-                <option value="10080">10080 минут (7 суток)</option>
-            </select>
+            <div class="space-y-3 text-left">
+                <div>
+                    <label class="block text-xs text-gray-400 uppercase mb-1">Причина наказания</label>
+                    <input type="text" id="violation-mute-reason" placeholder="Например: Оскорбления / Мат" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-xs text-white">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-400 uppercase mb-1">Длительность (от 1 до 9999 минут)</label>
+                    <input type="number" id="violation-mute-minutes" min="1" max="9999" value="60" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-sm text-white font-mono">
+                </div>
+            </div>
             <div class="flex justify-end space-x-2 pt-2">
                 <button onclick="document.getElementById('violation-mute-modal').classList.add('hidden')" class="bg-gray-800 hover:bg-gray-700 text-gray-300 px-4 py-2 rounded-xl text-xs font-bold">Отмена</button>
                 <button onclick="submitViolationMute()" class="bg-red-600 hover:bg-red-500 text-white px-5 py-2 rounded-xl text-xs font-bold shadow">Замутить</button>
@@ -151,12 +153,19 @@
         </div>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО НАЗНАЧЕНИЯ РОЛИ -->
+    <!-- МОДАЛЬНОЕ ОКНО НАЗНАЧЕНИЯ РОЛИ И СНЯТИЯ МУТА -->
     <div id="role-assign-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
         <div class="bg-gray-900 border border-purple-500/50 p-5 sm:p-6 rounded-3xl w-[92%] max-w-sm shadow-[0_0_35px_rgba(168,85,247,0.3)] space-y-4 relative">
             <button onclick="closeRoleAssignModal()" class="absolute top-4 right-4 text-gray-400 hover:text-white text-lg font-bold">✕</button>
-            <h3 class="text-lg font-bold text-white">Назначение роли</h3>
+            <h3 class="text-lg font-bold text-white">Управление пользователем</h3>
             <div id="role-assign-username" class="text-sm text-purple-300 font-bold"></div>
+            
+            <div id="user-global-mute-status" class="bg-gray-950 p-3 rounded-xl border border-red-500/30 text-xs space-y-2 hidden">
+                <div class="font-bold text-red-400">🔇 Действует глобальный мут</div>
+                <div id="user-global-mute-timer" class="text-gray-300 font-mono"></div>
+                <button onclick="removeGlobalMutedUser()" class="w-full bg-green-600 hover:bg-green-500 text-white py-1.5 rounded-lg font-bold">Снять глобальный мут</button>
+            </div>
+
             <div>
                 <label class="block text-xs text-gray-400 uppercase mb-1">Выберите глобальную роль</label>
                 <select id="role-assign-select" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-sm text-white focus:outline-none focus:border-purple-500">
@@ -269,8 +278,8 @@
                     <span class="text-[10px] font-medium tracking-tight">Радио</span>
                 </button>
 
-                <!-- ВКЛАДКА МОДЕРАЦИИ -->
-                <button onclick="switchTab('moderation')" id="nav-moderation" title="Модерация" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition relative">
+                <!-- ВКЛАДКА МОДЕРАЦИИ (СКРЫТА ДЛЯ ОБЫЧНЫХ ПОЛЬЗОВАТЕЛЕЙ) -->
+                <button onclick="switchTab('moderation')" id="nav-moderation" title="Модерация" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition relative hidden">
                     <span class="text-lg mb-0.5">🛡️</span>
                     <span class="text-[10px] font-medium tracking-tight">Мод-ция</span>
                     <span id="moderation-badge" class="absolute top-1 right-3 w-3 h-3 bg-red-500 rounded-full border-2 border-gray-900 hidden shadow-[0_0_8px_rgba(239,68,68,0.8)]"></span>
@@ -443,11 +452,12 @@
                             <span id="ws-group-sidebar-name" class="font-bold text-white truncate text-xs">Группа</span>
                             
                             <div class="flex items-center space-x-1">
+                                <!-- Кнопка верификации строго слева от заявок -->
+                                <div id="ws-verification-btn-container"></div>
                                 <button onclick="openGroupRequestsModal()" class="relative p-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-xs text-white" title="Запросы на вступление">
                                     📥
                                     <span id="ws-requests-badge-dot" class="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-gray-900 hidden shadow-[0_0_6px_rgba(239,68,68,0.8)]"></span>
                                 </button>
-                                <div id="ws-verification-btn-container"></div>
                                 <button onclick="openGroupMembersModal()" class="p-1.5 bg-purple-600/30 hover:bg-purple-600/50 text-purple-300 rounded-lg text-xs" title="Список участников">👥</button>
                                 <button onclick="openActiveGroupSettings()" class="text-xs text-gray-400 hover:text-white p-1" title="Настройки">⚙️</button>
                             </div>
@@ -571,6 +581,9 @@
                             <span>Нарушения</span>
                             <span id="violations-count-badge" class="bg-red-500 text-white text-[10px] px-1.5 py-0.2 rounded-full hidden">0</span>
                         </button>
+                        <button onclick="switchModTab('muted')" id="mod-tab-btn-muted" class="pb-2 font-bold text-sm text-gray-400 hover:text-white transition flex items-center space-x-1">
+                            <span>Нарушители (Муты)</span>
+                        </button>
                     </div>
 
                     <!-- 1. Вкладка Общение -->
@@ -611,6 +624,15 @@
                         <div class="bg-gray-900 border border-red-500/30 p-4 rounded-2xl space-y-3">
                             <h3 class="text-sm font-bold text-red-400">🚨 Зафиксированные нарушения (Русские маты)</h3>
                             <div id="mod-violations-list" class="space-y-3 max-h-[500px] overflow-y-auto"></div>
+                        </div>
+                    </div>
+
+                    <!-- 4. Вкладка Нарушители (Муты) с поиском -->
+                    <div id="mod-section-muted" class="space-y-4 hidden">
+                        <div class="bg-gray-900 border border-red-500/30 p-4 rounded-2xl space-y-3">
+                            <h3 class="text-sm font-bold text-red-400">🔇 Список активных нарушителей в муте</h3>
+                            <input type="text" id="mod-muted-search" oninput="renderMutedUsersList()" placeholder="Поиск по имени / логину..." class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-purple-500">
+                            <div id="mod-muted-users-list" class="space-y-3 max-h-[450px] overflow-y-auto"></div>
                         </div>
                     </div>
                 </div>
@@ -773,11 +795,6 @@
                     <div id="group-channels-list" class="space-y-2 max-h-36 overflow-y-auto mb-2"></div>
                 </div>
 
-                <div>
-                    <h4 class="text-xs font-bold text-purple-300 uppercase mb-2">👥 Участники группы</h4>
-                    <div id="group-members-column-list" class="space-y-2 max-h-48 overflow-y-auto pr-1"></div>
-                </div>
-
                 <div id="leader-delete-section" class="hidden pt-2 border-t border-gray-800">
                     <button onclick="deleteCurrentGroupModal()" class="w-full bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white py-2.5 rounded-xl font-bold transition text-xs">🗑 Удалить группу</button>
                 </div>
@@ -879,6 +896,7 @@
         let callTargetUser = null;
         let incomingOffer = null;
         let incomingCallerLogin = null;
+        let connectionTimeout = null;
 
         let outgoingRingtoneInterval = null;
         let incomingRingtoneInterval = null;
@@ -949,19 +967,50 @@
             const myLogin = currentUser.login.toLowerCase();
             const myGlobalRole = getUserGlobalRole(currentUser.login);
             if (myLogin !== 'warren' && myGlobalRole !== 'main_moderator') {
-                showCustomModal('Доступ запрещен', 'Назначать роли могут только Warren и Главный модератор!', false, null, '⚠️');
+                showCustomModal('Доступ запрещен', 'Назначать роли и управлять мутами могут только Warren и Главный модератор!', false, null, '⚠️');
                 return;
             }
             targetAssignLogin = login;
             document.getElementById('role-assign-username').textContent = `@${login}`;
             const currentRole = db.globalRoles?.[login] || 'user';
             document.getElementById('role-assign-select').value = currentRole;
+
+            // Проверка глобального мута
+            const muteUntil = db.mutedUsers?.[login];
+            const muteStatusBox = document.getElementById('user-global-mute-status');
+            const muteTimerEl = document.getElementById('user-global-mute-timer');
+            if (muteUntil && muteUntil > Date.now()) {
+                const leftMins = Math.ceil((muteUntil - Date.now()) / 60000);
+                muteTimerEl.textContent = `Осталось примерно ${leftMins} мин.`;
+                muteStatusBox.classList.remove('hidden');
+            } else {
+                muteStatusBox.classList.add('hidden');
+            }
+
             document.getElementById('role-assign-modal').classList.remove('hidden');
         }
 
         function closeRoleAssignModal() {
             document.getElementById('role-assign-modal').classList.add('hidden');
             targetAssignLogin = null;
+        }
+
+        async function removeGlobalMutedUser() {
+            if (!targetAssignLogin) return;
+            const res = await fetch('/api/remove-global-mute', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, targetLogin: targetAssignLogin })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                showCustomModal('Успех', `Глобальный мут с пользователя @${targetAssignLogin} снят!`, false, null, '✨');
+                closeRoleAssignModal();
+                renderFriends();
+                renderModerationPanel();
+                socket.emit('refresh-db');
+            }
         }
 
         async function saveUserRoleAssignment() {
@@ -1175,6 +1224,14 @@
                 myBadgeEl.classList.add('hidden');
             }
 
+            // Управление видимостью вкладки модерации для обычных пользователей
+            const navModBtn = document.getElementById('nav-moderation');
+            if (hasFullAccess(currentUser.login)) {
+                navModBtn.classList.remove('hidden');
+            } else {
+                navModBtn.classList.add('hidden');
+            }
+
             const newsPublishCard = document.getElementById('news-publish-card');
             if (!hasFullAccess(currentUser.login)) {
                 newsPublishCard.innerHTML = `
@@ -1218,6 +1275,11 @@
         }
 
         function switchTab(tab) {
+            if (tab === 'moderation' && !hasFullAccess(currentUser.login)) {
+                showCustomModal('Доступ запрещен', 'Раздел модерации доступен только модераторам!', false, null, '⚠️');
+                return;
+            }
+
             const tabs = ['chats', 'friends', 'groups', 'news', 'music', 'moderation', 'profile'];
             tabs.forEach(t => {
                 document.getElementById(`tab-content-${t}`)?.classList.add('hidden');
@@ -1273,7 +1335,7 @@
         }
 
         function switchModTab(subTab) {
-            ['chats', 'requests', 'violations'].forEach(st => {
+            ['chats', 'requests', 'violations', 'muted'].forEach(st => {
                 document.getElementById(`mod-section-${st}`).classList.add('hidden');
                 document.getElementById(`mod-tab-btn-${st}`).className = "pb-2 font-bold text-sm text-gray-400 hover:text-white transition";
             });
@@ -1323,7 +1385,6 @@
                 }
             }
 
-            // Рендер списка созданных глобальных каналов в разделе Модерация -> Общение
             const globalChannelsList = document.getElementById('global-channels-created-list');
             if (globalChannelsList) {
                 globalChannelsList.innerHTML = '';
@@ -1374,6 +1435,8 @@
                 }
             }
 
+            renderMutedUsersList();
+
             const verifList = document.getElementById('mod-verif-requests-list');
             if (verifList) {
                 verifList.innerHTML = '';
@@ -1420,6 +1483,61 @@
                 if (allMsgsCount === 0) {
                     chatMonitor.innerHTML = '<div class="text-xs text-gray-500 text-center py-2">Нет активных сообщений в чатах.</div>';
                 }
+            }
+        }
+
+        // Рендер списка нарушителей (мутов) с поиском и кнопкой снятия
+        function renderMutedUsersList() {
+            const listEl = document.getElementById('mod-muted-users-list');
+            const searchInput = document.getElementById('mod-muted-search');
+            if (!listEl) return;
+            listEl.innerHTML = '';
+
+            const query = searchInput ? searchInput.value.toLowerCase() : '';
+            const mutedMap = db.mutedUsers || {};
+            const now = Date.now();
+
+            let activeMutes = Object.entries(mutedMap).filter(([login, until]) => until > now);
+            if (query) {
+                activeMutes = activeMutes.filter(([login]) => login.toLowerCase().includes(query));
+            }
+
+            if (activeMutes.length === 0) {
+                listEl.innerHTML = '<div class="text-xs text-gray-500 text-center py-4">Нет активных мутов.</div>';
+                return;
+            }
+
+            activeMutes.forEach(([login, until]) => {
+                const leftMins = Math.ceil((until - now) / 60000);
+                const userObj = db.users[login] || {};
+                const div = document.createElement('div');
+                div.className = 'bg-gray-950 border border-red-500/30 p-3 rounded-xl flex items-center justify-between text-xs';
+                div.innerHTML = `
+                    <div class="flex items-center space-x-3">
+                        <img src="${getAvatar(userObj.avatar)}" class="w-9 h-9 rounded-full object-cover">
+                        <div>
+                            <div class="font-bold text-white text-sm">@${login}</div>
+                            <div class="text-red-400 font-mono">Осталось: ${leftMins} мин.</div>
+                        </div>
+                    </div>
+                    <button onclick="removeGlobalMutedUserDirect('${login}')" class="bg-green-600 hover:bg-green-500 text-white px-3 py-1.5 rounded-lg font-bold">Снять мут</button>
+                `;
+                listEl.appendChild(div);
+            });
+        }
+
+        async function removeGlobalMutedUserDirect(login) {
+            const res = await fetch('/api/remove-global-mute', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ login: currentUser.login, targetLogin: login })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                renderModerationPanel();
+                showCustomModal('Успех', `Мут с пользователя @${login} аннулирован!`, false, null, '✨');
+                socket.emit('refresh-db');
             }
         }
 
@@ -1474,16 +1592,19 @@
 
         function openViolationMuteModal(violId) {
             selectedViolationIdForAction = violId;
+            document.getElementById('violation-mute-reason').value = '';
+            document.getElementById('violation-mute-minutes').value = '60';
             document.getElementById('violation-mute-modal').classList.remove('hidden');
         }
 
         async function submitViolationMute() {
             if (!selectedViolationIdForAction) return;
-            const muteMinutes = document.getElementById('violation-mute-select').value;
+            const reason = document.getElementById('violation-mute-reason').value.trim() || 'Нарушение правил';
+            const muteMinutes = document.getElementById('violation-mute-minutes').value;
             const res = await fetch('/api/resolve-violation-action', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, violId: selectedViolationIdForAction, action: 'mute', muteMinutes })
+                body: JSON.stringify({ login: currentUser.login, violId: selectedViolationIdForAction, action: 'mute', muteMinutes, reason })
             });
             const data = await res.json();
             if (data.success) {
@@ -1491,7 +1612,7 @@
                 document.getElementById('violation-mute-modal').classList.add('hidden');
                 selectedViolationIdForAction = null;
                 renderModerationPanel();
-                showCustomModal('Мут выдан', 'Пользователь заблокирован и получил запрет на дублирование в ленте новостей.', false, null, '🔇');
+                showCustomModal('Мут выдан', `Пользователь заблокирован на ${muteMinutes} мин. Причина: ${reason}`, false, null, '🔇');
                 socket.emit('refresh-db');
             }
         }
@@ -1817,13 +1938,13 @@
                 const card = document.createElement('div');
                 card.className = 'flex items-center justify-between p-3 bg-gray-900 border border-gray-800 rounded-2xl shadow-sm hover:border-gray-700 transition';
                 card.innerHTML = `
-                    <div class="flex items-center space-x-3 cursor-pointer">
-                        <div class="relative" onclick="openRoleAssignModal('${friendLogin}')" title="Нажмите для назначения роли">
+                    <div class="flex items-center space-x-3 cursor-pointer" onclick="openRoleAssignModal('${friendLogin}')" title="Нажмите для управления профилем / ролью / мутом">
+                        <div class="relative">
                             <img src="${avatarUrl}" class="w-10 h-10 rounded-full object-cover border-2 border-purple-500/40 hover:scale-105 transition">
                             ${roleInfo.badge ? `<span class="absolute -bottom-1 -right-1 text-[10px] bg-purple-900 rounded-full px-1 border border-purple-500">${roleInfo.badge}</span>` : ''}
                             ${isOnline ? '<span class="absolute top-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-gray-900"></span>' : ''}
                         </div>
-                        <div onclick="openUserChat('${friendLogin}')">
+                        <div>
                             <div class="font-bold flex items-center space-x-2">
                                 <span class="${roleInfo.color}">${displayName}</span>
                                 ${roleInfo.badge ? `<span class="text-[10px] bg-purple-600/30 text-purple-300 px-1.5 py-0.5 rounded-md">${roleInfo.title}</span>` : ''}
@@ -1992,7 +2113,7 @@
                 item.onclick = () => selectChat({ type: 'user', id: friendLogin });
                 item.innerHTML = `
                     <div class="flex items-center space-x-3 overflow-hidden">
-                        <div class="relative flex-shrink-0">
+                        <div class="relative flex-shrink-0" onclick="event.stopPropagation(); openRoleAssignModal('${friendLogin}')" title="Управление пользователем">
                             <img src="${avatarUrl}" class="w-10 h-10 rounded-full object-cover">
                             ${roleInfo.badge ? `<span class="absolute -bottom-1 -right-1 text-[9px] bg-purple-900 rounded-full px-0.5 border border-purple-500">${roleInfo.badge}</span>` : ''}
                             ${isOnline ? '<span class="absolute top-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-gray-900"></span>' : ''}
@@ -2073,32 +2194,6 @@
                 channelsList.innerHTML = '<div class="text-xs text-gray-500 p-2">Нет дополнительных каналов</div>';
             }
 
-            const membersList = document.getElementById('group-members-column-list');
-            membersList.innerHTML = '';
-            const availableRoles = ['Лидер', 'Админ', 'Участник', ...Object.keys(group.customRoles || {})];
-
-            group.members.forEach(m => {
-                const mLeader = group.creator === m;
-                const mRole = group.roles?.[m] || (mLeader ? 'Лидер' : 'Участник');
-                const row = document.createElement('div');
-                row.className = 'flex justify-between items-center bg-gray-950 p-2.5 rounded-xl text-xs border border-gray-800';
-                
-                let roleSelectorHTML = `<span class="text-purple-400">[${mRole}]</span>`;
-                if (canManage && !mLeader && m !== currentUser.login) {
-                    let options = availableRoles.map(r => `<option value="${r}" ${mRole === r ? 'selected' : ''}>${r}</option>`).join('');
-                    roleSelectorHTML = `<select onchange="changeMemberRole('${groupId}', '${m}', this.value)" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-purple-300">${options}</select>`;
-                }
-
-                row.innerHTML = `
-                    <div class="flex items-center space-x-2">
-                        <span class="text-white font-bold">@${m} ${mLeader ? '⭐' : ''}</span>
-                        ${roleSelectorHTML}
-                    </div>
-                    ${(canManage && !mLeader && m !== currentUser.login) ? `<button onclick="kickGroupMember('${groupId}', '${m}')" class="bg-red-600 hover:bg-red-500 px-2 py-1 rounded text-[10px] font-bold text-white">Исключить</button>` : ''}
-                `;
-                membersList.appendChild(row);
-            });
-
             document.getElementById('group-settings-modal').classList.remove('hidden');
         }
 
@@ -2131,7 +2226,7 @@
             document.getElementById('group-requests-modal').classList.remove('hidden');
         }
 
-        // МОДАЛЬНОЕ ОКНО УПРАВЛЕНИЯ УЧАСТНИКАМИ ГРУППЫ С МУТОМ И НИКНЕЙМАМИ
+        // МОДАЛЬНОЕ ОКНО УПРАВЛЕНИЯ УЧАСТНИКАМИ ГРУППЫ С МУТОМ ОТ 1 ДО 9999 МИНУТ
         function openGroupMembersModal() {
             const gId = activeGroupWorkspaceId;
             if (!gId) return;
@@ -2151,6 +2246,7 @@
                 const mRole = group.roles?.[m] || (mLeader ? 'Лидер' : 'Участник');
                 const customNick = group.groupNicknames?.[m] || '';
                 const isMuted = group.groupMutedUsers?.[m] && group.groupMutedUsers[m] > Date.now();
+                const muteLeftMins = isMuted ? Math.ceil((group.groupMutedUsers[m] - Date.now()) / 60000) : 0;
                 const userObj = db.users[m] || {};
 
                 const div = document.createElement('div');
@@ -2168,7 +2264,7 @@
                             <img src="${getAvatar(userObj.avatar)}" class="w-8 h-8 rounded-full object-cover">
                             <div>
                                 <div class="font-bold text-white">@${m} ${customNick ? '(' + customNick + ')' : ''} ${mLeader ? '⭐' : ''}</div>
-                                <div class="text-[10px] text-gray-400">${isMuted ? '<span class="text-red-400 font-bold">🔇 В муте в группе</span>' : 'Активен'}</div>
+                                <div class="text-[10px] text-gray-400">${isMuted ? `<span class="text-red-400 font-bold">🔇 Мут в группе (${muteLeftMins} мин.)</span>` : 'Активен'}</div>
                             </div>
                         </div>
                         <div class="flex items-center space-x-1">
@@ -2179,12 +2275,15 @@
                     <div class="flex items-center justify-between pt-2 border-t border-gray-800 flex-wrap gap-1">
                         <div class="flex items-center space-x-1">
                             <input type="text" id="group-nick-input-${m}" value="${customNick}" placeholder="Ник в группе..." class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-28">
-                            <button onclick="saveGroupNickname('${groupId}', '${m}')" class="bg-purple-600 hover:bg-purple-500 px-2 py-1 rounded text-white font-bold">Изменить ник</button>
+                            <button onclick="saveGroupNickname('${groupId}', '${m}')" class="bg-purple-600 hover:bg-purple-500 px-2 py-1 rounded text-white font-bold">Ник</button>
                         </div>
                         <div class="flex items-center space-x-1">
                             ${isMuted ? 
                                 `<button onclick="groupUnmuteMember('${groupId}', '${m}')" class="bg-green-600 hover:bg-green-500 px-2 py-1 rounded text-white font-bold">Размутить</button>` :
-                                `<button onclick="groupMuteMemberModal('${groupId}', '${m}')" class="bg-red-600 hover:bg-red-500 px-2 py-1 rounded text-white font-bold">Мут</button>`
+                                `<div class="flex items-center space-x-1">
+                                    <input type="number" id="group-mute-mins-${m}" min="1" max="9999" value="60" class="bg-gray-800 border border-gray-700 rounded px-1 py-1 text-xs text-white w-14 font-mono text-center" title="Мин">
+                                    <button onclick="groupMuteMemberModal('${groupId}', '${m}')" class="bg-red-600 hover:bg-red-500 px-2 py-1 rounded text-white font-bold">Мут</button>
+                                </div>`
                             }
                             <button onclick="kickGroupMember('${groupId}', '${m}')" class="bg-gray-700 hover:bg-red-600 px-2 py-1 rounded text-white font-bold">Исключить</button>
                         </div>
@@ -2218,24 +2317,28 @@
             }
         }
 
-        function groupMuteMemberModal(groupId, targetLogin) {
-            showCustomModal('Мут в группе', `Выдать мут пользователю @${targetLogin} в этой группе? (Запрет на отправку сообщений и голосовой чат)`, true, async (confirmed) => {
-                if (!confirmed) return;
-                const res = await fetch('/api/group-mute-member', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ groupId, login: currentUser.login, targetLogin, muteMinutes: 60 })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    db = data.db;
-                    openGroupMembersModal();
-                    showCustomModal('Мут выдан', 'Пользователь заблокирован в этой группе.', false, null, '🔇');
-                    socket.emit('refresh-db');
-                } else {
-                    showCustomModal('Ошибка', data.error, false, null, '⚠️');
-                }
-            }, '🔇');
+        async function groupMuteMemberModal(groupId, targetLogin) {
+            const minsInput = document.getElementById(`group-mute-mins-${targetLogin}`);
+            const muteMinutes = minsInput ? parseInt(minsInput.value) || 60 : 60;
+            if (muteMinutes < 1 || muteMinutes > 9999) {
+                showCustomModal('Ошибка', 'Время мута должно быть от 1 до 9999 минут!', false, null, '⚠️');
+                return;
+            }
+
+            const res = await fetch('/api/group-mute-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ groupId, login: currentUser.login, targetLogin, muteMinutes })
+            });
+            const data = await res.json();
+            if (data.success) {
+                db = data.db;
+                openGroupMembersModal();
+                showCustomModal('Мут выдан', `Участник @${targetLogin} замучен в группе на ${muteMinutes} мин.`, false, null, '🔇');
+                socket.emit('refresh-db');
+            } else {
+                showCustomModal('Ошибка', data.error, false, null, '⚠️');
+            }
         }
 
         async function groupUnmuteMember(groupId, targetLogin) {
@@ -2284,12 +2387,13 @@
             if (reqs.length > 0) dot.classList.remove('hidden');
             else dot.classList.add('hidden');
 
+            // Кнопка верификации СТРОГО СЛЕВА от заявок в группу
             if (group.isVerified) {
-                verifContainer.innerHTML = `<span class="text-blue-400 text-sm font-bold" title="Сообщество верифицировано">✅</span>`;
+                verifContainer.innerHTML = `<span class="text-blue-400 text-sm font-bold p-1" title="Сообщество верифицировано">✅</span>`;
                 nameEl.innerHTML = `<span class="verified-gradient-name">${group.name}</span> <span class="text-blue-400">✓</span>`;
                 activeNameEl.innerHTML = `<span class="verified-gradient-name font-extrabold">${group.name}</span> <span class="text-blue-400" title="Верифицировано">✅</span> (# общий)`;
             } else if (group.verificationPending) {
-                verifContainer.innerHTML = `<span class="text-yellow-400 text-[10px]" title="На проверке">⏳ На проверке</span>`;
+                verifContainer.innerHTML = `<span class="text-yellow-400 text-[10px] p-1" title="На проверке">⏳</span>`;
                 nameEl.textContent = group.name;
                 activeNameEl.textContent = group.name + ' (# общий)';
             } else {
@@ -2329,7 +2433,7 @@
                     openGroupMembersModal();
                     socket.emit('refresh-db');
                 } else {
-                    showCustomModal('Ошибка', data.error, false, null, '⚠️️');
+                    showCustomModal('Ошибка', data.error, false, null, '⚠');
                 }
             }, '⚠️');
         }
@@ -2620,6 +2724,12 @@
                     } else if (sub.type === 'voice') {
                         div.innerHTML = `<span>🎙 ${sub.name}</span>`;
                         div.onclick = () => {
+                            // Проверка мута в группе перед входом в голосовой канал
+                            if (group.groupMutedUsers && group.groupMutedUsers[currentUser.login] && group.groupMutedUsers[currentUser.login] > Date.now()) {
+                                const left = Math.ceil((group.groupMutedUsers[currentUser.login] - Date.now()) / 60000);
+                                showCustomModal('Мут в группе', `Вы замучены в этой группе. Осталось минут: ${left}`, false, null, '🔇');
+                                return;
+                            }
                             startGroupConference(group.id, sub.id);
                         };
                         voiceChannels.appendChild(div);
@@ -2677,6 +2787,22 @@
 
         async function sendMessage() {
             const isGroup = !!activeGroupWorkspaceId;
+
+            // Проверка глобального или группового мута перед отправкой
+            if (db.mutedUsers && db.mutedUsers[currentUser.login] && db.mutedUsers[currentUser.login] > Date.now()) {
+                const left = Math.ceil((db.mutedUsers[currentUser.login] - Date.now()) / 60000);
+                showCustomModal('Глобальный мут', `Вы находитесь в глобальном муте. Осталось минут: ${left}`, false, null, '🔇');
+                return;
+            }
+            if (isGroup && activeGroupWorkspaceId) {
+                const grp = db.groups[activeGroupWorkspaceId];
+                if (grp && grp.groupMutedUsers && grp.groupMutedUsers[currentUser.login] && grp.groupMutedUsers[currentUser.login] > Date.now()) {
+                    const left = Math.ceil((grp.groupMutedUsers[currentUser.login] - Date.now()) / 60000);
+                    showCustomModal('Мут в группе', `Вы замучены в этой группе. Осталось минут: ${left}`, false, null, '🔇');
+                    return;
+                }
+            }
+
             const inputId = isGroup ? 'ws-message-input' : 'message-input';
             const input = document.getElementById(inputId);
             let text = input.value.trim();
@@ -2869,7 +2995,7 @@
                         ${mediaHTML}
                         <div class="flex items-center justify-end space-x-2 mt-1 text-[10px] opacity-80">
                             <button onclick="pinMessage('${msg.id}')" class="hover:underline">📌</button>
-                            ${isMe || hasFullAccess(currentUser.login) ? `<button onclick="startEditingMessage('${msg.id}', \`${msg.text || ''}\`)" class="hover:underline">✏️</button>` : ''}
+                            ${isMe || hasFullAccess(currentUser.login) ? `<button onclick="startEditingMessage('${msg.id}', \`${msg.text || ''}\`)" class="hover:underline">✏️️</button>` : ''}
                             ${canManage ? `<button onclick="deleteMessage('${msg.id}')" class="hover:underline text-red-300">🗑️</button>` : ''}
                         </div>
                     </div>
@@ -2887,6 +3013,12 @@
         }
 
         function toggleVoiceRecord() {
+            // Проверка мута
+            if (db.mutedUsers && db.mutedUsers[currentUser.login] && db.mutedUsers[currentUser.login] > Date.now()) {
+                showCustomModal('Мут', 'У вас активен мут.', false, null, '🔇');
+                return;
+            }
+
             if (!mediaRecorder || mediaRecorder.state === 'inactive') {
                 navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
                     mediaRecorder = new MediaRecorder(stream);
@@ -3070,11 +3202,21 @@
                     </div>
                     <div class="text-sm text-gray-200 break-words">${post.text}</div>
                     <div class="flex justify-end space-x-2">
-                        ${canManage ? `<button onclick="deleteGroupPost('${post.groupId}', '${post.id}')" class="text-xs text-red-400 hover:text-red-300 font-bold">🗑 Удалить</button>` : ''}
+                        ${canManage ? `
+                            <button onclick="startEditingGroupPost('${post.groupId}', '${post.id}', \`${post.text || ''}\`)" class="text-xs text-purple-400 font-bold hover:underline">✏️ Редактировать</button>
+                            <button onclick="deleteGroupPost('${post.groupId}', '${post.id}')" class="text-xs text-red-400 hover:text-red-300 font-bold">🗑 Удалить</button>
+                        ` : ''}
                     </div>
                 `;
                 list.appendChild(div);
             });
+        }
+
+        let editingGroupPostTarget = null;
+        function startEditingGroupPost(groupId, postId, currentText) {
+            editingGroupPostTarget = { groupId, postId };
+            document.getElementById('group-post-text').value = currentText;
+            document.getElementById('group-post-text').focus();
         }
 
         async function deleteGroupPost(groupId, postId) {
@@ -3282,7 +3424,7 @@
             }
         }
 
-        // WEBRTC ЗВОНКИ И КОНФЕРЕНЦИИ
+        // WEBRTC ЗВОНКИ И КОНФЕРЕНЦИИ С ИСПРАВЛЕНИЕМ ВЕЧНОГО ПОДКЛЮЧЕНИЯ
         async function startDirectCall() {
             if (!activeChat || activeChat.type !== 'user') return;
             callTargetUser = activeChat.id;
@@ -3300,15 +3442,32 @@
 
                 peerConnection.ontrack = e => {
                     document.getElementById('remote-audio').srcObject = e.streams[0];
+                    document.getElementById('call-status-text').textContent = 'Разговор идет';
                 };
 
                 peerConnection.onicecandidate = e => {
                     if (e.candidate) socket.emit('ice-candidate', { to: callTargetUser, candidate: e.candidate });
                 };
 
+                peerConnection.oniceconnectionstatechange = () => {
+                    if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'disconnected') {
+                        document.getElementById('call-status-text').textContent = 'Соединение прервано';
+                        setTimeout(() => hangUpCall(), 2000);
+                    }
+                };
+
                 const offer = await peerConnection.createOffer();
                 await peerConnection.setLocalDescription(offer);
                 socket.emit('call-user', { to: callTargetUser, offer, from: currentUser.login });
+
+                // Таймаут подключения (15 секунд)
+                connectionTimeout = setTimeout(() => {
+                    if (document.getElementById('call-status-text').textContent.includes('Вызов')) {
+                        showCustomModal('Нет ответа', 'Абонент не ответил на вызов.', false, null, '📞');
+                        hangUpCall();
+                    }
+                }, 15000);
+
             } catch (e) {
                 hangUpCall();
             }
@@ -3323,6 +3482,14 @@
             if (!activeGroupWorkspaceId) return;
             const group = db.groups[activeGroupWorkspaceId];
             if (!group) return;
+
+            // Проверка мута
+            if (group.groupMutedUsers && group.groupMutedUsers[currentUser.login] && group.groupMutedUsers[currentUser.login] > Date.now()) {
+                const left = Math.ceil((group.groupMutedUsers[currentUser.login] - Date.now()) / 60000);
+                showCustomModal('Мут в группе', `Вы замучены в этой группе. Осталось минут: ${left}`, false, null, '🔇');
+                return;
+            }
+
             const targets = group.members.filter(m => m !== currentUser.login);
             document.getElementById('call-partner-name').textContent = `Группа: ${group.name}`;
             document.getElementById('call-status-text').textContent = 'Подключение к конференции...';
@@ -3353,6 +3520,7 @@
 
         async function acceptIncomingCall() {
             stopIncomingRingtone();
+            if (connectionTimeout) clearTimeout(connectionTimeout);
             document.getElementById('incoming-call-modal').classList.add('hidden');
             document.getElementById('call-partner-name').textContent = incomingCallerLogin || 'Конференция';
             document.getElementById('call-status-text').textContent = 'Соединение установлено';
@@ -3367,10 +3535,18 @@
 
                 peerConnection.ontrack = e => {
                     document.getElementById('remote-audio').srcObject = e.streams[0];
+                    document.getElementById('call-status-text').textContent = 'Разговор идет';
                 };
 
                 peerConnection.onicecandidate = e => {
                     if (e.candidate && incomingCallerLogin) socket.emit('ice-candidate', { to: incomingCallerLogin, candidate: e.candidate });
+                };
+
+                peerConnection.oniceconnectionstatechange = () => {
+                    if (peerConnection.iceConnectionState === 'failed' || peerConnection.iceConnectionState === 'disconnected') {
+                        document.getElementById('call-status-text').textContent = 'Соединение прервано';
+                        setTimeout(() => hangUpCall(), 2000);
+                    }
                 };
 
                 if (incomingOffer) {
@@ -3391,6 +3567,7 @@
         socket.on('call-answered', async ({ answer }) => {
             stopOutgoingRingtone();
             stopIncomingRingtone();
+            if (connectionTimeout) clearTimeout(connectionTimeout);
             document.getElementById('incoming-call-modal').classList.add('hidden');
             document.getElementById('call-status-text').textContent = 'Разговор идет';
             if (peerConnection && answer) {
@@ -3410,6 +3587,7 @@
 
         function rejectIncomingCall() {
             stopIncomingRingtone();
+            if (connectionTimeout) clearTimeout(connectionTimeout);
             document.getElementById('incoming-call-modal').classList.add('hidden');
             if (incomingCallerLogin) socket.emit('hang-up', { to: incomingCallerLogin });
         }
@@ -3417,6 +3595,7 @@
         function hangUpCall() {
             stopOutgoingRingtone();
             stopIncomingRingtone();
+            if (connectionTimeout) clearTimeout(connectionTimeout);
             if (localStream) {
                 localStream.getTracks().forEach(t => t.stop());
                 localStream = null;
