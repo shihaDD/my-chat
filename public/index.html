@@ -25,36 +25,44 @@
                 height: 100dvh;
             }
             #main-app {
-                flex-direction: column-reverse !important;
+                flex-direction: row !important;
                 height: 100dvh !important;
             }
-            /* Нижняя панель навигации на смартфонах */
+            /* Левый вертикальный столбик навигации на смартфонах */
             .nav-sidebar {
-                width: 100% !important;
-                height: 60px !important;
-                flex-direction: row !important;
-                position: fixed !important;
-                bottom: 0 !important;
-                left: 0 !important;
+                width: 56px !important;
+                height: 100dvh !important;
+                flex-direction: column !important;
+                position: relative !important;
+                bottom: auto !important;
+                left: auto !important;
                 z-index: 100;
                 background: #090d16 !important;
-                border-top: 1px solid #1f2937 !important;
-                border-right: none !important;
-                padding: 0 5px !important;
-                justify-content: space-around !important;
+                border-top: none !important;
+                border-right: 1px solid #1f2937 !important;
+                padding: 10px 0 !important;
+                justify-content: space-between !important;
             }
             .nav-sidebar button {
-                width: auto !important;
+                width: 100% !important;
                 height: auto !important;
                 margin: 0 !important;
-                padding: 4px 8px !important;
+                padding: 8px 0 !important;
+                display: flex !important;
+                flex-direction: column !important;
+                align-items: center !important;
+                justify-content: center !important;
             }
-            .nav-sidebar button span:last-child {
-                display: none; /* Скрываем подписи на узких экранах для экономии места */
+            /* Скрываем текст под иконками в левом столбике на мобильных */
+            .nav-sidebar span:last-child {
+                display: none !important;
+            }
+            .nav-sidebar .hidden.md\:flex {
+                display: flex !important;
             }
             .content-wrapper {
-                height: calc(100dvh - 60px) !important;
-                margin-bottom: 60px !important;
+                height: 100dvh !important;
+                margin-bottom: 0 !important;
             }
             /* Списки чатов и активный чат на весь экран */
             .chat-list-panel {
@@ -159,38 +167,38 @@
         
         <!-- Сайдбар Навигации -->
         <div id="nav-sidebar" class="w-24 bg-gray-900 border-r border-gray-800 flex flex-col items-center py-4 justify-between flex-shrink-0 z-20 nav-sidebar">
-            <div class="space-y-3 flex flex-col items-center w-full md:space-y-3 flex-row md:flex-col justify-around md:justify-start">
-                <button onclick="switchTab('profile')" id="nav-profile" title="Профиль" class="w-10 h-10 md:w-12 md:h-12 rounded-2xl p-0.5 bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center shadow-[0_0_15px_rgba(168,85,247,0.5)] mb-0 md:mb-2 hover:scale-105 transition group">
+            <div class="space-y-3 flex flex-col items-center w-full">
+                <button onclick="switchTab('profile')" id="nav-profile" title="Профиль" class="w-10 h-10 md:w-12 md:h-12 rounded-2xl p-0.5 bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center shadow-[0_0_15px_rgba(168,85,247,0.5)] mb-2 hover:scale-105 transition group">
                     <img id="my-avatar-icon" src="" class="w-full h-full rounded-[14px] object-cover">
                 </button>
 
-                <button onclick="switchTab('chats')" id="nav-chats" title="Чаты" class="flex flex-col items-center py-2 hover:bg-gray-800/80 text-gray-400 transition">
+                <button onclick="switchTab('chats')" id="nav-chats" title="Чаты" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
                     <span class="text-lg mb-0.5">💬</span>
                     <span class="text-[10px] font-medium tracking-tight">Чаты</span>
                 </button>
-                <button onclick="switchTab('friends')" id="nav-friends" title="Друзья" class="flex flex-col items-center py-2 hover:bg-gray-800/80 text-gray-400 transition">
+                <button onclick="switchTab('friends')" id="nav-friends" title="Друзья" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
                     <span class="text-lg mb-0.5">👥</span>
                     <span class="text-[10px] font-medium tracking-tight">Друзья</span>
                 </button>
-                <button onclick="switchTab('groups')" id="nav-groups" title="Сообщества" class="flex flex-col items-center py-2 hover:bg-gray-800/80 text-gray-400 transition">
+                <button onclick="switchTab('groups')" id="nav-groups" title="Сообщества" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
                     <span class="text-lg mb-0.5">🏢</span>
                     <span class="text-[10px] font-medium tracking-tight">Группы</span>
                 </button>
-                <button onclick="switchTab('news')" id="nav-news" title="Лента Новостей" class="flex flex-col items-center py-2 hover:bg-gray-800/80 text-gray-400 transition">
+                <button onclick="switchTab('news')" id="nav-news" title="Лента Новостей" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
                     <span class="text-lg mb-0.5">📰</span>
                     <span class="text-[10px] font-medium tracking-tight">Новости</span>
                 </button>
-                <button onclick="switchTab('tiktok')" id="nav-tiktok" title="Видео-Приколы" class="flex flex-col items-center py-2 hover:bg-gray-800/80 text-gray-400 transition">
+                <button onclick="switchTab('tiktok')" id="nav-tiktok" title="Видео-Приколы" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
                     <span class="text-lg mb-0.5">🎬</span>
                     <span class="text-[10px] font-medium tracking-tight">Приколы</span>
                 </button>
-                <button onclick="switchTab('music')" id="nav-music" title="Онлайн Радио" class="flex flex-col items-center py-2 hover:bg-gray-800/80 text-gray-400 transition">
+                <button onclick="switchTab('music')" id="nav-music" title="Онлайн Радио" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition">
                     <span class="text-lg mb-0.5">📻</span>
                     <span class="text-[10px] font-medium tracking-tight">Радио</span>
                 </button>
             </div>
 
-            <div class="hidden md:flex flex-col items-center w-full">
+            <div class="flex flex-col items-center w-full">
                 <button onclick="openSettingsModal()" id="nav-settings" title="Настройки" class="flex flex-col items-center w-full py-3 hover:bg-gray-800/80 text-gray-400 transition">
                     <span class="text-lg mb-0.5">⚙</span>
                     <span class="text-[10px] font-medium tracking-tight">Настройки</span>
@@ -629,8 +637,8 @@
     </div>
 
     <!-- ПЛАВАЮЩЕЕ МИНИ-ОКОШКО СВЕРНУТОЙ КОНФЕРЕНЦИИ -->
-    <div id="minimized-call-widget" class="fixed bottom-16 md:bottom-6 right-6 z-50 bg-gray-900 border border-purple-500/60 p-4 rounded-2xl shadow-[0_0_25px_rgba(168,85,247,0.4)] flex items-center space-x-4 hidden backdrop-blur-md">
-        <div class="w-10 h-10 rounded-full bg-purple-600/30 border border-purple-500 flex items-center justify-center text-xl animate-pulse">🎙️️</div>
+    <div id="minimized-call-widget" class="fixed bottom-6 right-6 z-50 bg-gray-900 border border-purple-500/60 p-4 rounded-2xl shadow-[0_0_25px_rgba(168,85,247,0.4)] flex items-center space-x-4 hidden backdrop-blur-md">
+        <div class="w-10 h-10 rounded-full bg-purple-600/30 border border-purple-500 flex items-center justify-center text-xl animate-pulse">🎙</div>
         <div>
             <div class="font-bold text-white text-xs">Голосовая конференция</div>
             <div class="text-[10px] text-purple-400">Звонок активен</div>
@@ -1268,7 +1276,7 @@
                     renderChatsList();
                     socket.emit('refresh-db');
                 }
-            }, '⚠️️');
+            }, '⚠️');
         }
 
         socket.on('update-db', (updatedDb) => {
@@ -1550,7 +1558,7 @@
                     }
                     showCustomModal('Успех', 'Группа успешно удалена', false, null, '✨');
                 } else {
-                    showCustomModal('Ошибка', data.error, false, null, '⚠️️');
+                    showCustomModal('Ошибка', data.error, false, null, '⚠️');
                 }
             }, '⚠️');
         }
@@ -1642,7 +1650,7 @@
                 btnCall.classList.add('hidden');
                 sidebar.classList.remove('hidden');
 
-                socket.emit('join-group-room', chat.id);
+                socket.emit('join-room', chat.id);
                 renderGroupSidebar(group);
             }
 
@@ -1738,7 +1746,7 @@
                 if (isMe && activeChat.type === 'user') {
                     actionsHTML = `
                         <div class="absolute -top-2 -left-16 bg-gray-900 border border-gray-700 rounded-lg p-1 hidden group-hover:flex space-x-1 shadow">
-                            <button onclick="startEditingMessage('${m.id}', \`${m.text.replace(/`/g, '\\`')}\`)" class="text-[10px] text-purple-400 hover:text-white px-1">✏️️</button>
+                            <button onclick="startEditingMessage('${m.id}', \`${m.text.replace(/`/g, '\\`')}\`)" class="text-[10px] text-purple-400 hover:text-white px-1">✏️</button>
                             <button onclick="deleteMessage('${m.id}')" class="text-[10px] text-red-400 hover:text-white px-1">🗑️</button>
                         </div>
                     `;
@@ -2092,7 +2100,7 @@
                 textInput.value = '';
                 renderGroupsFeed();
             } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠');
+                showCustomModal('Ошибка', data.error, false, null, '⚠️');
             }
         }
 
@@ -2631,7 +2639,7 @@
 
         socket.on('mod-kick-action', () => {
             leaveGroupCall();
-            showCustomModal('Модерация', 'Вас отключили от голосового канала', false, null, '⚠️');
+            showCustomModal('Модерация', 'Вас отключили от голосового канала', false, null, '⚠️️');
         });
 
         function leaveGroupCall() {
@@ -2674,7 +2682,7 @@
                 }
 
                 sidebarItem.innerHTML = `
-                    <span class="text-white font-bold">🎙️️ ${label}</span>
+                    <span class="text-white font-bold">🎙 ${label}</span>
                     ${modButtons}
                 `;
                 sidebar.appendChild(sidebarItem);
