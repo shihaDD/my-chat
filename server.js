@@ -262,6 +262,21 @@ app.post('/api/update-group', async (req, res) => {
     res.json({ success: true, db, group });
 });
 
+// Удаление группы (доступно только создателю/лидеру)
+app.post('/api/delete-group', async (req, res) => {
+    const { groupId, login } = req.body;
+    const group = db.groups[groupId];
+    if (!group) return res.json({ success: false, error: 'Группа не найдена' });
+    if (group.creator !== login) {
+        return res.json({ success: false, error: 'Только создатель группы может её удалить!' });
+    }
+
+    delete db.groups[groupId];
+    await saveDb();
+    io.emit('update-db', db);
+    res.json({ success: true, db });
+});
+
 app.post('/api/join-group', async (req, res) => {
     const { groupId, login } = req.body;
     const group = db.groups[groupId];
