@@ -29,7 +29,6 @@
             animation: gradientShift 6s ease infinite;
         }
 
-        /* Визуализация мута (красный ник и значок 🔇) */
         .muted-user-style {
             color: #ef4444 !important;
             text-decoration: line-through;
@@ -285,7 +284,7 @@
                     <span class="text-[10px] font-medium tracking-tight">Радио</span>
                 </button>
 
-                <!-- ВКЛАДКА МОДЕРАЦИИ (СКРЫТА ДЛЯ ОБЫЧНЫХ ПОЛЬЗОВАТЕЛЕЙ) -->
+                <!-- ВКЛАДКА МОДЕРАЦИИ -->
                 <button onclick="switchTab('moderation')" id="nav-moderation" title="Модерация" class="flex flex-col items-center w-full py-2 hover:bg-gray-800/80 text-gray-400 transition relative hidden">
                     <span class="text-lg mb-0.5">🛡️</span>
                     <span class="text-[10px] font-medium tracking-tight">Мод-ция</span>
@@ -459,7 +458,6 @@
                             <span id="ws-group-sidebar-name" class="font-bold text-white truncate text-xs">Группа</span>
                             
                             <div class="flex items-center space-x-1">
-                                <!-- Кнопка верификации строго слева от заявок -->
                                 <div id="ws-verification-btn-container"></div>
                                 <button onclick="openGroupRequestsModal()" class="relative p-1.5 bg-gray-800 hover:bg-gray-700 rounded-lg text-xs text-white" title="Запросы на вступление">
                                     📥
@@ -571,7 +569,7 @@
                 </div>
             </div>
 
-            <!-- Вкладка: МОДЕРАЦИЯ -->
+            <!-- Вкладка: МОДЕРАЦИЯ (Без раздела "Общение") -->
             <div id="tab-content-moderation" class="flex-1 p-4 sm:p-6 overflow-y-auto hidden space-y-6">
                 <div class="max-w-4xl mx-auto space-y-6">
                     <h2 class="text-xl sm:text-2xl font-bold text-purple-400 flex items-center space-x-2">
@@ -579,8 +577,7 @@
                     </h2>
 
                     <div class="flex border-b border-gray-800 space-x-4">
-                        <button onclick="switchModTab('chats')" id="mod-tab-btn-chats" class="pb-2 font-bold text-sm border-b-2 border-purple-500 text-purple-400 transition">Общение</button>
-                        <button onclick="switchModTab('requests')" id="mod-tab-btn-requests" class="pb-2 font-bold text-sm text-gray-400 hover:text-white transition flex items-center space-x-1">
+                        <button onclick="switchModTab('requests')" id="mod-tab-btn-requests" class="pb-2 font-bold text-sm border-b-2 border-purple-500 text-purple-400 transition flex items-center space-x-1">
                             <span>Запросы верификации</span>
                             <span id="verif-count-badge" class="bg-blue-500 text-white text-[10px] px-1.5 py-0.2 rounded-full hidden">0</span>
                         </button>
@@ -593,31 +590,8 @@
                         </button>
                     </div>
 
-                    <!-- 1. Вкладка Общение -->
-                    <div id="mod-section-chats" class="space-y-4">
-                        <div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl space-y-3">
-                            <h3 class="text-sm font-bold text-gray-300">💬 Создание и управление каналами общения</h3>
-                            <div id="warren-channel-creator" class="bg-gray-950 p-4 rounded-xl border border-purple-500/30 space-y-2">
-                                <span class="text-xs text-purple-300 font-bold block">Создать новый глобальный канал ( Warren / Главный модератор )</span>
-                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                                    <input type="text" id="new-global-channel-name" placeholder="Название канала..." class="bg-gray-800 border border-gray-700 rounded-xl p-2 text-xs text-white">
-                                    <select id="new-global-channel-type" class="bg-gray-800 border border-gray-700 rounded-xl p-2 text-xs text-white">
-                                        <option value="text">💬 Текстовый</option>
-                                        <option value="voice">🎙 Голосовой</option>
-                                    </select>
-                                    <button onclick="createGlobalChannel()" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-xl text-xs font-bold">Создать канал</button>
-                                </div>
-                            </div>
-                            <div class="pt-2">
-                                <span class="text-xs font-bold text-gray-400 uppercase block mb-2">Созданные глобальные каналы:</span>
-                                <div id="global-channels-created-list" class="space-y-2"></div>
-                            </div>
-                            <div id="mod-chats-monitor-list" class="space-y-2 max-h-96 overflow-y-auto"></div>
-                        </div>
-                    </div>
-
-                    <!-- 2. Вкладка Запросы верификации -->
-                    <div id="mod-section-requests" class="space-y-4 hidden">
+                    <!-- 1. Вкладка Запросы верификации -->
+                    <div id="mod-section-requests" class="space-y-4">
                         <div class="bg-gray-900 border border-gray-800 p-4 rounded-2xl space-y-3">
                             <h3 class="text-sm font-bold text-gray-300">🛡️ Запросы на верификацию сообществ</h3>
                             <div id="mod-verif-requests-list" class="space-y-2">
@@ -626,7 +600,7 @@
                         </div>
                     </div>
 
-                    <!-- 3. Вкладка Нарушения -->
+                    <!-- 2. Вкладка Нарушения -->
                     <div id="mod-section-violations" class="space-y-4 hidden">
                         <div class="bg-gray-900 border border-red-500/30 p-4 rounded-2xl space-y-3">
                             <h3 class="text-sm font-bold text-red-400">🚨 Зафиксированные нарушения (Русские маты)</h3>
@@ -634,7 +608,7 @@
                         </div>
                     </div>
 
-                    <!-- 4. Вкладка Нарушители (Муты) с поиском -->
+                    <!-- 3. Вкладка Нарушители (Муты) с поиском -->
                     <div id="mod-section-muted" class="space-y-4 hidden">
                         <div class="bg-gray-900 border border-red-500/30 p-4 rounded-2xl space-y-3">
                             <h3 class="text-sm font-bold text-red-400">🔇 Список активных нарушителей в муте</h3>
@@ -878,7 +852,7 @@
             <div id="call-ptt-talking-indicator" class="bg-green-600 text-white text-[10px] font-bold px-2 py-1 rounded shadow hidden inline-block mt-1">🟢 Говорите</div>
         </div>
 
-        <audio id="remote-audio" autoplay></audio>
+        <audio id="remote-audio" autoplay playsinline></audio>
 
         <div class="flex space-x-2 pt-1">
             <button onclick="toggleMyCallMute()" id="btn-call-mute" class="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-2 rounded-xl text-xs font-bold transition">Микрофон</button>
@@ -909,6 +883,7 @@
         let incomingOffer = null;
         let incomingCallerLogin = null;
         let connectionTimeout = null;
+        let iceCandidateQueue = [];
 
         let outgoingRingtoneInterval = null;
         let incomingRingtoneInterval = null;
@@ -937,7 +912,6 @@
             { name: 'Радио Energy', genre: 'Dance / EDM', url: 'https://energy.hostingradio.ru/energy128.mp3', logo: '🔥' }
         ];
 
-        // Проверка мута пользователя (глобальный или групповой)
         function isUserMutedAnywhere(login) {
             if (!login) return false;
             const l = login.toLowerCase();
@@ -954,7 +928,6 @@
             return false;
         }
 
-        // Рендер аватара с бейджем мута 🔇
         function getAvatarWithMuteBadge(avatarUrl, login) {
             const isMuted = isUserMutedAnywhere(login);
             const cleanAvatar = getAvatar(avatarUrl);
@@ -1268,7 +1241,6 @@
             document.getElementById('auth-screen').classList.add('hidden');
             document.getElementById('main-app').classList.remove('hidden');
             
-            // Рендер аватара с учетом мута
             const myAvatarWrapper = document.getElementById('my-avatar-icon').parentElement;
             myAvatarWrapper.innerHTML = `
                 <div class="w-full h-full rounded-[14px] overflow-hidden">${getAvatarWithMuteBadge(currentUser.avatar, currentUser.login)}</div>
@@ -1395,7 +1367,7 @@
         }
 
         function switchModTab(subTab) {
-            ['chats', 'requests', 'violations', 'muted'].forEach(st => {
+            ['requests', 'violations', 'muted'].forEach(st => {
                 document.getElementById(`mod-section-${st}`).classList.add('hidden');
                 document.getElementById(`mod-tab-btn-${st}`).className = "pb-2 font-bold text-sm text-gray-400 hover:text-white transition";
             });
@@ -1433,34 +1405,6 @@
                     verifBadge.classList.remove('hidden');
                 } else {
                     verifBadge.classList.add('hidden');
-                }
-            }
-
-            const warrenCreator = document.getElementById('warren-channel-creator');
-            if (warrenCreator) {
-                if (currentUser && hasFullAccess(currentUser.login)) {
-                    warrenCreator.classList.remove('hidden');
-                } else {
-                    warrenCreator.classList.add('hidden');
-                }
-            }
-
-            const globalChannelsList = document.getElementById('global-channels-created-list');
-            if (globalChannelsList) {
-                globalChannelsList.innerHTML = '';
-                const globalChannels = db.globalChannels || [];
-                if (globalChannels.length > 0) {
-                    globalChannels.forEach(ch => {
-                        const d = document.createElement('div');
-                        d.className = 'bg-gray-950 p-2.5 rounded-xl border border-gray-800 flex items-center justify-between text-xs';
-                        d.innerHTML = `
-                            <span class="text-white font-bold">${ch.type === 'voice' ? '🎙' : '#'} ${ch.name} <span class="text-purple-400 font-normal">(Глобальный канал)</span></span>
-                            ${hasFullAccess(currentUser.login) ? `<button onclick="deleteGlobalChannel('${ch.id}')" class="text-red-400 hover:text-red-300 font-bold px-2 py-1 bg-red-600/20 rounded-lg">Удалить</button>` : ''}
-                        `;
-                        globalChannelsList.appendChild(d);
-                    });
-                } else {
-                    globalChannelsList.innerHTML = '<div class="text-xs text-gray-500">Нет созданных глобальных каналов.</div>';
                 }
             }
 
@@ -1516,33 +1460,8 @@
                     });
                 }
             }
-
-            const chatMonitor = document.getElementById('mod-chats-monitor-list');
-            if (chatMonitor) {
-                chatMonitor.innerHTML = '';
-                let allMsgsCount = 0;
-                Object.entries(db.messagesStore || {}).forEach(([chatKey, msgs]) => {
-                    msgs.forEach(m => {
-                        allMsgsCount++;
-                        const d = document.createElement('div');
-                        d.className = 'bg-gray-950 p-2.5 rounded-xl border border-gray-800 flex items-center justify-between text-xs';
-                        d.innerHTML = `
-                            <div class="overflow-hidden pr-2">
-                                <div class="font-bold text-purple-300">@${m.sender} <span class="text-[10px] text-gray-500">${new Date(m.timestamp).toLocaleTimeString()}</span></div>
-                                <div class="text-gray-300 truncate">${m.text || '[Медиафайл]'}</div>
-                            </div>
-                            <button onclick="deleteMessage('${m.id}')" class="bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white px-2.5 py-1 rounded-lg font-bold flex-shrink-0">Удалить</button>
-                        `;
-                        chatMonitor.appendChild(d);
-                    });
-                });
-                if (allMsgsCount === 0) {
-                    chatMonitor.innerHTML = '<div class="text-xs text-gray-500 text-center py-2">Нет активных сообщений в чатах.</div>';
-                }
-            }
         }
 
-        // Рендер списка нарушителей (мутов) с поиском и кнопкой снятия
         function renderMutedUsersList() {
             const listEl = document.getElementById('mod-muted-users-list');
             const searchInput = document.getElementById('mod-muted-search');
@@ -1601,44 +1520,6 @@
                 renderFriends();
                 renderChatsList();
                 showCustomModal('Успех', `Мут с пользователя @${login} аннулирован!`, false, null, '✨');
-                socket.emit('refresh-db');
-            }
-        }
-
-        async function createGlobalChannel() {
-            const nameInput = document.getElementById('new-global-channel-name');
-            const typeSelect = document.getElementById('new-global-channel-type');
-            const name = nameInput.value.trim();
-            if (!name) return;
-
-            const res = await fetch('/api/create-global-channel', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, name, type: typeSelect.value })
-            });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                nameInput.value = '';
-                renderModerationPanel();
-                renderGroups();
-                showCustomModal('Успех', 'Новый глобальный канал успешно создан!', false, null, '✨');
-                socket.emit('refresh-db');
-            } else {
-                showCustomModal('Ошибка', data.error, false, null, '⚠️');
-            }
-        }
-
-        async function deleteGlobalChannel(channelId) {
-            const res = await fetch('/api/delete-global-channel', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ login: currentUser.login, channelId })
-            });
-            const data = await res.json();
-            if (data.success) {
-                db = data.db;
-                renderModerationPanel();
                 socket.emit('refresh-db');
             }
         }
@@ -1708,6 +1589,7 @@
                 db = data.db;
                 renderModerationPanel();
                 renderNewsFeed();
+                renderGroupFeedList();
                 socket.emit('refresh-db');
             }
         }
@@ -2162,14 +2044,6 @@
             renderModerationPanel();
         });
 
-        socket.on('receive-global-message', ({ channelId, msg }) => {
-            if (msg.sender !== currentUser.login) {
-                playNotificationSound();
-            }
-            renderMessages();
-            renderModerationPanel();
-        });
-
         function renderChatsList() {
             const list = document.getElementById('chats-list');
             if (!list) return;
@@ -2186,29 +2060,6 @@
                 </div>
             `;
             list.appendChild(savedCard);
-
-            // Рендер глобальных каналов модерации во вкладке чатов для удобства
-            const globalChannels = db.globalChannels || [];
-            if (globalChannels.length > 0) {
-                const header = document.createElement('div');
-                header.className = 'px-3 pt-2 pb-1 text-[10px] font-bold text-purple-400 uppercase tracking-wider';
-                header.textContent = 'Глобальные каналы';
-                list.appendChild(header);
-
-                globalChannels.forEach(ch => {
-                    const item = document.createElement('div');
-                    item.className = `p-2.5 rounded-2xl cursor-pointer flex items-center space-x-3 hover:bg-gray-800 transition ${activeChat?.type === 'global' && activeChat?.id === ch.id ? 'bg-gray-800' : ''}`;
-                    item.onclick = () => selectGlobalChannelChat(ch.id, ch.type, ch.name);
-                    item.innerHTML = `
-                        <div class="w-9 h-9 rounded-xl bg-purple-600/20 text-purple-300 flex items-center justify-center font-bold flex-shrink-0 text-sm">${ch.type === 'voice' ? '🎙' : '#'}</div>
-                        <div class="overflow-hidden">
-                            <div class="font-bold text-white text-xs truncate">${ch.name}</div>
-                            <div class="text-[10px] text-gray-400">Канал модерации</div>
-                        </div>
-                    `;
-                    list.appendChild(item);
-                });
-            }
 
             const friendHeader = document.createElement('div');
             friendHeader.className = 'px-3 pt-3 pb-1 text-[10px] font-bold text-gray-400 uppercase tracking-wider';
@@ -2242,29 +2093,6 @@
                 `;
                 list.appendChild(item);
             });
-        }
-
-        function selectGlobalChannelChat(chId, type, name) {
-            activeChat = { type: 'global', id: chId };
-            activeGroupWorkspaceId = null;
-            cancelEditing();
-
-            document.getElementById('no-chat-selected').classList.add('hidden');
-            document.getElementById('chat-window').classList.remove('hidden');
-            document.getElementById('message-history-search').classList.remove('hidden');
-
-            if (window.innerWidth <= 768) {
-                document.getElementById('chat-list-panel').classList.add('mobile-hidden');
-            }
-
-            document.getElementById('active-chat-name').textContent = `${type === 'voice' ? '🎙' : '#'} ${name}`;
-            document.getElementById('active-chat-avatar').src = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150';
-            document.getElementById('active-chat-status').textContent = 'Глобальный канал модерации';
-            document.getElementById('btn-call-user').classList.add('hidden');
-
-            socket.emit('join-global-room', chId);
-            renderMessages();
-            renderPinnedMessageBanner();
         }
 
         function filterChats() {
@@ -2364,7 +2192,7 @@
             document.getElementById('group-requests-modal').classList.remove('hidden');
         }
 
-        // МОДАЛЬНОЕ ОКНО УПРАВЛЕНИЯ УЧАСТНИКАМИ ГРУППЫ С МУТОМ ОТ 1 ДО 9999 МИНУТ
+        // МОДАЛЬНОЕ ОКНО УПРАВЛЕНИЯ УЧАСТНИКАМИ ГРУППЫ С НИКАМИ, МУТОМ И КИКОМ
         function openGroupMembersModal() {
             const gId = activeGroupWorkspaceId;
             if (!gId) return;
@@ -2525,7 +2353,6 @@
             if (reqs.length > 0) dot.classList.remove('hidden');
             else dot.classList.add('hidden');
 
-            // Кнопка верификации СТРОГО СЛЕВА от заявок в группу
             if (group.isVerified) {
                 verifContainer.innerHTML = `<span class="text-blue-400 text-sm font-bold p-1" title="Сообщество верифицировано">✅</span>`;
                 nameEl.innerHTML = `<span class="verified-gradient-name">${group.name}</span> <span class="text-blue-400">✓</span>`;
@@ -2790,7 +2617,6 @@
             if (data.success) {
                 db = data.db;
                 if (activeGroupWorkspaceId) openGroupWorkspace(groupId);
-                renderModerationPanel();
                 socket.emit('refresh-db');
             }
         }
@@ -2913,8 +2739,6 @@
                 document.getElementById('active-chat-avatar').src = getAvatar(friendObj.avatar);
                 document.getElementById('active-chat-status').textContent = isUserOnline(chat.id) ? 'В сети' : formatLastSeen(db.lastSeen?.[chat.id]);
                 btnCall.classList.remove('hidden');
-            } else if (chat.type === 'global') {
-                btnCall.classList.add('hidden');
             }
 
             renderMessages();
@@ -2928,7 +2752,6 @@
         async function sendMessage() {
             const isGroup = !!activeGroupWorkspaceId;
 
-            // Проверка мутов перед отправкой
             if (db.mutedUsers && db.mutedUsers[currentUser.login] && db.mutedUsers[currentUser.login] > Date.now()) {
                 const left = Math.ceil((db.mutedUsers[currentUser.login] - Date.now()) / 60000);
                 showCustomModal('Глобальный мут', `Вы находитесь в глобальном муте. Осталось минут: ${left}`, false, null, '🔇');
@@ -3071,7 +2894,6 @@
             if (!activeChat) return '';
             if (activeChat.type === 'user') return [currentUser.login, activeChat.id].sort().join('_');
             if (activeChat.type === 'group') return `group_${activeChat.id}_${activeSubgroup}`;
-            if (activeChat.type === 'global') return `global_${activeChat.id}`;
             return `saved_${currentUser.login}`;
         }
 
@@ -3346,20 +3168,12 @@
                     <div class="text-sm text-gray-200 break-words">${post.text}</div>
                     <div class="flex justify-end space-x-2">
                         ${canManage ? `
-                            <button onclick="startEditingGroupPost('${post.groupId}', '${post.id}', \`${post.text || ''}\`)" class="text-xs text-purple-400 font-bold hover:underline">✏️ Редактировать</button>
                             <button onclick="deleteGroupPost('${post.groupId}', '${post.id}')" class="text-xs text-red-400 hover:text-red-300 font-bold">🗑 Удалить</button>
                         ` : ''}
                     </div>
                 `;
                 list.appendChild(div);
             });
-        }
-
-        let editingGroupPostTarget = null;
-        function startEditingGroupPost(groupId, postId, currentText) {
-            editingGroupPostTarget = { groupId, postId };
-            document.getElementById('group-post-text').value = currentText;
-            document.getElementById('group-post-text').focus();
         }
 
         async function deleteGroupPost(groupId, postId) {
@@ -3448,7 +3262,7 @@
                 renderNewsFeed();
                 socket.emit('refresh-db');
             } else {
-                showCustomModal('Ошибка', data.error || 'Нельзя удалить запись', false, null, '⚠️️');
+                showCustomModal('Ошибка', data.error || 'Нельзя удалить запись', false, null, '⚠');
             }
         }
 
@@ -3573,7 +3387,7 @@
             }
         }
 
-        // WEBRTC ЗВОНКИ И КОНФЕРЕНЦИИ С ИСПРАВЛЕНИЕМ ВЕЧНОГО ПОДКЛЮЧЕНИЯ
+        // РАБОЧИЕ WEBRTC ЗВОНКИ С ОЧЕРЕДЬЮ CANDIDATE И ИСПРАВЛЕНИЕМ ПОДКЛЮЧЕНИЯ
         async function startDirectCall() {
             if (!activeChat || activeChat.type !== 'user') return;
             callTargetUser = activeChat.id;
@@ -3582,25 +3396,32 @@
             document.getElementById('single-call-modal').classList.remove('hidden');
             isInCallOrConference = true;
             startOutgoingRingtone();
+            iceCandidateQueue = [];
 
             try {
                 const noiseSup = document.getElementById('noise-suppression-checkbox')?.checked ?? true;
                 localStream = await navigator.mediaDevices.getUserMedia({ audio: { noiseSuppression: noiseSup, echoCancellation: true } });
+                
                 peerConnection = new RTCPeerConnection({
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
                         { urls: 'stun:stun1.l.google.com:19302' }
                     ]
                 });
+                
                 localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
                 peerConnection.ontrack = e => {
-                    document.getElementById('remote-audio').srcObject = e.streams[0];
+                    const remoteAudio = document.getElementById('remote-audio');
+                    remoteAudio.srcObject = e.streams[0];
+                    remoteAudio.play().catch(() => {});
                     document.getElementById('call-status-text').textContent = 'Разговор идет';
                 };
 
                 peerConnection.onicecandidate = e => {
-                    if (e.candidate) socket.emit('webrtc-candidate', { targetLogin: callTargetUser, candidate: e.candidate });
+                    if (e.candidate) {
+                        socket.emit('webrtc-candidate', { targetLogin: callTargetUser, candidate: e.candidate });
+                    }
                 };
 
                 peerConnection.oniceconnectionstatechange = () => {
@@ -3674,25 +3495,32 @@
             document.getElementById('call-status-text').textContent = 'Соединение установлено';
             document.getElementById('single-call-modal').classList.remove('hidden');
             isInCallOrConference = true;
+            iceCandidateQueue = [];
 
             try {
                 const noiseSup = document.getElementById('noise-suppression-checkbox')?.checked ?? true;
                 localStream = await navigator.mediaDevices.getUserMedia({ audio: { noiseSuppression: noiseSup, echoCancellation: true } });
+                
                 peerConnection = new RTCPeerConnection({
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
                         { urls: 'stun:stun1.l.google.com:19302' }
                     ]
                 });
+                
                 localStream.getTracks().forEach(track => peerConnection.addTrack(track, localStream));
 
                 peerConnection.ontrack = e => {
-                    document.getElementById('remote-audio').srcObject = e.streams[0];
+                    const remoteAudio = document.getElementById('remote-audio');
+                    remoteAudio.srcObject = e.streams[0];
+                    remoteAudio.play().catch(() => {});
                     document.getElementById('call-status-text').textContent = 'Разговор идет';
                 };
 
                 peerConnection.onicecandidate = e => {
-                    if (e.candidate && incomingCallerLogin) socket.emit('webrtc-candidate', { targetLogin: incomingCallerLogin, candidate: e.candidate });
+                    if (e.candidate && incomingCallerLogin) {
+                        socket.emit('webrtc-candidate', { targetLogin: incomingCallerLogin, candidate: e.candidate });
+                    }
                 };
 
                 peerConnection.oniceconnectionstatechange = () => {
@@ -3704,9 +3532,17 @@
 
                 if (incomingOffer) {
                     await peerConnection.setRemoteDescription(new RTCSessionDescription(incomingOffer));
+                    
+                    while (iceCandidateQueue.length > 0) {
+                        const candidate = iceCandidateQueue.shift();
+                        try { await peerConnection.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) {}
+                    }
+
                     const answer = await peerConnection.createAnswer();
                     await peerConnection.setLocalDescription(answer);
-                    if (incomingCallerLogin) socket.emit('accept-call', { targetLogin: incomingCallerLogin, answer, accepterLogin: currentUser.login });
+                    if (incomingCallerLogin) {
+                        socket.emit('accept-call', { targetLogin: incomingCallerLogin, answer, accepterLogin: currentUser.login });
+                    }
                 }
             } catch (e) {
                 hangUpCall();
@@ -3721,6 +3557,10 @@
             document.getElementById('call-status-text').textContent = 'Разговор идет';
             if (peerConnection && answer) {
                 await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
+                while (iceCandidateQueue.length > 0) {
+                    const candidate = iceCandidateQueue.shift();
+                    try { await peerConnection.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) {}
+                }
             }
         });
 
@@ -3734,8 +3574,12 @@
         });
 
         socket.on('webrtc-candidate', async ({ candidate }) => {
-            if (peerConnection && candidate) {
-                try { await peerConnection.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) {}
+            if (candidate) {
+                if (peerConnection && peerConnection.remoteDescription && peerConnection.remoteDescription.type) {
+                    try { await peerConnection.addIceCandidate(new RTCIceCandidate(candidate)); } catch (e) {}
+                } else {
+                    iceCandidateQueue.push(candidate);
+                }
             }
         });
 
@@ -3766,6 +3610,7 @@
             isInCallOrConference = false;
             callTargetUser = null;
             incomingCallerLogin = null;
+            iceCandidateQueue = [];
         }
 
         function toggleMyCallMute() {
