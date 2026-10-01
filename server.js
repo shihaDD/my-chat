@@ -1,1046 +1,1099 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Мессенджер</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="/socket.io/socket.io.js"></script>
-    <style>
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: #090d16; }
-        ::-webkit-scrollbar-thumb { background: #1f2937; border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: #374151; }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+const express = require('express');
+const http = require('http');
+const { WebSocketServer } = require('ws');
+const crypto = require('crypto');
+const path = require('path');
 
-        .mobile-back-btn { display: none; }
+const app = express();
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server, path: '/ws' });
 
-        @keyframes gradientShift {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
-        .verified-gradient-name {
-            background: linear-gradient(270deg, #38bdf8, #a855f7, #ec4899, #38bdf8);
-            background-size: 300% 300%;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            animation: gradientShift 6s ease infinite;
-        }
+app.use(express.json({ limit: '50mb' }));
+app.use(express.static(path.join(__dirname, 'public')));
 
-        .speaking-glow {
-            border: 2px solid #22c55e !important;
-            box-shadow: 0 0 12px rgba(34, 197, 94, 0.85) !important;
-            animation: pulse 1.2s infinite;
-        }
+// ──────────────────────────────────────────────
+// Хранилище данных (in-memory)
+// ──────────────────────────────────────────────
+const users = new Map();        // userId -> { id, login, name, passwordHash, avatar, bio, email, role, muted, muteUntil, muteReason, verified, friends: [], friendRequests: [], sentRequests: [] }
+const sessions = new Map();     // token -> userId
+const chats = new Map();        // chatId -> { id, type, participants: [], messages: [], pinned: null }
+const groups = new Map();       // groupId -> { id, name, avatar, isClosed, owner, members: [], roles: {}, channels: { text: [], voice: [] }, description, verified, joinRequests: [] }
+const groupMessages = new Map(); // channelId -> [{ id, senderId, text, edited, timestamp, attachments: [] }]
+const news = new Map();         // newsId -> { id, authorId, text, media, timestamp }
+const violations = new Map();   // violationId -> { id, reporterId, targetId, reason, timestamp, resolved }
+const verificationRequests = new Map(); // requestId -> { id, groupId, requestedBy, timestamp, status }
+const radioStations = [
+  { id: 'r1', name: 'Радио Дача', url: 'http://ic7.101.ru:8000/c18_2' },
+  { id: 'r2', name: 'Авторадио', url: 'http://icecast-authoradio.adtf.ru:8000/authoradio' },
+  { id: 'r3', name: 'Европа Плюс', url: 'http://icecast-europeplus.cdnvideo.ru:8000/europeplus128' },
+  { id: 'r4', name: 'Радио Шансон', url: 'http://chanson.hostingradio.ru:8041/chanson128.mp3' },
+  { id: 'r5', name: 'Радио Maximum', url: 'http://icecast.maximum.cdnvideo.ru:8000/maximum' },
+  { id: 'r6', name: 'Дорожное Радио', url: 'http://icecast-dorognoe.cdnvideo.ru:8000/dorognoe' },
+  { id: 'r7', name: 'Радио Рекорд', url: 'http://icecast-record.cdnvideo.ru:8000/record128' },
+  { id: 'r8', name: 'Наше Радио', url: 'http://icecast-nashe.cdnvideo.ru:8000/nashe' },
+];
 
-        .muted-user-style {
-            color: #ef4444 !important;
-            text-decoration: line-through;
-            font-weight: bold;
-        }
+const wsClients = new Map(); // userId -> Set<ws>
 
-        @media (max-width: 768px) {
-            body { overflow: hidden; height: 100dvh; }
-            #main-app { flex-direction: row !important; height: 100dvh !important; }
-            .nav-sidebar {
-                width: 56px !important;
-                height: 100dvh !important;
-                flex-direction: column !important;
-                position: relative !important;
-                z-index: 100;
-                background: #090d16 !important;
-                border-right: 1px solid #1f2937 !important;
-                padding: 10px 0 !important;
-                justify-content: space-between !important;
-            }
-            .nav-sidebar button {
-                width: 100% !important;
-                padding: 8px 0 !important;
-                display: flex !important;
-                flex-direction: column !important;
-                align-items: center !important;
-                justify-content: center !important;
-                position: relative !important;
-            }
-            .nav-sidebar span:last-child { display: none !important; }
-            .content-wrapper { height: 100dvh !important; margin-bottom: 0 !important; }
-            .chat-list-panel {
-                width: 100% !important;
-                position: absolute !important;
-                height: 100% !important;
-                z-index: 10;
-                transition: transform 0.3s ease;
-                background: #090d16 !important;
-            }
-            .chat-list-panel.mobile-hidden { transform: translateX(-100%); }
-            .active-chat-panel { width: 100% !important; position: absolute !important; height: 100% !important; z-index: 5; }
-            .mobile-back-btn { display: inline-block !important; }
-        }
-    </style>
-</head>
-<body class="bg-gray-950 text-gray-100 h-screen overflow-hidden font-sans select-none">
+// ──────────────────────────────────────────────
+// Утилиты
+// ──────────────────────────────────────────────
+function hashPassword(password) {
+  return crypto.createHash('sha256').update(password).digest('hex');
+}
 
-    <!-- КАСТОМНОЕ УВЕДОМЛЕНИЕ -->
-    <div id="custom-modal" class="fixed inset-0 z-[99999] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
-        <div class="bg-gray-900 border border-purple-500/50 p-5 rounded-3xl w-[92%] max-w-sm shadow-2xl text-center space-y-4">
-            <div id="custom-modal-icon" class="text-3xl">✨</div>
-            <h3 class="text-lg font-bold text-white" id="custom-modal-title">Уведомление</h3>
-            <p class="text-sm text-gray-300" id="custom-modal-text"></p>
-            <div id="custom-modal-buttons" class="flex space-x-3 justify-center pt-2">
-                <button onclick="closeCustomModal(true)" id="custom-modal-ok" class="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2.5 rounded-xl font-bold transition">ОК</button>
-            </div>
-        </div>
-    </div>
+function generateToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
 
-    <!-- ОКНО АВТОРИЗАЦИИ И РЕГИСТРАЦИИ -->
-    <div id="auth-screen" class="fixed inset-0 z-50 bg-gray-950/90 backdrop-blur-md flex items-center justify-center p-4">
-        <div class="bg-gray-900 border border-purple-500/40 p-6 sm:p-8 rounded-3xl w-[95%] max-w-md shadow-2xl relative">
-            <h1 class="text-2xl sm:text-3xl font-extrabold text-center mb-6 text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">
-                Добро пожаловать
-            </h1>
-            <div id="auth-alert" class="mb-4 p-3 rounded-xl text-xs font-semibold hidden"></div>
-            <div class="flex border-b border-gray-800 mb-6">
-                <button id="tab-login" onclick="switchAuthTab('login')" class="w-1/2 pb-2 text-center font-bold border-b-2 border-purple-500 text-purple-400 transition">Вход</button>
-                <button id="tab-register" onclick="switchAuthTab('register')" class="w-1/2 pb-2 text-center font-bold text-gray-400 transition">Регистрация</button>
-            </div>
-            <form id="form-login" onsubmit="handleLogin(event)" class="space-y-4">
-                <div>
-                    <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Логин</label>
-                    <input type="text" id="login-input" required class="w-full bg-gray-800 border border-gray-700 rounded-xl p-3 text-white focus:outline-none focus:border-purple-500">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Пароль</label>
-                    <input type="password" id="password-input" required class="w-full bg-gray-800 border border-gray-700 rounded-xl p-3 text-white focus:outline-none focus:border-purple-500">
-                </div>
-                <button type="submit" class="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold py-3 rounded-xl shadow-lg transition">Войти</button>
-            </form>
-            <form id="form-register" onsubmit="handleRegister(event)" class="space-y-3 hidden">
-                <div>
-                    <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Логин</label>
-                    <input type="text" id="reg-login-input" required class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-purple-500">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Имя</label>
-                    <input type="text" id="reg-name-input" required class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-purple-500">
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-gray-400 uppercase mb-1">Пароль</label>
-                    <input type="password" id="reg-password-input" required class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white focus:outline-none focus:border-purple-500">
-                </div>
-                <button type="submit" class="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold py-3 rounded-xl shadow-lg transition">Зарегистрироваться</button>
-            </form>
-        </div>
-    </div>
+function generateId() {
+  return crypto.randomBytes(8).toString('hex');
+}
 
-    <!-- ОСНОВНОЕ ПРИЛОЖЕНИЕ -->
-    <div id="main-app" class="flex h-screen w-screen hidden">
-        
-        <!-- Сайдбар Навигации -->
-        <div id="nav-sidebar" class="w-24 bg-gray-900 border-r border-gray-800 flex flex-col items-center py-4 justify-between flex-shrink-0 z-20 nav-sidebar">
-            <div class="space-y-3 flex flex-col items-center w-full">
-                <button onclick="switchTab('profile')" id="nav-profile" title="Профиль" class="w-10 h-10 md:w-12 md:h-12 rounded-2xl p-0.5 bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center mb-2 hover:scale-105 transition relative">
-                    <img id="my-avatar-icon" src="" class="w-full h-full rounded-[14px] object-cover">
-                </button>
-                <button onclick="switchTab('chats')" id="nav-chats" title="Чаты" class="flex flex-col items-center w-full py-2 hover:bg-gray-800 text-gray-400 transition relative">
-                    <span class="text-lg mb-0.5">💬</span>
-                    <span class="text-[10px]">Чаты</span>
-                </button>
-                <button onclick="switchTab('friends')" id="nav-friends" title="Друзья" class="flex flex-col items-center w-full py-2 hover:bg-gray-800 text-gray-400 transition relative">
-                    <span class="text-lg mb-0.5">👥</span>
-                    <span class="text-[10px]">Друзья</span>
-                </button>
-                <button onclick="switchTab('groups')" id="nav-groups" title="Сообщества" class="flex flex-col items-center w-full py-2 hover:bg-gray-800 text-gray-400 transition relative">
-                    <span class="text-lg mb-0.5">🏢</span>
-                    <span class="text-[10px]">Группы</span>
-                </button>
-                <button onclick="switchTab('news')" id="nav-news" title="Новости" class="flex flex-col items-center w-full py-2 hover:bg-gray-800 text-gray-400 transition relative">
-                    <span class="text-lg mb-0.5">📰</span>
-                    <span class="text-[10px]">Новости</span>
-                </button>
-                <button onclick="switchTab('music')" id="nav-music" title="Радио" class="flex flex-col items-center w-full py-2 hover:bg-gray-800 text-gray-400 transition">
-                    <span class="text-lg mb-0.5">📻</span>
-                    <span class="text-[10px]">Радио</span>
-                </button>
-            </div>
-            <div class="flex flex-col items-center w-full">
-                <button onclick="openSettingsModal()" title="Настройки" class="flex flex-col items-center w-full py-3 hover:bg-gray-800 text-gray-400 transition">
-                    <span class="text-lg mb-0.5">⚙</span>
-                    <span class="text-[10px]">Настройки</span>
-                </button>
-            </div>
-        </div>
+function findUserByLogin(login) {
+  for (const user of users.values()) {
+    if (user.login === login) return user;
+  }
+  return null;
+}
 
-        <!-- Центральная Панель Контента -->
-        <div class="flex-1 flex overflow-hidden content-wrapper relative">
-            
-            <!-- Вкладка: ЧАТЫ -->
-            <div id="tab-content-chats" class="flex-1 flex w-full relative overflow-hidden">
-                <div id="chat-list-panel" class="w-80 bg-gray-900/60 border-r border-gray-800 flex flex-col flex-shrink-0 chat-list-panel">
-                    <div class="p-4 border-b border-gray-800">
-                        <input type="text" id="chat-search" placeholder="Поиск по чатам..." class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-500">
-                    </div>
-                    <div id="chats-list" class="flex-1 overflow-y-auto p-2 space-y-1"></div>
-                </div>
+function getUserSafe(user) {
+  if (!user) return null;
+  return {
+    id: user.id,
+    login: user.login,
+    name: user.name,
+    avatar: user.avatar,
+    bio: user.bio,
+    email: user.email,
+    role: user.role,
+    muted: user.muted,
+    muteUntil: user.muteUntil,
+    muteReason: user.muteReason,
+    verified: user.verified,
+  };
+}
 
-                <div id="active-chat-area" class="flex-1 flex flex-col bg-gray-950 relative active-chat-panel">
-                    <div id="no-chat-selected" class="flex-1 flex flex-col items-center justify-center text-gray-500 p-4 text-center">
-                        <div class="text-6xl mb-4 opacity-40">💬</div>
-                        <div class="text-lg">Выберите чат или друга для начала общения</div>
-                    </div>
+function sendToUser(userId, data) {
+  const clients = wsClients.get(userId);
+  if (clients) {
+    clients.forEach(ws => {
+      if (ws.readyState === 1) ws.send(JSON.stringify(data));
+    });
+  }
+}
 
-                    <div id="chat-window" class="flex-1 flex flex-col hidden h-full">
-                        <div class="p-4 bg-gray-900 border-b border-gray-800 flex items-center justify-between z-10">
-                            <div class="flex items-center space-x-3">
-                                <button onclick="backToChatList()" class="mobile-back-btn bg-gray-800 text-white px-3 py-1.5 rounded-xl text-xs font-bold">← Назад</button>
-                                <img id="active-chat-avatar" src="" class="w-10 h-10 rounded-full object-cover border border-purple-500/50">
-                                <div>
-                                    <div id="active-chat-name" class="font-bold text-white"></div>
-                                    <div id="active-chat-status" class="text-xs text-gray-400">онлайн</div>
-                                </div>
-                            </div>
-                            <div id="chat-actions" class="flex items-center space-x-2">
-                                <button onclick="startDirectCall()" class="p-2 px-3 bg-green-600 hover:bg-green-500 rounded-xl text-white font-bold text-xs flex items-center space-x-1">
-                                    <span>📞 Звонок</span>
-                                </button>
-                            </div>
-                        </div>
+function broadcastToChat(chatId, data) {
+  const chat = chats.get(chatId);
+  if (!chat) return;
+  chat.participants.forEach(uid => sendToUser(uid, data));
+}
 
-                        <div id="messages-container" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
+function broadcastToGroup(groupId, data) {
+  const group = groups.get(groupId);
+  if (!group) return;
+  group.members.forEach(m => sendToUser(m.userId, data));
+}
 
-                        <div class="p-3 md:p-4 bg-gray-900 border-t border-gray-800 flex items-center space-x-2">
-                            <input type="text" id="message-input" onkeydown="if(event.key==='Enter') sendMessage()" placeholder="Сообщение..." class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-purple-500">
-                            <button onclick="sendMessage()" class="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2 rounded-xl font-bold">Отправить</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
+// ──────────────────────────────────────────────
+// Middleware: аутентификация
+// ──────────────────────────────────────────────
+function authMiddleware(req, res, next) {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  if (!token) return res.status(401).json({ error: 'Не авторизован' });
 
-            <!-- Вкладка: ДРУЗЬЯ -->
-            <div id="tab-content-friends" class="flex-1 p-6 overflow-y-auto hidden h-full">
-                <h2 class="text-2xl font-bold mb-6 text-purple-400">Управление Друзьями</h2>
-                <div class="bg-gray-900 border border-gray-800 p-5 rounded-2xl mb-6 max-w-xl">
-                    <h3 class="text-sm font-semibold mb-2 text-gray-300">Добавить друга по логину</h3>
-                    <div class="flex space-x-2">
-                        <input type="text" id="add-friend-login" placeholder="Логин пользователя..." class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-purple-500">
-                        <button onclick="sendFriendRequest()" class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-xl font-bold">Отправить</button>
-                    </div>
-                </div>
-                <div id="friend-requests-section" class="mb-6 max-w-xl hidden">
-                    <h3 class="text-sm font-semibold mb-2 text-yellow-400">📥 Входящие заявки</h3>
-                    <div id="friend-requests-list" class="space-y-2"></div>
-                </div>
-                <div class="max-w-xl">
-                    <h3 class="text-sm font-semibold mb-3 text-gray-300">👥 Мои Друзья</h3>
-                    <div id="friends-list" class="space-y-2"></div>
-                </div>
-            </div>
+  const userId = sessions.get(token);
+  if (!userId) return res.status(401).json({ error: 'Сессия истекла' });
 
-            <!-- Вкладка: СООБЩЕСТВА -->
-            <div id="tab-content-groups" class="flex-1 flex overflow-hidden hidden h-full">
-                <div id="groups-main-view" class="flex-1 p-6 overflow-y-auto space-y-6 h-full pb-12">
-                    <h2 class="text-2xl font-bold text-purple-400">Сообщества и Группы</h2>
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-7xl">
-                        <div class="space-y-6">
-                            <div class="bg-gray-900 border border-gray-800 p-5 rounded-2xl space-y-3">
-                                <h3 class="text-sm font-semibold text-gray-300">Создать новое сообщество</h3>
-                                <input type="text" id="new-group-name" placeholder="Название группы..." class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-purple-500">
-                                <label class="flex items-center space-x-2 text-xs text-gray-300 cursor-pointer">
-                                    <input type="checkbox" id="new-group-closed" class="accent-purple-500 w-4 h-4 rounded">
-                                    <span>🔒 Закрытая группа (требуется запрос на вступление)</span>
-                                </label>
-                                <button onclick="createNewGroup()" class="w-full bg-purple-600 hover:bg-purple-500 py-2.5 rounded-xl font-bold text-sm">Создать Группу</button>
-                            </div>
-                            <div class="bg-gray-900 border border-gray-800 p-5 rounded-2xl">
-                                <h3 class="text-sm font-semibold mb-3 text-gray-300">🏢 Все Сообщества</h3>
-                                <div id="groups-list" class="space-y-2 overflow-y-auto max-h-[400px]"></div>
-                            </div>
-                        </div>
-                        <div class="space-y-6">
-                            <div class="bg-gray-900 border border-purple-500/30 p-5 rounded-2xl space-y-3 h-full flex flex-col">
-                                <h3 class="text-sm font-bold text-purple-300 uppercase">📢 Лента постов сообществ</h3>
-                                <div class="space-y-2">
-                                    <select id="group-post-select" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-sm text-white"></select>
-                                    <textarea id="group-post-text" placeholder="Поделитесь новостью в группе..." class="w-full bg-gray-800 border border-gray-700 rounded-xl p-3 text-white h-20 resize-none"></textarea>
-                                    <label class="text-xs text-purple-300 flex items-center space-x-2 cursor-pointer">
-                                        <input type="checkbox" id="group-post-announcement" class="accent-purple-500 w-4 h-4 rounded">
-                                        <span>📢 Дублировать как пост в ленту новостей</span>
-                                    </label>
-                                    <button onclick="publishGroupPost()" class="bg-purple-600 hover:bg-purple-500 px-5 py-2 rounded-xl font-bold text-xs">Опубликовать в группу</button>
-                                </div>
-                                <div id="groups-feed-list" class="space-y-3 pt-2 flex-1 overflow-y-auto max-h-[400px]"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+  req.userId = userId;
+  req.token = token;
+  req.user = users.get(userId);
+  next();
+}
 
-                <!-- Рабочая область группы -->
-                <div id="group-workspace-view" class="flex-1 flex overflow-hidden hidden">
-                    <div class="w-64 bg-gray-900 border-r border-gray-800 flex flex-col flex-shrink-0">
-                        <div class="p-4 border-b border-gray-800 flex items-center justify-between">
-                            <button onclick="closeGroupWorkspace()" class="text-xs text-gray-400 hover:text-white font-bold">← К списку</button>
-                            <span id="ws-group-sidebar-name" class="font-bold text-white truncate text-xs">Группа</span>
-                            <button onclick="openActiveGroupSettings()" class="text-xs text-gray-400 hover:text-white p-1.5 bg-purple-600/30 rounded-lg" title="Настройки">⚙</button>
-                        </div>
-                        <div class="flex-1 overflow-y-auto p-3 space-y-4">
-                            <div>
-                                <div class="text-xs font-bold text-gray-400 uppercase mb-2">Текстовые каналы</div>
-                                <div id="ws-sidebar-text-channels" class="space-y-1"></div>
-                            </div>
-                            <div>
-                                <div class="text-xs font-bold text-gray-400 uppercase mb-2">Голосовые каналы</div>
-                                <div id="ws-sidebar-voice-channels" class="space-y-1"></div>
-                            </div>
-                        </div>
-                    </div>
+// Проверка мута
+function checkMute(req, res, next) {
+  const user = req.user;
+  if (user.muted && user.muteUntil > Date.now()) {
+    return res.status(403).json({ error: `Вы в муте до ${new Date(user.muteUntil).toLocaleString('ru-RU')}. Причина: ${user.muteReason}` });
+  }
+  if (user.muted && user.muteUntil <= Date.now()) {
+    user.muted = false;
+    user.muteUntil = 0;
+    user.muteReason = '';
+  }
+  next();
+}
 
-                    <div class="flex-1 flex flex-col bg-gray-950 relative">
-                        <div class="p-4 bg-gray-900 border-b border-gray-800 flex items-center justify-between">
-                            <div id="ws-active-chat-name" class="font-bold text-white">Канал</div>
-                        </div>
-                        <div id="ws-messages-container" class="flex-1 overflow-y-auto p-4 space-y-3"></div>
-                        <div class="p-4 bg-gray-900 border-t border-gray-800 flex items-center space-x-2">
-                            <input type="text" id="ws-message-input" onkeydown="if(event.key==='Enter') sendMessage()" placeholder="Сообщение..." class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2 text-sm text-white">
-                            <button onclick="sendMessage()" class="bg-purple-600 hover:bg-purple-500 text-white px-5 py-2 rounded-xl font-bold">Отправить</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
+// ──────────────────────────────────────────────
+// AUTH
+// ──────────────────────────────────────────────
+app.post('/api/register', (req, res) => {
+  const { login, name, password, confirmPassword, avatar } = req.body;
 
-            <!-- Вкладка: НОВОСТИ -->
-            <div id="tab-content-news" class="flex-1 p-6 overflow-y-auto hidden h-full">
-                <div class="max-w-2xl mx-auto space-y-6 pb-12">
-                    <h2 class="text-2xl font-bold text-purple-400">Лента Новостей</h2>
-                    <div id="news-feed-list" class="space-y-4"></div>
-                </div>
-            </div>
+  if (!login || !name || !password) return res.status(400).json({ error: 'Заполните все поля' });
+  if (password !== confirmPassword) return res.status(400).json({ error: 'Пароли не совпадают' });
+  if (findUserByLogin(login)) return res.status(409).json({ error: 'Логин занят' });
+  if (login.length < 3) return res.status(400).json({ error: 'Логин слишком короткий' });
 
-            <!-- Вкладка: РАДИО -->
-            <div id="tab-content-music" class="flex-1 p-6 overflow-y-auto hidden h-full">
-                <div class="max-w-3xl mx-auto space-y-6">
-                    <h2 class="text-2xl font-bold text-purple-400">📻 Онлайн Радио</h2>
-                    <div id="radio-stations-list" class="space-y-3"></div>
-                </div>
-            </div>
+  const userId = generateId();
+  const user = {
+    id: userId,
+    login,
+    name,
+    passwordHash: hashPassword(password),
+    avatar: avatar || '',
+    bio: '',
+    email: '',
+    role: 'user',
+    muted: false,
+    muteUntil: 0,
+    muteReason: '',
+    verified: false,
+    friends: [],
+    friendRequests: [],
+    sentRequests: [],
+  };
 
-            <!-- Вкладка: ПРОФИЛЬ -->
-            <div id="tab-content-profile" class="flex-1 p-6 overflow-y-auto hidden h-full">
-                <div class="max-w-md mx-auto bg-gray-900 border border-gray-800 rounded-3xl p-6 shadow-2xl space-y-6">
-                    <h2 class="text-2xl font-bold text-purple-400 text-center">Мой Профиль</h2>
-                    <div class="flex flex-col items-center">
-                        <img id="profile-avatar-preview" src="" class="w-24 h-24 rounded-full border-4 border-purple-500 object-cover mb-3">
-                        <div id="profile-username" class="text-xl font-bold text-white"></div>
-                    </div>
-                    <div class="space-y-4">
-                        <div>
-                            <label class="block text-xs text-gray-400 uppercase mb-1">Имя</label>
-                            <input type="text" id="profile-name-input" class="w-full bg-gray-800 border border-gray-700 rounded-xl p-2.5 text-white">
-                        </div>
-                        <button onclick="saveProfile()" class="w-full bg-purple-600 hover:bg-purple-500 py-3 rounded-xl font-bold text-white">Сохранить</button>
-                        <button onclick="logout()" class="w-full bg-red-600/20 hover:bg-red-600 text-red-400 hover:text-white py-2.5 rounded-xl font-bold">Выйти</button>
-                    </div>
-                </div>
-            </div>
+  users.set(userId, user);
+  const token = generateToken();
+  sessions.set(token, userId);
 
-        </div>
-    </div>
+  res.json({ token, user: getUserSafe(user) });
+});
 
-    <!-- ВХОДЯЩИЙ ВЫЗОВ (Всплывающее окно) -->
-    <div id="incoming-call-modal" class="fixed bottom-6 right-6 z-[999999] bg-gray-900 border border-green-500 p-5 rounded-3xl w-80 shadow-2xl text-center space-y-4 hidden">
-        <img id="incoming-caller-avatar" src="" class="w-16 h-16 rounded-full object-cover border-2 border-green-500 mx-auto">
-        <h3 class="text-base font-bold text-white" id="incoming-caller-title">Входящий вызов...</h3>
-        <div class="flex space-x-3 justify-center">
-            <button onclick="acceptIncomingCall()" class="flex-1 bg-green-600 hover:bg-green-500 text-white py-2.5 rounded-xl font-bold text-xs">Принять</button>
-            <button onclick="rejectIncomingCall()" class="flex-1 bg-red-600 hover:bg-red-500 text-white py-2.5 rounded-xl font-bold text-xs">Сбросить</button>
-        </div>
-    </div>
+app.post('/api/login', (req, res) => {
+  const { login, password } = req.body;
+  const user = findUserByLogin(login);
 
-    <!-- АКТИВНЫЙ ЗВОНОК -->
-    <div id="single-call-modal" class="fixed bottom-6 right-6 z-[99999] w-80 bg-gray-900 border border-purple-500 rounded-3xl shadow-2xl p-5 flex flex-col space-y-4 hidden">
-        <div class="flex justify-between items-center">
-            <span class="text-xs font-bold text-purple-400 uppercase">🎙 Аудиосвязь</span>
-            <button onclick="hangUpCall()" class="text-gray-400 hover:text-white font-bold text-sm">✕</button>
-        </div>
-        <h2 id="call-partner-name" class="text-sm font-bold text-white">Вызов...</h2>
-        <div id="remote-audio-container"></div>
-        <button onclick="hangUpCall()" class="w-full bg-red-600 hover:bg-red-500 text-white py-2 rounded-xl text-xs font-bold">Завершить</button>
-    </div>
+  if (!user || user.passwordHash !== hashPassword(password)) {
+    return res.status(401).json({ error: 'Неверный логин или пароль' });
+  }
 
-    <!-- МОДАЛЬНОЕ ОКНО НАСТРОЕК ГРУППЫ -->
-    <div id="group-settings-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
-        <div class="bg-gray-900 border border-purple-500 p-6 rounded-3xl w-full max-w-lg space-y-4">
-            <div class="flex justify-between items-center border-b border-gray-800 pb-3">
-                <h3 class="text-lg font-bold text-white">⚙ Настройки группы</h3>
-                <button onclick="document.getElementById('group-settings-modal').classList.add('hidden')" class="text-gray-400 hover:text-white font-bold">✕</button>
-            </div>
-            <div id="group-settings-content" class="space-y-3"></div>
-            <div class="flex justify-end pt-2">
-                <button onclick="document.getElementById('group-settings-modal').classList.add('hidden')" class="bg-purple-600 hover:bg-purple-500 px-5 py-2 rounded-xl font-bold text-xs text-white">Закрыть</button>
-            </div>
-        </div>
-    </div>
+  const token = generateToken();
+  sessions.set(token, user.id);
 
-    <script>
-        const socket = io();
+  res.json({ token, user: getUserSafe(user) });
+});
 
-        let currentUser = null;
-        let db = { users: {}, messagesStore: {}, groups: {}, groupPosts: {}, news: [], friendRequests: {}, outgoingRequests: {}, friends: [], mutedUsers: {}, verificationRequests: {}, violations: [] };
-        let activeChat = null;
-        let activeGroupWorkspaceId = null;
-        let activeSubgroup = 'main';
+app.get('/api/me', authMiddleware, (req, res) => {
+  res.json({ user: getUserSafe(req.user) });
+});
 
-        let localStream = null;
-        let peerConnections = {};
-        let callTargetUser = null;
-        let incomingOffer = null;
-        let incomingCallerLogin = null;
-        let activeVoiceRoomKey = null;
+app.post('/api/logout', authMiddleware, (req, res) => {
+  sessions.delete(req.token);
+  res.json({ ok: true });
+});
 
-        // Web Audio API для рингтонов и звуков вызова
-        let audioCtx = null;
-        function initAudioContext() {
-            if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }
-        }
+// ──────────────────────────────────────────────
+// PROFILE
+// ──────────────────────────────────────────────
+app.put('/api/profile', authMiddleware, (req, res) => {
+  const { name, avatar, bio, email, newPassword, confirmPassword } = req.body;
+  const user = req.user;
 
-        function playBeep(freq = 440, type = 'sine', duration = 0.2) {
-            try {
-                initAudioContext();
-                if (audioCtx.state === 'suspended') audioCtx.resume();
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = type;
-                osc.frequency.value = freq;
-                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                osc.start();
-                osc.stop(audioCtx.currentTime + duration);
-            } catch (e) { console.error(e); }
-        }
+  if (name) user.name = name;
+  if (avatar !== undefined) user.avatar = avatar;
+  if (bio !== undefined) user.bio = bio;
+  if (email !== undefined) user.email = email;
 
-        let ringInterval = null;
-        function startRingSound() {
-            stopRingSound();
-            ringInterval = setInterval(() => {
-                playBeep(520, 'sine', 0.4);
-                setTimeout(() => playBeep(620, 'sine', 0.4), 300);
-            }, 1500);
-        }
+  if (newPassword) {
+    if (newPassword !== confirmPassword) return res.status(400).json({ error: 'Пароли не совпадают' });
+    user.passwordHash = hashPassword(newPassword);
+  }
 
-        function stopRingSound() {
-            if (ringInterval) {
-                clearInterval(ringInterval);
-                ringInterval = null;
-            }
-        }
+  res.json({ user: getUserSafe(user) });
+});
 
-        const radioStations = [
-            { name: 'Европа Плюс', genre: 'Поп / Хит', url: 'https://ep256.europaplus.ru/ep256_aac', logo: '🌐' },
-            { name: 'Авторадио', genre: 'Дорожное / Ретро', url: 'https://pub0102.101.ru:8443/stream/air/aac/64/101', logo: '🚗' },
-            { name: 'Наше Радио', genre: 'Рок', url: 'https://nashe3.hostingradio.ru/nashe-128.mp3', logo: '🎸' }
-        ];
+app.get('/api/user/:userId', authMiddleware, (req, res) => {
+  const user = users.get(req.params.userId);
+  if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
+  res.json({ user: getUserSafe(user) });
+});
 
-        function switchAuthTab(tab) {
-            if (tab === 'login') {
-                document.getElementById('form-login').classList.remove('hidden');
-                document.getElementById('form-register').classList.add('hidden');
-                document.getElementById('tab-login').className = 'w-1/2 pb-2 text-center font-bold border-b-2 border-purple-500 text-purple-400';
-                document.getElementById('tab-register').className = 'w-1/2 pb-2 text-center font-bold text-gray-400';
-            } else {
-                document.getElementById('form-login').classList.add('hidden');
-                document.getElementById('form-register').classList.remove('hidden');
-                document.getElementById('tab-register').className = 'w-1/2 pb-2 text-center font-bold border-b-2 border-purple-500 text-purple-400';
-                document.getElementById('tab-login').className = 'w-1/2 pb-2 text-center font-bold text-gray-400';
-            }
-        }
+// ──────────────────────────────────────────────
+// FRIENDS
+// ──────────────────────────────────────────────
+app.post('/api/friends/request', authMiddleware, (req, res) => {
+  const { login } = req.body;
+  const targetUser = findUserByLogin(login);
 
-        function handleLogin(e) {
-            e.preventDefault();
-            socket.emit('login', {
-                login: document.getElementById('login-input').value.trim(),
-                password: document.getElementById('password-input').value
-            });
-        }
+  if (!targetUser) return res.status(404).json({ error: 'Пользователь не найден' });
+  if (targetUser.id === req.userId) return res.status(400).json({ error: 'Нельзя добавить себя' });
+  if (req.user.friends.includes(targetUser.id)) return res.status(400).json({ error: 'Уже в друзьях' });
+  if (req.user.sentRequests.includes(targetUser.id)) return res.status(400).json({ error: 'Заявка уже отправлена' });
 
-        function handleRegister(e) {
-            e.preventDefault();
-            socket.emit('register', {
-                login: document.getElementById('reg-login-input').value.trim(),
-                name: document.getElementById('reg-name-input').value.trim(),
-                password: document.getElementById('reg-password-input').value
-            });
-        }
+  req.user.sentRequests.push(targetUser.id);
+  targetUser.friendRequests.push(req.userId);
 
-        socket.on('auth_success', (user) => {
-            currentUser = user;
-            document.getElementById('auth-screen').classList.add('hidden');
-            document.getElementById('main-app').classList.remove('hidden');
-            document.getElementById('my-avatar-icon').src = user.avatar;
-            renderRadioStations();
-            switchTab('chats');
+  sendToUser(targetUser.id, { type: 'friend_request', from: getUserSafe(req.user) });
+  res.json({ ok: true });
+});
+
+app.post('/api/friends/accept', authMiddleware, (req, res) => {
+  const { userId } = req.body;
+  const fromUser = users.get(userId);
+  if (!fromUser) return res.status(404).json({ error: 'Пользователь не найден' });
+
+  const idx = req.user.friendRequests.indexOf(userId);
+  if (idx === -1) return res.status(400).json({ error: 'Нет такой заявки' });
+
+  req.user.friendRequests.splice(idx, 1);
+  req.user.friends.push(userId);
+
+  const sentIdx = fromUser.sentRequests.indexOf(req.userId);
+  if (sentIdx !== -1) fromUser.sentRequests.splice(sentIdx, 1);
+  fromUser.friends.push(req.userId);
+
+  // Создаём личный чат
+  const chatId = generateId();
+  chats.set(chatId, {
+    id: chatId,
+    type: 'private',
+    participants: [req.userId, userId],
+    messages: [],
+    pinned: null,
+  });
+
+  sendToUser(userId, { type: 'friend_accepted', by: getUserSafe(req.user), chatId });
+  res.json({ ok: true, chatId });
+});
+
+app.post('/api/friends/reject', authMiddleware, (req, res) => {
+  const { userId } = req.body;
+  const idx = req.user.friendRequests.indexOf(userId);
+  if (idx !== -1) req.user.friendRequests.splice(idx, 1);
+
+  const fromUser = users.get(userId);
+  if (fromUser) {
+    const sentIdx = fromUser.sentRequests.indexOf(req.userId);
+    if (sentIdx !== -1) fromUser.sentRequests.splice(sentIdx, 1);
+  }
+
+  res.json({ ok: true });
+});
+
+app.delete('/api/friends/:userId', authMiddleware, (req, res) => {
+  const targetId = req.params.userId;
+  const idx = req.user.friends.indexOf(targetId);
+  if (idx !== -1) req.user.friends.splice(idx, 1);
+
+  const target = users.get(targetId);
+  if (target) {
+    const tIdx = target.friends.indexOf(req.userId);
+    if (tIdx !== -1) target.friends.splice(tIdx, 1);
+  }
+
+  res.json({ ok: true });
+});
+
+app.get('/api/friends', authMiddleware, (req, res) => {
+  const friendsList = req.user.friends.map(id => getUserSafe(users.get(id))).filter(Boolean);
+  const incoming = req.user.friendRequests.map(id => getUserSafe(users.get(id))).filter(Boolean);
+  const outgoing = req.user.sentRequests.map(id => getUserSafe(users.get(id))).filter(Boolean);
+  res.json({ friends: friendsList, incoming, outgoing });
+});
+
+// ──────────────────────────────────────────────
+// CHATS
+// ──────────────────────────────────────────────
+app.get('/api/chats', authMiddleware, (req, res) => {
+  const userChats = [];
+  for (const chat of chats.values()) {
+    if (chat.participants.includes(req.userId)) {
+      const otherId = chat.participants.find(id => id !== req.userId);
+      const otherUser = otherId ? users.get(otherId) : null;
+      userChats.push({
+        id: chat.id,
+        type: chat.type,
+        otherUser: otherUser ? getUserSafe(otherUser) : null,
+        lastMessage: chat.messages[chat.messages.length - 1] || null,
+        messageCount: chat.messages.length,
+        pinned: chat.pinned,
+      });
+    }
+  }
+  userChats.sort((a, b) => {
+    const aTime = a.lastMessage?.timestamp || 0;
+    const bTime = b.lastMessage?.timestamp || 0;
+    return bTime - aTime;
+  });
+  res.json({ chats: userChats });
+});
+
+app.get('/api/chats/:chatId/messages', authMiddleware, (req, res) => {
+  const chat = chats.get(req.params.chatId);
+  if (!chat) return res.status(404).json({ error: 'Чат не найден' });
+  if (!chat.participants.includes(req.userId)) return res.status(403).json({ error: 'Нет доступа' });
+
+  const messagesWithUsers = chat.messages.map(m => ({
+    ...m,
+    sender: getUserSafe(users.get(m.senderId)),
+  }));
+
+  res.json({ messages: messagesWithUsers, pinned: chat.pinned });
+});
+
+app.post('/api/chats/:chatId/messages', authMiddleware, checkMute, (req, res) => {
+  const { text, attachments } = req.body;
+  const chat = chats.get(req.params.chatId);
+  if (!chat) return res.status(404).json({ error: 'Чат не найден' });
+  if (!chat.participants.includes(req.userId)) return res.status(403).json({ error: 'Нет доступа' });
+
+  const message = {
+    id: generateId(),
+    senderId: req.userId,
+    text,
+    attachments: attachments || [],
+    edited: false,
+    timestamp: Date.now(),
+  };
+
+  chat.messages.push(message);
+
+  const msgData = { type: 'chat_message', chatId: chat.id, message: { ...message, sender: getUserSafe(req.user) } };
+  broadcastToChat(chat.id, msgData);
+
+  res.json({ message });
+});
+
+app.put('/api/chats/:chatId/messages/:msgId', authMiddleware, (req, res) => {
+  const { text } = req.body;
+  const chat = chats.get(req.params.chatId);
+  if (!chat) return res.status(404).json({ error: 'Чат не найден' });
+
+  const msg = chat.messages.find(m => m.id === req.params.msgId);
+  if (!msg) return res.status(404).json({ error: 'Сообщение не найдено' });
+  if (msg.senderId !== req.userId) return res.status(403).json({ error: 'Нельзя редактировать чужое сообщение' });
+
+  msg.text = text;
+  msg.edited = true;
+
+  broadcastToChat(chat.id, { type: 'chat_message_edited', chatId: chat.id, message: msg });
+  res.json({ message: msg });
+});
+
+app.delete('/api/chats/:chatId/messages/:msgId', authMiddleware, (req, res) => {
+  const chat = chats.get(req.params.chatId);
+  if (!chat) return res.status(404).json({ error: 'Чат не найден' });
+
+  const idx = chat.messages.findIndex(m => m.id === req.params.msgId);
+  if (idx === -1) return res.status(404).json({ error: 'Сообщение не найдено' });
+  const msg = chat.messages[idx];
+  if (msg.senderId !== req.userId && req.user.role !== 'moderator' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Нет прав' });
+  }
+
+  chat.messages.splice(idx, 1);
+  broadcastToChat(chat.id, { type: 'chat_message_deleted', chatId: chat.id, messageId: req.params.msgId });
+  res.json({ ok: true });
+});
+
+app.post('/api/chats/:chatId/pin', authMiddleware, (req, res) => {
+  const { messageId } = req.body;
+  const chat = chats.get(req.params.chatId);
+  if (!chat) return res.status(404).json({ error: 'Чат не найден' });
+  if (!chat.participants.includes(req.userId)) return res.status(403).json({ error: 'Нет доступа' });
+
+  const msg = chat.messages.find(m => m.id === messageId);
+  if (!msg) return res.status(404).json({ error: 'Сообщение не найдено' });
+
+  chat.pinned = msg;
+  broadcastToChat(chat.id, { type: 'chat_pinned', chatId: chat.id, message: msg });
+  res.json({ ok: true, pinned: msg });
+});
+
+app.post('/api/chats/:chatId/unpin', authMiddleware, (req, res) => {
+  const chat = chats.get(req.params.chatId);
+  if (!chat) return res.status(404).json({ error: 'Чат не найден' });
+  chat.pinned = null;
+  broadcastToChat(chat.id, { type: 'chat_unpinned', chatId: chat.id });
+  res.json({ ok: true });
+});
+
+// ──────────────────────────────────────────────
+// GROUPS
+// ──────────────────────────────────────────────
+app.post('/api/groups', authMiddleware, (req, res) => {
+  const { name, avatar, isClosed, description } = req.body;
+  if (!name) return res.status(400).json({ error: 'Укажите название' });
+
+  const groupId = generateId();
+  const defaultRole = { name: 'Участник', permissions: { post: true, delete: false, duplicate: false, voiceMute: false } };
+  const ownerRole = { name: 'Владелец', permissions: { post: true, delete: true, duplicate: true, voiceMute: true, manage: true } };
+
+  const group = {
+    id: groupId,
+    name,
+    avatar: avatar || '',
+    isClosed: !!isClosed,
+    description: description || '',
+    owner: req.userId,
+    members: [{ userId: req.userId, role: 'owner' }],
+    roles: { owner: ownerRole, member: defaultRole },
+    channels: { text: [], voice: [] },
+    verified: false,
+    joinRequests: [],
+  };
+
+  // Канал по умолчанию
+  const defaultChannelId = generateId();
+  group.channels.text.push({ id: defaultChannelId, name: 'общий', accessRole: 'member' });
+  groupMessages.set(defaultChannelId, []);
+
+  groups.set(groupId, group);
+  res.json({ group });
+});
+
+app.get('/api/groups', authMiddleware, (req, res) => {
+  const allGroups = [];
+  for (const g of groups.values()) {
+    const isMember = g.members.some(m => m.userId === req.userId);
+    if (!g.isClosed || isMember || req.user.role === 'moderator' || req.user.role === 'admin') {
+      allGroups.push({
+        id: g.id,
+        name: g.name,
+        avatar: g.avatar,
+        isClosed: g.isClosed,
+        memberCount: g.members.length,
+        verified: g.verified,
+        isMember,
+      });
+    }
+  }
+  res.json({ groups: allGroups });
+});
+
+app.get('/api/groups/:groupId', authMiddleware, (req, res) => {
+  const group = groups.get(req.params.groupId);
+  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
+
+  const isMember = group.members.some(m => m.userId === req.userId);
+  if (group.isClosed && !isMember && req.user.role !== 'moderator' && req.user.role !== 'admin') {
+    return res.json({ group: { id: group.id, name: group.name, avatar: group.avatar, isClosed: true, isMember: false } });
+  }
+
+  res.json({
+    group: {
+      ...group,
+      members: group.members.map(m => ({ ...m, user: getUserSafe(users.get(m.userId)) })),
+    },
+  });
+});
+
+app.post('/api/groups/:groupId/join', authMiddleware, (req, res) => {
+  const group = groups.get(req.params.groupId);
+  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
+
+  if (group.members.some(m => m.userId === req.userId)) return res.status(400).json({ error: 'Уже участник' });
+
+  if (group.isClosed) {
+    if (group.joinRequests.includes(req.userId)) return res.status(400).json({ error: 'Заявка уже отправлена' });
+    group.joinRequests.push(req.userId);
+    sendToUser(group.owner, { type: 'group_join_request', groupId: group.id, user: getUserSafe(req.user) });
+    return res.json({ ok: true, message: 'Заявка отправлена' });
+  }
+
+  group.members.push({ userId: req.userId, role: 'member' });
+  broadcastToGroup(group.id, { type: 'group_member_joined', groupId: group.id, user: getUserSafe(req.user) });
+  res.json({ ok: true });
+});
+
+app.post('/api/groups/:groupId/join/:userId/accept', authMiddleware, (req, res) => {
+  const group = groups.get(req.params.groupId);
+  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
+  if (group.owner !== req.userId) return res.status(403).json({ error: 'Только владелец может принимать заявки' });
+
+  const idx = group.joinRequests.indexOf(req.params.userId);
+  if (idx === -1) return res.status(400).json({ error: 'Нет такой заявки' });
+
+  group.joinRequests.splice(idx, 1);
+  group.members.push({ userId: req.params.userId, role: 'member' });
+
+  sendToUser(req.params.userId, { type: 'group_join_accepted', groupId: group.id, groupName: group.name });
+  broadcastToGroup(group.id, { type: 'group_member_joined', groupId: group.id, user: getUserSafe(users.get(req.params.userId)) });
+  res.json({ ok: true });
+});
+
+app.post('/api/groups/:groupId/join/:userId/reject', authMiddleware, (req, res) => {
+  const group = groups.get(req.params.groupId);
+  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
+  if (group.owner !== req.userId) return res.status(403).json({ error: 'Только владелец может отклонять заявки' });
+
+  const idx = group.joinRequests.indexOf(req.params.userId);
+  if (idx !== -1) group.joinRequests.splice(idx, 1);
+
+  sendToUser(req.params.userId, { type: 'group_join_rejected', groupId: group.id });
+  res.json({ ok: true });
+});
+
+app.get('/api/groups/:groupId/requests', authMiddleware, (req, res) => {
+  const group = groups.get(req.params.groupId);
+  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
+  if (group.owner !== req.userId) return res.status(403).json({ error: 'Нет доступа' });
+
+  const requests = group.joinRequests.map(uid => getUserSafe(users.get(uid))).filter(Boolean);
+  res.json({ requests });
+});
+
+app.put('/api/groups/:groupId', authMiddleware, (req, res) => {
+  const { name, avatar, isClosed, description } = req.body;
+  const group = groups.get(req.params.groupId);
+  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
+  if (group.owner !== req.userId) return res.status(403).json({ error: 'Только владелец может редактировать' });
+
+  if (name) group.name = name;
+  if (avatar !== undefined) group.avatar = avatar;
+  if (isClosed !== undefined) group.isClosed = isClosed;
+  if (description !== undefined) group.description = description;
+
+  broadcastToGroup(group.id, { type: 'group_updated', group: { id: group.id, name: group.name, avatar: group.avatar, isClosed: group.isClosed } });
+  res.json({ group });
+});
+
+app.delete('/api/groups/:groupId', authMiddleware, (req, res) => {
+  const group = groups.get(req.params.groupId);
+  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
+  if (group.owner !== req.userId) return res.status(403).json({ error: 'Только владелец может удалить группу' });
+
+  broadcastToGroup(group.id, { type: 'group_deleted', groupId: group.id });
+  groups.delete(req.params.groupId);
+  res.json({ ok: true });
+});
+
+app.post('/api/groups/:groupId/leave', authMiddleware, (req, res) => {
+  const group = groups.get(req.params.groupId);
+  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
+
+  const idx = group.members.findIndex(m => m.userId === req.userId);
+  if (idx === -1) return res.status(400).json({ error: 'Вы не участник' });
+
+  if (group.owner === req.userId) return res.status(400).json({ error: 'Владелец не может покинуть группу (удалите её)' });
+
+  group.members.splice(idx, 1);
+  broadcastToGroup(group.id, { type: 'group_member_left', groupId: group.id, userId: req.userId });
+  res.json({ ok: true });
+});
+
+// ── Каналы группы ──
+app.post('/api/groups/:groupId/channels', authMiddleware, (req, res) => {
+  const { name, type, accessRole } = req.body;
+  const group = groups.get(req.params.groupId);
+  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
+  if (group.owner !== req.userId) return res.status(403).json({ error: 'Только владелец может создавать каналы' });
+
+  const channelId = generateId();
+  const channel = { id: channelId, name: name || 'новый канал', accessRole: accessRole || 'member' };
+
+  if (type === 'voice') {
+    group.channels.voice.push(channel);
+  } else {
+    group.channels.text.push(channel);
+    groupMessages.set(channelId, []);
+  }
+
+  broadcastToGroup(group.id, { type: 'group_channel_created', groupId: group.id, channel, channelType: type });
+  res.json({ channel });
+});
+
+app.delete('/api/groups/:groupId/channels/:channelId', authMiddleware, (req, res) => {
+  const group = groups.get(req.params.groupId);
+  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
+  if (group.owner !== req.userId) return res.status(403).json({ error: 'Нет доступа' });
+
+  ['text', 'voice'].forEach(type => {
+    const idx = group.channels[type].findIndex(c => c.id === req.params.channelId);
+    if (idx !== -1) {
+      group.channels[type].splice(idx, 1);
+      if (type === 'text') groupMessages.delete(req.params.channelId);
+    }
+  });
+
+  broadcastToGroup(group.id, { type: 'group_channel_deleted', groupId: group.id, channelId: req.params.channelId });
+  res.json({ ok: true });
+});
+
+// ── Сообщения канала ──
+app.get('/api/groups/:groupId/channels/:channelId/messages', authMiddleware, (req, res) => {
+  const group = groups.get(req.params.groupId);
+  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
+  if (!group.members.some(m => m.userId === req.userId)) return res.status(403).json({ error: 'Нет доступа' });
+
+  const messages = groupMessages.get(req.params.channelId) || [];
+  const messagesWithUsers = messages.map(m => ({ ...m, sender: getUserSafe(users.get(m.senderId)) }));
+  res.json({ messages: messagesWithUsers });
+});
+
+app.post('/api/groups/:groupId/channels/:channelId/messages', authMiddleware, checkMute, (req, res) => {
+  const { text, attachments, duplicateToNews } = req.body;
+  const group = groups.get(req.params.groupId);
+  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
+  if (!group.members.some(m => m.userId === req.userId)) return res.status(403).json({ error: 'Нет доступа' });
+
+  const channel = [...group.channels.text, ...group.channels.voice].find(c => c.id === req.params.channelId);
+  if (!channel) return res.status(404).json({ error: 'Канал не найден' });
+
+  const message = {
+    id: generateId(),
+    senderId: req.userId,
+    text,
+    attachments: attachments || [],
+    edited: false,
+    timestamp: Date.now(),
+  };
+
+  if (!groupMessages.has(req.params.channelId)) groupMessages.set(req.params.channelId, []);
+  groupMessages.get(req.params.channelId).push(message);
+
+  broadcastToGroup(group.id, {
+    type: 'group_message',
+    groupId: group.id,
+    channelId: req.params.channelId,
+    message: { ...message, sender: getUserSafe(req.user) },
+  });
+
+  // Дублирование в новости
+  if (duplicateToNews) {
+    const newsId = generateId();
+    const newsItem = {
+      id: newsId,
+      authorId: req.userId,
+      groupId: group.id,
+      groupName: group.name,
+      text,
+      media: attachments || [],
+      timestamp: Date.now(),
+    };
+    news.set(newsId, newsItem);
+  }
+
+  res.json({ message });
+});
+
+app.put('/api/groups/:groupId/channels/:channelId/messages/:msgId', authMiddleware, (req, res) => {
+  const { text } = req.body;
+  const messages = groupMessages.get(req.params.channelId);
+  if (!messages) return res.status(404).json({ error: 'Канал не найден' });
+
+  const msg = messages.find(m => m.id === req.params.msgId);
+  if (!msg) return res.status(404).json({ error: 'Сообщение не найдено' });
+  if (msg.senderId !== req.userId) return res.status(403).json({ error: 'Нельзя редактировать чужое сообщение' });
+
+  msg.text = text;
+  msg.edited = true;
+
+  const group = groups.get(req.params.groupId);
+  broadcastToGroup(group.id, {
+    type: 'group_message_edited',
+    groupId: group.id,
+    channelId: req.params.channelId,
+    message: msg,
+  });
+  res.json({ message: msg });
+});
+
+app.delete('/api/groups/:groupId/channels/:channelId/messages/:msgId', authMiddleware, (req, res) => {
+  const group = groups.get(req.params.groupId);
+  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
+
+  const messages = groupMessages.get(req.params.channelId);
+  if (!messages) return res.status(404).json({ error: 'Канал не найден' });
+
+  const idx = messages.findIndex(m => m.id === req.params.msgId);
+  if (idx === -1) return res.status(404).json({ error: 'Сообщение не найдено' });
+
+  const msg = messages[idx];
+  const member = group.members.find(m => m.userId === req.userId);
+  if (!member) return res.status(403).json({ error: 'Нет доступа' });
+
+  const canDelete = msg.senderId === req.userId || member.role === 'owner' || member.role === 'moderator';
+  if (!canDelete) return res.status(403).json({ error: 'Нет прав на удаление' });
+
+  messages.splice(idx, 1);
+  broadcastToGroup(group.id, { type: 'group_message_deleted', groupId: group.id, channelId: req.params.channelId, messageId: req.params.msgId });
+  res.json({ ok: true });
+});
+
+// ── Роли ──
+app.post('/api/groups/:groupId/roles', authMiddleware, (req, res) => {
+  const { name, permissions } = req.body;
+  const group = groups.get(req.params.groupId);
+  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
+  if (group.owner !== req.userId) return res.status(403).json({ error: 'Только владелец может управлять ролями' });
+
+  const roleId = generateId();
+  group.roles[roleId] = { name, permissions };
+
+  res.json({ roleId, role: group.roles[roleId] });
+});
+
+app.put('/api/groups/:groupId/members/:userId/role', authMiddleware, (req, res) => {
+  const { role } = req.body;
+  const group = groups.get(req.params.groupId);
+  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
+  if (group.owner !== req.userId) return res.status(403).json({ error: 'Только владелец может менять роли' });
+
+  const member = group.members.find(m => m.userId === req.params.userId);
+  if (!member) return res.status(404).json({ error: 'Участник не найден' });
+
+  member.role = role;
+  broadcastToGroup(group.id, { type: 'group_member_role_changed', groupId: group.id, userId: req.params.userId, role });
+  res.json({ ok: true });
+});
+
+// ──────────────────────────────────────────────
+// NEWS
+// ──────────────────────────────────────────────
+app.get('/api/news', authMiddleware, (req, res) => {
+  const newsList = [];
+  for (const item of news.values()) {
+    newsList.push({
+      ...item,
+      author: getUserSafe(users.get(item.authorId)),
+    });
+  }
+  newsList.sort((a, b) => b.timestamp - a.timestamp);
+  res.json({ news: newsList });
+});
+
+app.post('/api/news', authMiddleware, checkMute, (req, res) => {
+  const { text, media } = req.body;
+  if (!text) return res.status(400).json({ error: 'Текст обязателен' });
+
+  const newsId = generateId();
+  const newsItem = {
+    id: newsId,
+    authorId: req.userId,
+    text,
+    media: media || [],
+    timestamp: Date.now(),
+  };
+  news.set(newsId, newsItem);
+
+  res.json({ news: { ...newsItem, author: getUserSafe(req.user) } });
+});
+
+// ──────────────────────────────────────────────
+// RADIO
+// ──────────────────────────────────────────────
+app.get('/api/radio', authMiddleware, (req, res) => {
+  res.json({ stations: radioStations });
+});
+
+// ──────────────────────────────────────────────
+// MODERATION
+// ──────────────────────────────────────────────
+app.post('/api/mod/mute', authMiddleware, (req, res) => {
+  const { userId, reason, duration } = req.body;
+  if (req.user.role !== 'moderator' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Нет прав модератора' });
+  }
+
+  const target = users.get(userId);
+  if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
+
+  const minutes = Math.min(Math.max(parseInt(duration) || 1, 1), 9999);
+  target.muted = true;
+  target.muteUntil = Date.now() + minutes * 60 * 1000;
+  target.muteReason = reason || 'Нарушение правил';
+
+  sendToUser(userId, {
+    type: 'muted',
+    muteUntil: target.muteUntil,
+    muteReason: target.muteReason,
+  });
+
+  res.json({ ok: true, user: getUserSafe(target) });
+});
+
+app.post('/api/mod/unmute', authMiddleware, (req, res) => {
+  const { userId } = req.body;
+  if (req.user.role !== 'moderator' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Нет прав модератора' });
+  }
+
+  const target = users.get(userId);
+  if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
+
+  target.muted = false;
+  target.muteUntil = 0;
+  target.muteReason = '';
+
+  sendToUser(userId, { type: 'unmuted' });
+  res.json({ ok: true, user: getUserSafe(target) });
+});
+
+app.post('/api/mod/violation', authMiddleware, (req, res) => {
+  const { targetId, reason } = req.body;
+  const violationId = generateId();
+  const violation = {
+    id: violationId,
+    reporterId: req.userId,
+    targetId,
+    reason: reason || 'Нарушение правил',
+    timestamp: Date.now(),
+    resolved: false,
+  };
+  violations.set(violationId, violation);
+  res.json({ violation });
+});
+
+app.get('/api/mod/violations', authMiddleware, (req, res) => {
+  if (req.user.role !== 'moderator' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Нет прав модератора' });
+  }
+  const list = [];
+  for (const v of violations.values()) {
+    list.push({
+      ...v,
+      reporter: getUserSafe(users.get(v.reporterId)),
+      target: getUserSafe(users.get(v.targetId)),
+    });
+  }
+  list.sort((a, b) => b.timestamp - a.timestamp);
+  res.json({ violations: list });
+});
+
+app.get('/api/mod/muted', authMiddleware, (req, res) => {
+  if (req.user.role !== 'moderator' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Нет прав модератора' });
+  }
+  const mutedUsers = [];
+  for (const u of users.values()) {
+    if (u.muted && u.muteUntil > Date.now()) {
+      mutedUsers.push(getUserSafe(u));
+    }
+  }
+  res.json({ muted: mutedUsers });
+});
+
+// ── Верификация сообществ ──
+app.post('/api/mod/verification/request', authMiddleware, (req, res) => {
+  const { groupId } = req.body;
+  const group = groups.get(groupId);
+  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
+  if (group.owner !== req.userId) return res.status(403).json({ error: 'Только владелец может запросить верификацию' });
+
+  const existing = [...verificationRequests.values()].find(v => v.groupId === groupId && v.status === 'pending');
+  if (existing) return res.status(400).json({ error: 'Заявка уже подана' });
+
+  const requestId = generateId();
+  verificationRequests.set(requestId, {
+    id: requestId,
+    groupId,
+    groupName: group.name,
+    requestedBy: req.userId,
+    timestamp: Date.now(),
+    status: 'pending',
+  });
+
+  res.json({ ok: true, requestId });
+});
+
+app.get('/api/mod/verification', authMiddleware, (req, res) => {
+  if (req.user.role !== 'moderator' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Нет прав модератора' });
+  }
+  const list = [];
+  for (const v of verificationRequests.values()) {
+    if (v.status === 'pending') {
+      list.push({
+        ...v,
+        group: groups.get(v.groupId) ? { id: groups.get(v.groupId).id, name: groups.get(v.groupId).name, avatar: groups.get(v.groupId).avatar } : null,
+        requestedByUser: getUserSafe(users.get(v.requestedBy)),
+      });
+    }
+  }
+  list.sort((a, b) => b.timestamp - a.timestamp);
+  res.json({ requests: list });
+});
+
+app.post('/api/mod/verification/:requestId/:action', authMiddleware, (req, res) => {
+  if (req.user.role !== 'moderator' && req.user.role !== 'admin') {
+    return res.status(403).json({ error: 'Нет прав модератора' });
+  }
+
+  const v = verificationRequests.get(req.params.requestId);
+  if (!v) return res.status(404).json({ error: 'Заявка не найдена' });
+
+  if (req.params.action === 'approve') {
+    v.status = 'approved';
+    const group = groups.get(v.groupId);
+    if (group) group.verified = true;
+    sendToUser(v.requestedBy, { type: 'verification_approved', groupId: v.groupId });
+  } else if (req.params.action === 'reject') {
+    v.status = 'rejected';
+    sendToUser(v.requestedBy, { type: 'verification_rejected', groupId: v.groupId });
+  }
+
+  res.json({ ok: true });
+});
+
+// ──────────────────────────────────────────────
+// USER ROLE (глобальная)
+// ──────────────────────────────────────────────
+app.put('/api/admin/user/:userId/role', authMiddleware, (req, res) => {
+  const { role } = req.body;
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Нет прав администратора' });
+
+  const target = users.get(req.params.userId);
+  if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
+
+  target.role = role;
+  res.json({ ok: true, user: getUserSafe(target) });
+});
+
+// ──────────────────────────────────────────────
+// WebSocket
+// ──────────────────────────────────────────────
+wss.on('connection', (ws, req) => {
+  const url = new URL(req.url, 'http://localhost');
+  const token = url.searchParams.get('token');
+
+  if (!token) {
+    ws.close();
+    return;
+  }
+
+  const userId = sessions.get(token);
+  if (!userId) {
+    ws.close();
+    return;
+  }
+
+  if (!wsClients.has(userId)) wsClients.set(userId, new Set());
+  wsClients.get(userId).add(ws);
+  ws.userId = userId;
+
+  ws.on('message', (raw) => {
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return;
+    }
+
+    switch (data.type) {
+      // WebRTC сигналинг
+      case 'call_offer': {
+        sendToUser(data.targetUserId, {
+          type: 'call_offer',
+          fromUserId: userId,
+          fromUser: getUserSafe(users.get(userId)),
+          sdp: data.sdp,
         });
+        break;
+      }
 
-        socket.on('auth_error', (msg) => {
-            const alert = document.getElementById('auth-alert');
-            alert.textContent = msg;
-            alert.className = 'mb-4 p-3 rounded-xl text-xs font-semibold bg-red-600/20 text-red-400 border border-red-500/50';
-            alert.classList.remove('hidden');
+      case 'call_answer': {
+        sendToUser(data.targetUserId, {
+          type: 'call_answer',
+          fromUserId: userId,
+          sdp: data.sdp,
         });
+        break;
+      }
 
-        socket.on('sync_app_data', (data) => {
-            db = data;
-            if (currentUser && db.users[currentUser.login]) {
-                currentUser = db.users[currentUser.login];
-            }
-            refreshActiveViews();
+      case 'call_ice': {
+        sendToUser(data.targetUserId, {
+          type: 'call_ice',
+          fromUserId: userId,
+          candidate: data.candidate,
         });
+        break;
+      }
 
-        function switchTab(tabName) {
-            ['chats', 'friends', 'groups', 'news', 'music', 'profile'].forEach(t => {
-                const el = document.getElementById(`tab-content-${t}`);
-                if (el) el.classList.add('hidden');
-            });
-            const target = document.getElementById(`tab-content-${tabName}`);
-            if (target) target.classList.remove('hidden');
+      case 'call_reject': {
+        sendToUser(data.targetUserId, { type: 'call_reject', fromUserId: userId });
+        break;
+      }
 
-            if (tabName === 'chats') renderChatsList();
-            if (tabName === 'friends') renderFriendsView();
-            if (tabName === 'groups') renderGroupsView();
-            if (tabName === 'news') renderNewsFeed();
-            if (tabName === 'profile') renderProfileView();
-        }
+      case 'call_end': {
+        sendToUser(data.targetUserId, { type: 'call_end', fromUserId: userId });
+        break;
+      }
 
-        function refreshActiveViews() {
-            if (activeChat) renderMessages();
-            renderChatsList();
-            renderFriendsView();
-            renderGroupsView();
-            renderNewsFeed();
-        }
-
-        // Рендеринг чатов и друзей
-        function renderChatsList() {
-            const list = document.getElementById('chats-list');
-            if (!list || !currentUser) return;
-            list.innerHTML = '';
-
-            const friends = db.friends[currentUser.login] || [];
-            friends.forEach(fLogin => {
-                const fUser = db.users[fLogin];
-                if (!fUser) return;
-                const chatKey = [currentUser.login, fLogin].sort().join('_');
-                const div = document.createElement('div');
-                div.className = `p-3 rounded-2xl flex items-center space-x-3 cursor-pointer transition ${activeChat === chatKey ? 'bg-purple-600/20 border border-purple-500/50' : 'hover:bg-gray-800/50'}`;
-                div.onclick = () => openChat(chatKey, fUser.name, fUser.avatar);
-                div.innerHTML = `
-                    <img src="${fUser.avatar}" class="w-10 h-10 rounded-full object-cover">
-                    <div class="flex-1 min-w-0">
-                        <div class="font-bold text-white truncate text-sm">${fUser.name}</div>
-                        <div class="text-xs text-gray-400 truncate">@${fUser.login}</div>
-                    </div>
-                `;
-                list.appendChild(div);
-            });
-        }
-
-        function openChat(chatKey, name, avatar) {
-            activeChat = chatKey;
-            activeGroupWorkspaceId = null;
-            document.getElementById('no-chat-selected').classList.add('hidden');
-            document.getElementById('chat-window').classList.remove('hidden');
-            document.getElementById('active-chat-name').textContent = name;
-            document.getElementById('active-chat-avatar').src = avatar;
-            renderMessages();
-            if (window.innerWidth <= 768) {
-                document.getElementById('chat-list-panel').classList.add('mobile-hidden');
-            }
-        }
-
-        function backToChatList() {
-            document.getElementById('chat-list-panel').classList.remove('mobile-hidden');
-        }
-
-        function renderMessages() {
-            const container = document.getElementById('messages-container');
-            if (!container || !activeChat) return;
-            container.innerHTML = '';
-            const messages = db.messagesStore[activeChat] || [];
-            messages.forEach(msg => {
-                const isMe = msg.sender === currentUser.login;
-                const senderObj = db.users[msg.sender] || { name: msg.sender };
-                const div = document.createElement('div');
-                div.className = `flex flex-col ${isMe ? 'items-end' : 'items-start'} space-y-1`;
-                div.innerHTML = `
-                    <div class="max-w-[75%] rounded-2xl px-4 py-2.5 text-sm ${isMe ? 'bg-purple-600 text-white rounded-br-none' : 'bg-gray-800 text-gray-100 rounded-bl-none'}">
-                        ${!isMe ? `<div class="text-[10px] font-bold text-purple-300 mb-0.5">${senderObj.name}</div>` : ''}
-                        <div>${escapeHtml(msg.text)}</div>
-                    </div>
-                `;
-                container.appendChild(div);
-            });
-            container.scrollTop = container.scrollHeight;
-        }
-
-        function sendMessage() {
-            const input = document.getElementById('message-input');
-            const wsInput = document.getElementById('ws-message-input');
-            const text = (input && !input.parentElement.classList.contains('hidden') ? input.value : wsInput?.value || '').trim();
-            if (!text || !activeChat) return;
-
-            socket.emit('send_message', {
-                chatKey: activeChat,
-                text,
-                isGroup: !!activeGroupWorkspaceId
-            });
-
-            if (input) input.value = '';
-            if (wsInput) wsInput.value = '';
-        }
-
-        // Друзья
-        function renderFriendsView() {
-            const list = document.getElementById('friends-list');
-            const reqSection = document.getElementById('friend-requests-section');
-            const reqList = document.getElementById('friend-requests-list');
-            if (!currentUser) return;
-
-            const myReqs = db.friendRequests[currentUser.login] || [];
-            if (myReqs.length > 0) {
-                reqSection.classList.remove('hidden');
-                reqList.innerHTML = '';
-                myReqs.forEach(senderLogin => {
-                    const sender = db.users[senderLogin];
-                    if (!sender) return;
-                    const div = document.createElement('div');
-                    div.className = 'bg-gray-800/80 p-3 rounded-xl flex items-center justify-between';
-                    div.innerHTML = `
-                        <div class="flex items-center space-x-2">
-                            <img src="${sender.avatar}" class="w-8 h-8 rounded-full object-cover">
-                            <span class="text-sm font-bold text-white">${sender.name} (@${sender.login})</span>
-                        </div>
-                        <div class="space-x-2">
-                            <button onclick="socket.emit('accept_friend_request', '${senderLogin}')" class="bg-green-600 px-3 py-1 rounded-lg text-xs font-bold text-white">Принять</button>
-                            <button onclick="socket.emit('reject_friend_request', '${senderLogin}')" class="bg-red-600 px-3 py-1 rounded-lg text-xs font-bold text-white">Отклонить</button>
-                        </div>
-                    `;
-                    reqList.appendChild(div);
-                });
-            } else {
-                reqSection.classList.add('hidden');
-            }
-
-            list.innerHTML = '';
-            const friends = db.friends[currentUser.login] || [];
-            friends.forEach(fLogin => {
-                const f = db.users[fLogin];
-                if (!f) return;
-                const div = document.createElement('div');
-                div.className = 'bg-gray-900 border border-gray-800 p-3 rounded-xl flex items-center justify-between';
-                div.innerHTML = `
-                    <div class="flex items-center space-x-3">
-                        <img src="${f.avatar}" class="w-10 h-10 rounded-full object-cover">
-                        <div>
-                            <div class="font-bold text-white text-sm">${f.name}</div>
-                            <div class="text-xs text-gray-400">@${f.login}</div>
-                        </div>
-                    </div>
-                    <button onclick="openChat('${[currentUser.login, fLogin].sort().join('_')}', '${f.name}', '${f.avatar}'); switchTab('chats')" class="bg-purple-600/30 hover:bg-purple-600 text-purple-300 hover:text-white px-3 py-1.5 rounded-xl text-xs font-bold transition">Написать</button>
-                `;
-                list.appendChild(div);
-            });
-        }
-
-        function sendFriendRequest() {
-            const login = document.getElementById('add-friend-login').value.trim();
-            if (!login) return;
-            socket.emit('send_friend_request', login);
-            document.getElementById('add-friend-login').value = '';
-        }
-
-        // Сообщества
-        function renderGroupsView() {
-            const list = document.getElementById('groups-list');
-            const select = document.getElementById('group-post-select');
-            if (!list || !select) return;
-
-            list.innerHTML = '';
-            select.innerHTML = '';
-
-            Object.values(db.groups).forEach(g => {
-                const isMember = g.members.includes(currentUser.login);
-                const isOwner = g.owner === currentUser.login;
-
-                // Селект для постов
-                if (isMember) {
-                    const opt = document.createElement('option');
-                    opt.value = g.id;
-                    opt.textContent = g.name;
-                    select.appendChild(opt);
-                }
-
-                const div = document.createElement('div');
-                div.className = 'bg-gray-800/80 p-3 rounded-xl flex items-center justify-between';
-                div.innerHTML = `
-                    <div class="flex items-center space-x-3">
-                        <img src="${g.avatar}" class="w-10 h-10 rounded-xl object-cover">
-                        <div>
-                            <div class="font-bold text-white text-sm">${g.name}</div>
-                            <div class="text-xs text-gray-400">${g.members.length} участников</div>
-                        </div>
-                    </div>
-                    <div>
-                        ${isMember ? `<button onclick="openGroupWorkspace('${g.id}')" class="bg-purple-600 px-3 py-1.5 rounded-xl text-xs font-bold text-white">Открыть</button>` : `<button onclick="socket.emit('join_group', '${g.id}')" class="bg-green-600 px-3 py-1.5 rounded-xl text-xs font-bold text-white">Вступить</button>`}
-                    </div>
-                `;
-                list.appendChild(div);
-            });
-
-            renderGroupsFeed();
-        }
-
-        function createNewGroup() {
-            const name = document.getElementById('new-group-name').value.trim();
-            const closed = document.getElementById('new-group-closed').checked;
-            if (!name) return;
-            socket.emit('create_group', { name, closed });
-            document.getElementById('new-group-name').value = '';
-        }
-
-        function openGroupWorkspace(groupId) {
-            const group = db.groups[groupId];
-            if (!group) return;
-            activeGroupWorkspaceId = groupId;
-            activeChat = groupId;
-
-            document.getElementById('groups-main-view').classList.add('hidden');
-            document.getElementById('group-workspace-view').classList.remove('hidden');
-            document.getElementById('ws-group-sidebar-name').textContent = group.name;
-
-            renderGroupChannels(group);
-            openGroupChannel('main');
-        }
-
-        function closeGroupWorkspace() {
-            activeGroupWorkspaceId = null;
-            document.getElementById('group-workspace-view').classList.add('hidden');
-            document.getElementById('groups-main-view').classList.remove('hidden');
-        }
-
-        function renderGroupChannels(group) {
-            const textDiv = document.getElementById('ws-sidebar-text-channels');
-            const voiceDiv = document.getElementById('ws-sidebar-voice-channels');
-            textDiv.innerHTML = '';
-            voiceDiv.innerHTML = '';
-
-            group.channels.text.forEach(ch => {
-                const btn = document.createElement('button');
-                btn.className = `w-full text-left px-3 py-1.5 rounded-xl text-xs font-bold transition ${activeSubgroup === ch.id ? 'bg-purple-600 text-white' : 'text-gray-400 hover:bg-gray-800'}`;
-                btn.textContent = `# ${ch.name}`;
-                btn.onclick = () => openGroupChannel(ch.id);
-                textDiv.appendChild(btn);
-            });
-
-            group.channels.voice.forEach(ch => {
-                const btn = document.createElement('button');
-                btn.className = 'w-full text-left px-3 py-1.5 rounded-xl text-xs font-bold text-gray-400 hover:bg-gray-800';
-                btn.textContent = `🎙 ${ch.name}`;
-                btn.onclick = () => joinVoiceChannel(group.id, ch.id);
-                voiceDiv.appendChild(btn);
-            });
-        }
-
-        function openGroupChannel(channelId) {
-            activeSubgroup = channelId;
-            document.getElementById('ws-active-chat-name').textContent = `# ${channelId}`;
-            renderGroupMessages();
-        }
-
-        function renderGroupMessages() {
-            const container = document.getElementById('ws-messages-container');
-            if (!container || !activeGroupWorkspaceId) return;
-            container.innerHTML = '';
-            const messages = db.messagesStore[activeGroupWorkspaceId] || [];
-            messages.forEach(msg => {
-                const senderObj = db.users[msg.sender] || { name: msg.sender };
-                const div = document.createElement('div');
-                div.className = 'flex flex-col items-start space-y-1';
-                div.innerHTML = `
-                    <div class="max-w-[75%] bg-gray-800 text-gray-100 rounded-2xl rounded-bl-none px-4 py-2.5 text-sm">
-                        <div class="text-[10px] font-bold text-purple-300 mb-0.5">${senderObj.name}</div>
-                        <div>${escapeHtml(msg.text)}</div>
-                    </div>
-                `;
-                container.appendChild(div);
-            });
-            container.scrollTop = container.scrollHeight;
-        }
-
-        function publishGroupPost() {
-            const groupId = document.getElementById('group-post-select').value;
-            const text = document.getElementById('group-post-text').value.trim();
-            const duplicateToNews = document.getElementById('group-post-announcement').checked;
-            if (!text || !groupId) return;
-
-            socket.emit('publish_group_post', { groupId, text, duplicateToNews });
-            document.getElementById('group-post-text').value = '';
-        }
-
-        function renderGroupsFeed() {
-            const feed = document.getElementById('groups-feed-list');
-            if (!feed) return;
-            feed.innerHTML = '';
-
-            let allPosts = [];
-            Object.values(db.groupPosts).forEach(posts => {
-                allPosts.push(...posts);
-            });
-            allPosts.sort((a, b) => b.timestamp - a.timestamp);
-
-            allPosts.forEach(post => {
-                const author = db.users[post.author] || { name: post.author };
-                const group = db.groups[post.groupId] || { name: 'Группа' };
-                const div = document.createElement('div');
-                div.className = 'bg-gray-800/60 p-3 rounded-xl space-y-2';
-                div.innerHTML = `
-                    <div class="flex items-center space-x-2">
-                        <img src="${author.avatar}" class="w-7 h-7 rounded-full object-cover">
-                        <div>
-                            <div class="text-xs font-bold text-white">${author.name} <span class="text-purple-400 font-normal">в ${group.name}</span></div>
-                        </div>
-                    </div>
-                    <div class="text-xs text-gray-200">${escapeHtml(post.text)}</div>
-                `;
-                feed.appendChild(div);
-            });
-        }
-
-        // Новости
-        function renderNewsFeed() {
-            const feed = document.getElementById('news-feed-list');
-            if (!feed) return;
-            feed.innerHTML = '';
-
-            const news = db.news || [];
-            news.forEach(item => {
-                const author = db.users[item.author] || { name: item.author };
-                const div = document.createElement('div');
-                div.className = 'bg-gray-900 border border-gray-800 p-4 rounded-2xl space-y-2';
-                div.innerHTML = `
-                    <div class="flex items-center space-x-2">
-                        <img src="${author.avatar}" class="w-8 h-8 rounded-full object-cover">
-                        <div class="text-sm font-bold text-white">${author.name}</div>
-                    </div>
-                    <div class="text-sm text-gray-200 whitespace-pre-wrap">${escapeHtml(item.text)}</div>
-                `;
-                feed.appendChild(div);
-            });
-        }
-
-        // Радио
-        function renderRadioStations() {
-            const list = document.getElementById('radio-stations-list');
-            if (!list) return;
-            list.innerHTML = '';
-            radioStations.forEach(st => {
-                const div = document.createElement('div');
-                div.className = 'bg-gray-900 border border-gray-800 p-4 rounded-xl flex items-center justify-between';
-                div.innerHTML = `
-                    <div class="flex items-center space-x-3">
-                        <span class="text-2xl">${st.logo}</span>
-                        <div>
-                            <div class="font-bold text-white text-sm">${st.name}</div>
-                            <div class="text-xs text-gray-400">${st.genre}</div>
-                        </div>
-                    </div>
-                    <audio controls src="${st.url}" class="h-10"></audio>
-                `;
-                list.appendChild(div);
-            });
-        }
-
-        // Профиль
-        function renderProfileView() {
-            if (!currentUser) return;
-            document.getElementById('profile-avatar-preview').src = currentUser.avatar;
-            document.getElementById('profile-username').textContent = currentUser.name;
-            document.getElementById('profile-name-input').value = currentUser.name;
-        }
-
-        function saveProfile() {
-            const name = document.getElementById('profile-name-input').value.trim();
-            if (!name) return;
-            socket.emit('update_profile', { name });
-            showCustomModal('Успешно', 'Профиль обновлен!');
-        }
-
-        function logout() {
-            location.reload();
-        }
-
-        // Веб-звонки (WebRTC)
-        function startDirectCall() {
-            if (!activeChat) return;
-            const participants = activeChat.split('_');
-            callTargetUser = participants.find(p => p !== currentUser.login);
-            if (!callTargetUser) return;
-
-            document.getElementById('call-partner-name').textContent = db.users[callTargetUser]?.name || callTargetUser;
-            document.getElementById('single-call-modal').classList.remove('hidden');
-
-            navigator.mediaDevices.getUserMedia({ audio: true, video: false }).then(stream => {
-                localStream = stream;
-                const pc = createPeerConnection(callTargetUser);
-                localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-                pc.createOffer().then(offer => pc.setLocalDescription(offer)).then(() => {
-                    socket.emit('call_user', { to: callTargetUser, offer: pc.localDescription });
-                });
-            }).catch(err => alert('Нет доступа к микрофону: ' + err));
-        }
-
-        function createPeerConnection(partnerLogin) {
-            if (peerConnections[partnerLogin]) return peerConnections[partnerLogin];
-            const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
-
-            pc.onicecandidate = (event) => {
-                if (event.candidate) {
-                    socket.emit('webrtc_ice_candidate', { to: partnerLogin, candidate: event.candidate });
-                }
-            };
-
-            pc.ontrack = (event) => {
-                const container = document.getElementById('remote-audio-container');
-                container.innerHTML = '';
-                const audio = document.createElement('audio');
-                audio.srcObject = event.streams[0];
-                audio.autoplay = true;
-                container.appendChild(audio);
-            };
-
-            peerConnections[partnerLogin] = pc;
-            return pc;
-        }
-
-        socket.on('incoming_call', ({ from, offer }) => {
-            incomingCallerLogin = from;
-            incomingOffer = offer;
-            const caller = db.users[from] || { name: from, avatar: '' };
-            document.getElementById('incoming-caller-avatar').src = caller.avatar;
-            document.getElementById('incoming-caller-title', `Входящий вызов от ${caller.name}`);
-            document.getElementById('incoming-call-modal').classList.remove('hidden');
-            startRingSound();
+      // Голосовой канал группы
+      case 'voice_channel_join': {
+        const group = groups.get(data.groupId);
+        if (!group) return;
+        broadcastToGroup(group.id, {
+          type: 'voice_channel_user_joined',
+          groupId: data.groupId,
+          channelId: data.channelId,
+          userId,
         });
+        break;
+      }
 
-        function acceptIncomingCall() {
-            stopRingSound();
-            document.getElementById('incoming-call-modal').classList.add('hidden');
-            document.getElementById('single-call-modal').classList.remove('hidden');
-            document.getElementById('call-partner-name').textContent = db.users[incomingCallerLogin]?.name || incomingCallerLogin;
-            callTargetUser = incomingCallerLogin;
-
-            navigator.mediaDevices.getUserMedia({ audio: true, video: false }).then(stream => {
-                localStream = stream;
-                const pc = createPeerConnection(callTargetUser);
-                localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-
-                pc.setRemoteDescription(new RTCSessionDescription(incomingOffer)).then(() => {
-                    return pc.createAnswer();
-                }).then(answer => {
-                    return pc.setLocalDescription(answer);
-                }).then(() => {
-                    socket.emit('make_call_answer', { to: callTargetUser, answer: pc.localDescription });
-                });
-            });
-        }
-
-        function rejectIncomingCall() {
-            stopRingSound();
-            document.getElementById('incoming-call-modal').classList.add('hidden');
-            if (incomingCallerLogin) {
-                socket.emit('hang_up_call', { to: incomingCallerLogin });
-            }
-        }
-
-        socket.on('call_answered', ({ from, answer }) => {
-            const pc = peerConnections[from];
-            if (pc) {
-                pc.setRemoteDescription(new RTCSessionDescription(answer));
-            }
+      case 'voice_channel_leave': {
+        const group = groups.get(data.groupId);
+        if (!group) return;
+        broadcastToGroup(group.id, {
+          type: 'voice_channel_user_left',
+          groupId: data.groupId,
+          channelId: data.channelId,
+          userId,
         });
+        break;
+      }
 
-        socket.on('webrtc_ice_candidate', ({ from, candidate }) => {
-            const pc = peerConnections[from];
-            if (pc && candidate) {
-                pc.addIceCandidate(new RTCIceCandidate(candidate));
-            }
+      case 'voice_channel_offer': {
+        sendToUser(data.targetUserId, {
+          type: 'voice_channel_offer',
+          fromUserId: userId,
+          groupId: data.groupId,
+          channelId: data.channelId,
+          sdp: data.sdp,
         });
+        break;
+      }
 
-        socket.on('call_hung_up', () => {
-            hangUpCall(true);
+      case 'voice_channel_answer': {
+        sendToUser(data.targetUserId, {
+          type: 'voice_channel_answer',
+          fromUserId: userId,
+          channelId: data.channelId,
+          sdp: data.sdp,
         });
+        break;
+      }
 
-        function hangUpCall(remote = false) {
-            stopRingSound();
-            if (!remote && callTargetUser) {
-                socket.emit('hang_up_call', { to: callTargetUser });
-            }
-            if (localStream) {
-                localStream.getTracks().forEach(t => t.stop());
-                localStream = null;
-            }
-            Object.values(peerConnections).forEach(pc => pc.close());
-            peerConnections = {};
-            callTargetUser = null;
-            document.getElementById('single-call-modal').classList.add('hidden');
-            document.getElementById('incoming-call-modal').classList.add('hidden');
-        }
-
-        // Голосовой канал (конференция)
-        function joinVoiceChannel(groupId, channelId) {
-            activeVoiceRoomKey = `${groupId}_${channelId}`;
-            socket.emit('join_voice_room', { groupId, channelId });
-            showCustomModal('Голосовой канал', 'Вы подключились к голосовому каналу.');
-        }
-
-        socket.on('voice_room_participants_update', ({ roomKey, participants }) => {
-            console.log('Участники голосового канала:', participants);
+      case 'voice_channel_ice': {
+        sendToUser(data.targetUserId, {
+          type: 'voice_channel_ice',
+          fromUserId: userId,
+          candidate: data.candidate,
         });
+        break;
+      }
 
-        // Вспомогательные модалки
-        function showCustomModal(title, text) {
-            document.getElementById('custom-modal-title').textContent = title;
-            document.getElementById('custom-modal-text').textContent = text;
-            document.getElementById('custom-modal').classList.remove('hidden');
+      // Набор текста
+      case 'typing': {
+        const chat = chats.get(data.chatId);
+        if (chat) {
+          chat.participants.forEach(uid => {
+            if (uid !== userId) sendToUser(uid, { type: 'typing', chatId: data.chatId, userId });
+          });
         }
+        break;
+      }
+    }
+  });
 
-        function closeCustomModal() {
-            document.getElementById('custom-modal').classList.add('hidden');
-        }
+  ws.on('close', () => {
+    const clients = wsClients.get(userId);
+    if (clients) {
+      clients.delete(ws);
+      if (clients.size === 0) wsClients.delete(userId);
+    }
+  });
+});
 
-        function openSettingsModal() {
-            showCustomModal('Настройки', 'Все параметры аудио работают по умолчанию.');
-        }
-
-        function openActiveGroupSettings() {
-            const group = db.groups[activeGroupWorkspaceId];
-            if (!group) return;
-            const content = document.getElementById('group-settings-content');
-            content.innerHTML = `
-                <div><b>Название:</b> ${group.name}</div>
-                <div><b>Создатель:</b> ${group.owner}</div>
-                <div><b>Участников:</b> ${group.members.length}</div>
-            `;
-            document.getElementById('group-settings-modal').classList.remove('hidden');
-        }
-
-        function escapeHtml(text) {
-            const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
-            return text.replace(/[&<>"']/g, m => map[m]);
-        }
-    </script>
-</body>
-</html>
+// ──────────────────────────────────────────────
+// Запуск
+// ──────────────────────────────────────────────
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+  console.log(`Сервер мессенджера запущен на http://localhost:${PORT}`);
+});
