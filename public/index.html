@@ -2350,15 +2350,7 @@
         function openGroupSettings(groupId) {
             editingGroupId = groupId;
             const group = db.groups[groupId];
-            if (!group) {
-                socket.emit('refresh-db');
-                setTimeout(() => {
-                    const g = db.groups[groupId];
-                    if (g) openGroupSettings(groupId);
-                    else showCustomModal('Ошибка', 'Группа не найдена. Возможно, данные устарели. Попробуйте перезагрузить страницу.', false, null, '⚠');
-                }, 500);
-                return;
-            }
+            if (!group) return;
 
             document.getElementById('edit-group-name-input').value = group.name;
             document.getElementById('edit-group-avatar-preview').src = getAvatar(group.avatar);
@@ -3203,7 +3195,7 @@
             }
         }
 
-        async async function publishGroupPost() {
+        async function publishGroupPost() {
             const groupId = document.getElementById('group-post-select').value;
             const text = document.getElementById('group-post-text').value.trim();
             const isAnnouncement = document.getElementById('group-post-announcement').checked;
@@ -3736,22 +3728,6 @@
             }
         }
 
-        let incomingRingInterval = null;
-        function startIncomingRing() {
-            stopIncomingRing();
-            playNotificationSound();
-            incomingRingInterval = setInterval(() => {
-                if (!document.getElementById('incoming-call-modal').classList.contains('hidden')) {
-                    playNotificationSound();
-                } else {
-                    stopIncomingRing();
-                }
-            }, 2000);
-        }
-        function stopIncomingRing() {
-            if (incomingRingInterval) { clearInterval(incomingRingInterval); incomingRingInterval = null; }
-        }
-
         socket.on('incoming-call', ({ offer, from }) => {
             incomingOffer = offer;
             incomingCallerLogin = from;
@@ -3760,12 +3736,11 @@
             document.getElementById('incoming-caller-title').textContent = `Звонок от @${from}`;
             document.getElementById('incoming-caller-avatar').src = getAvatar(callerObj.avatar);
             document.getElementById('incoming-call-modal').classList.remove('hidden');
-            startIncomingRing();
+            playNotificationSound();
         });
 
         async function acceptIncomingCall() {
             document.getElementById('incoming-call-modal').classList.add('hidden');
-            stopIncomingRing();
             callTargetUser = incomingCallerLogin;
             isInCallOrConference = true;
 
@@ -3797,7 +3772,6 @@
 
         function rejectIncomingCall() {
             document.getElementById('incoming-call-modal').classList.add('hidden');
-            stopIncomingRing();
             if (incomingCallerLogin) {
                 socket.emit('reject-call', { to: incomingCallerLogin });
             }
@@ -3900,7 +3874,7 @@
             hangUpCall();
         });
 
-        async async function joinGroupVoiceConference(groupId, subgroupId) {
+        async function joinGroupVoiceConference(groupId, subgroupId) {
             activeVoiceGroup = groupId;
             activeVoiceChannel = subgroupId;
             activeVoiceRoomKey = `${groupId}_sub_${subgroupId}`;
@@ -3961,27 +3935,7 @@
             socket.emit('voice-answer', { answer, to: from });
         });
 
-        socket.on('voice-answer', async ({ answer, from }
-
-        socket.on('voice-user-left', ({ login }) => {
-            if (voicePeerConnections[login]) {
-                voicePeerConnections[login].close();
-                delete voicePeerConnections[login];
-            }
-            const audioEl = document.getElementById(`voice-audio-${login}`);
-            if (audioEl) audioEl.remove();
-            delete speakingUsersMap[login];
-            const grp = db.groups[activeGroupWorkspaceId];
-            if (grp) renderGroupWorkspaceSidebar(grp);
-        });
-
-        socket.on('voice-ice-candidate', async ({ candidate, from }) => {
-            const pc = voicePeerConnections[from];
-            if (pc) {
-                try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch(e) {}
-            }
-        });
-) => {
+        socket.on('voice-answer', async ({ answer, from }) => {
             const pc = voicePeerConnections[from];
             if (pc) await pc.setRemoteDescription(new RTCSessionDescription(answer));
         });
