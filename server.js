@@ -1,971 +1,204 @@
-const express = require('express');
-const http = require('http');
-const { WebSocketServer } = require('ws');
-const crypto = require('crypto');
-const path = require('path');
+// server.js — Мессенджер (Node.js + Express + MongoDB + WebSocket + WebRTC)
+// Зависимости: npm install express mongoose bcrypt jsonwebtoken ws cors dotenv multer
+// Запуск: node server.js
+// .env: MONGO_URI, JWT_SECRET, PORT
+
+require("dotenv").config();
+
+const express = require("express");
+const http = require("http");
+const { WebSocketServer } = require("ws");
+const mongoose = require("mongoose");
+const bcrypt = require("bcrypt");
+const jwt = require("jsonwebtoken");
+const cors = require("cors");
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server, path: '/ws' });
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+// ─── Middleware ──────────────────────────────────────────────
+app.use(cors({ origin: "*", credentials: true }));
+app.use(express.json({ limit: "10mb" }));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// ──────────────────────────────────────────────
-// Хранилище данных (in-memory)
-// ──────────────────────────────────────────────
-const users = new Map();        // userId -> { id, login, name, passwordHash, avatar, bio, email, role, muted, muteUntil, muteReason, verified, friends: [], friendRequests: [], sentRequests: [] }
-const sessions = new Map();     // token -> userId
-const chats = new Map();        // chatId -> { id, type, participants: [], messages: [], pinned: null }
-const groups = new Map();       // groupId -> { id, name, avatar, isClosed, owner, members: [], roles: {}, channels: { text: [], voice: [] }, description, verified, joinRequests: [] }
-const groupMessages = new Map(); // channelId -> [{ id, senderId, text, edited, timestamp, attachments: [] }]
-const news = new Map();         // newsId -> { id, authorId, text, media, timestamp }
-const violations = new Map();   // violationId -> { id, reporterId, targetId, reason, timestamp, resolved }
-const verificationRequests = new Map(); // requestId -> { id, groupId, requestedBy, timestamp, status }
-const radioStations = [
-  { id: 'r1', name: 'Радио Дача', url: 'http://ic7.101.ru:8000/c18_2' },
-  { id: 'r2', name: 'Авторадио', url: 'http://icecast-authoradio.adtf.ru:8000/authoradio' },
-  { id: 'r3', name: 'Европа Плюс', url: 'http://icecast-europeplus.cdnvideo.ru:8000/europeplus128' },
-  { id: 'r4', name: 'Радио Шансон', url: 'http://chanson.hostingradio.ru:8041/chanson128.mp3' },
-  { id: 'r5', name: 'Радио Maximum', url: 'http://icecast.maximum.cdnvideo.ru:8000/maximum' },
-  { id: 'r6', name: 'Дорожное Радио', url: 'http://icecast-dorognoe.cdnvideo.ru:8000/dorognoe' },
-  { id: 'r7', name: 'Радио Рекорд', url: 'http://icecast-record.cdnvideo.ru:8000/record128' },
-  { id: 'r8', name: 'Наше Радио', url: 'http://icecast-nashe.cdnvideo.ru:8000/nashe' },
-];
-
-const wsClients = new Map(); // userId -> Set<ws>
-
-// ──────────────────────────────────────────────
-// Утилиты
-// ──────────────────────────────────────────────
-function hashPassword(password) {
-  return crypto.createHash('sha256').update(password).digest('hex');
-}
-
-function generateToken() {
-  return crypto.randomBytes(32).toString('hex');
-}
-
-function generateId() {
-  return crypto.randomBytes(8).toString('hex');
-}
-
-function findUserByLogin(login) {
-  for (const user of users.values()) {
-    if (user.login === login) return user;
-  }
-  return null;
-}
-
-function getUserSafe(user) {
-  if (!user) return null;
-  return {
-    id: user.id,
-    login: user.login,
-    name: user.name,
-    avatar: user.avatar,
-    bio: user.bio,
-    email: user.email,
-    role: user.role,
-    muted: user.muted,
-    muteUntil: user.muteUntil,
-    muteReason: user.muteReason,
-    verified: user.verified,
-  };
-}
-
-function sendToUser(userId, data) {
-  const clients = wsClients.get(userId);
-  if (clients) {
-    clients.forEach(ws => {
-      if (ws.readyState === 1) ws.send(JSON.stringify(data));
-    });
-  }
-}
-
-function broadcastToChat(chatId, data) {
-  const chat = chats.get(chatId);
-  if (!chat) return;
-  chat.participants.forEach(uid => sendToUser(uid, data));
-}
-
-function broadcastToGroup(groupId, data) {
-  const group = groups.get(groupId);
-  if (!group) return;
-  group.members.forEach(m => sendToUser(m.userId, data));
-}
-
-// ──────────────────────────────────────────────
-// Middleware: аутентификация
-// ──────────────────────────────────────────────
-function authMiddleware(req, res, next) {
-  const token = req.headers.authorization?.replace('Bearer ', '');
-  if (!token) return res.status(401).json({ error: 'Не авторизован' });
-
-  const userId = sessions.get(token);
-  if (!userId) return res.status(401).json({ error: 'Сессия истекла' });
-
-  req.userId = userId;
-  req.token = token;
-  req.user = users.get(userId);
-  next();
-}
-
-// Проверка мута
-function checkMute(req, res, next) {
-  const user = req.user;
-  if (user.muted && user.muteUntil > Date.now()) {
-    return res.status(403).json({ error: `Вы в муте до ${new Date(user.muteUntil).toLocaleString('ru-RU')}. Причина: ${user.muteReason}` });
-  }
-  if (user.muted && user.muteUntil <= Date.now()) {
-    user.muted = false;
-    user.muteUntil = 0;
-    user.muteReason = '';
-  }
-  next();
-}
-
-// ──────────────────────────────────────────────
-// AUTH
-// ──────────────────────────────────────────────
-app.post('/api/register', (req, res) => {
-  const { login, name, password, confirmPassword, avatar } = req.body;
-
-  if (!login || !name || !password) return res.status(400).json({ error: 'Заполните все поля' });
-  if (password !== confirmPassword) return res.status(400).json({ error: 'Пароли не совпадают' });
-  if (findUserByLogin(login)) return res.status(409).json({ error: 'Логин занят' });
-  if (login.length < 3) return res.status(400).json({ error: 'Логин слишком короткий' });
-
-  const userId = generateId();
-  const user = {
-    id: userId,
-    login,
-    name,
-    passwordHash: hashPassword(password),
-    avatar: avatar || '',
-    bio: '',
-    email: '',
-    role: 'user',
-    muted: false,
-    muteUntil: 0,
-    muteReason: '',
-    verified: false,
-    friends: [],
-    friendRequests: [],
-    sentRequests: [],
-  };
-
-  users.set(userId, user);
-  const token = generateToken();
-  sessions.set(token, userId);
-
-  res.json({ token, user: getUserSafe(user) });
+// ─── Multer (загрузка аватаров / медиа) ──────────────────────
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, "uploads");
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`);
+  },
 });
+const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 
-app.post('/api/login', (req, res) => {
-  const { login, password } = req.body;
-  const user = findUserByLogin(login);
-
-  if (!user || user.passwordHash !== hashPassword(password)) {
-    return res.status(401).json({ error: 'Неверный логин или пароль' });
-  }
-
-  const token = generateToken();
-  sessions.set(token, user.id);
-
-  res.json({ token, user: getUserSafe(user) });
-});
-
-app.get('/api/me', authMiddleware, (req, res) => {
-  res.json({ user: getUserSafe(req.user) });
-});
-
-app.post('/api/logout', authMiddleware, (req, res) => {
-  sessions.delete(req.token);
-  res.json({ ok: true });
-});
-
-// ──────────────────────────────────────────────
-// PROFILE
-// ──────────────────────────────────────────────
-app.put('/api/profile', authMiddleware, (req, res) => {
-  const { name, avatar, bio, email, newPassword, confirmPassword } = req.body;
-  const user = req.user;
-
-  if (name) user.name = name;
-  if (avatar !== undefined) user.avatar = avatar;
-  if (bio !== undefined) user.bio = bio;
-  if (email !== undefined) user.email = email;
-
-  if (newPassword) {
-    if (newPassword !== confirmPassword) return res.status(400).json({ error: 'Пароли не совпадают' });
-    user.passwordHash = hashPassword(newPassword);
-  }
-
-  res.json({ user: getUserSafe(user) });
-});
-
-app.get('/api/user/:userId', authMiddleware, (req, res) => {
-  const user = users.get(req.params.userId);
-  if (!user) return res.status(404).json({ error: 'Пользователь не найден' });
-  res.json({ user: getUserSafe(user) });
-});
-
-// ──────────────────────────────────────────────
-// FRIENDS
-// ──────────────────────────────────────────────
-app.post('/api/friends/request', authMiddleware, (req, res) => {
-  const { login } = req.body;
-  const targetUser = findUserByLogin(login);
-
-  if (!targetUser) return res.status(404).json({ error: 'Пользователь не найден' });
-  if (targetUser.id === req.userId) return res.status(400).json({ error: 'Нельзя добавить себя' });
-  if (req.user.friends.includes(targetUser.id)) return res.status(400).json({ error: 'Уже в друзьях' });
-  if (req.user.sentRequests.includes(targetUser.id)) return res.status(400).json({ error: 'Заявка уже отправлена' });
-
-  req.user.sentRequests.push(targetUser.id);
-  targetUser.friendRequests.push(req.userId);
-
-  sendToUser(targetUser.id, { type: 'friend_request', from: getUserSafe(req.user) });
-  res.json({ ok: true });
-});
-
-app.post('/api/friends/accept', authMiddleware, (req, res) => {
-  const { userId } = req.body;
-  const fromUser = users.get(userId);
-  if (!fromUser) return res.status(404).json({ error: 'Пользователь не найден' });
-
-  const idx = req.user.friendRequests.indexOf(userId);
-  if (idx === -1) return res.status(400).json({ error: 'Нет такой заявки' });
-
-  req.user.friendRequests.splice(idx, 1);
-  req.user.friends.push(userId);
-
-  const sentIdx = fromUser.sentRequests.indexOf(req.userId);
-  if (sentIdx !== -1) fromUser.sentRequests.splice(sentIdx, 1);
-  fromUser.friends.push(req.userId);
-
-  // Создаём личный чат
-  const chatId = generateId();
-  chats.set(chatId, {
-    id: chatId,
-    type: 'private',
-    participants: [req.userId, userId],
-    messages: [],
-    pinned: null,
+// ─── MongoDB Connection ─────────────────────────────────────
+const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/messenger";
+mongoose
+  .connect(MONGO_URI)
+  .then(() => console.log("[MongoDB] Connected"))
+  .catch((err) => {
+    console.error("[MongoDB] Connection error:", err);
+    process.exit(1);
   });
 
-  sendToUser(userId, { type: 'friend_accepted', by: getUserSafe(req.user), chatId });
-  res.json({ ok: true, chatId });
+// ─── Mongoose Schemas ──────────────────────────────────────
+
+const userSchema = new mongoose.Schema({
+  login:      { type: String, required: true, unique: true, trim: true },
+  name:       { type: String, required: true, trim: true },
+  password:   { type: String, required: true },
+  avatar:     { type: String, default: "" },
+  bio:        { type: String, default: "" },
+  email:      { type: String, default: "" },
+  globalRole: { type: String, enum: ["user", "moderator", "admin"], default: "user" },
+  isMuted:    { type: Boolean, default: false },
+  muteReason: { type: String, default: "" },
+  muteUntil:  { type: Date, default: null },
+  friends:    [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+  friendRequests:     [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+  friendRequestsSent: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+  createdAt:  { type: Date, default: Date.now },
+  lastSeen:   { type: Date, default: Date.now },
 });
 
-app.post('/api/friends/reject', authMiddleware, (req, res) => {
-  const { userId } = req.body;
-  const idx = req.user.friendRequests.indexOf(userId);
-  if (idx !== -1) req.user.friendRequests.splice(idx, 1);
-
-  const fromUser = users.get(userId);
-  if (fromUser) {
-    const sentIdx = fromUser.sentRequests.indexOf(req.userId);
-    if (sentIdx !== -1) fromUser.sentRequests.splice(sentIdx, 1);
-  }
-
-  res.json({ ok: true });
+const messageSchema = new mongoose.Schema({
+  chatId:    { type: mongoose.Schema.Types.ObjectId, required: true },
+  sender:    { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  text:      { type: String, default: "" },
+  attachments: [{ type: String }],
+  replyTo:   { type: mongoose.Schema.Types.ObjectId, ref: "Message", default: null },
+  edited:    { type: Boolean, default: false },
+  deleted:   { type: Boolean, default: false },
+  pinned:    { type: Boolean, default: false },
+  createdAt: { type: Date, default: Date.now },
 });
 
-app.delete('/api/friends/:userId', authMiddleware, (req, res) => {
-  const targetId = req.params.userId;
-  const idx = req.user.friends.indexOf(targetId);
-  if (idx !== -1) req.user.friends.splice(idx, 1);
-
-  const target = users.get(targetId);
-  if (target) {
-    const tIdx = target.friends.indexOf(req.userId);
-    if (tIdx !== -1) target.friends.splice(tIdx, 1);
-  }
-
-  res.json({ ok: true });
+const chatSchema = new mongoose.Schema({
+  type:       { type: String, enum: ["direct", "group", "channel"], default: "direct" },
+  name:       { type: String, default: "" },
+  groupId:    { type: mongoose.Schema.Types.ObjectId, ref: "Group", default: null },
+  channelId:   { type: mongoose.Schema.Types.ObjectId, default: null },
+  participants: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+  pinnedMessageId: { type: mongoose.Schema.Types.ObjectId, ref: "Message", default: null },
+  createdAt:  { type: Date, default: Date.now },
 });
 
-app.get('/api/friends', authMiddleware, (req, res) => {
-  const friendsList = req.user.friends.map(id => getUserSafe(users.get(id))).filter(Boolean);
-  const incoming = req.user.friendRequests.map(id => getUserSafe(users.get(id))).filter(Boolean);
-  const outgoing = req.user.sentRequests.map(id => getUserSafe(users.get(id))).filter(Boolean);
-  res.json({ friends: friendsList, incoming, outgoing });
-});
-
-// ──────────────────────────────────────────────
-// CHATS
-// ──────────────────────────────────────────────
-app.get('/api/chats', authMiddleware, (req, res) => {
-  const userChats = [];
-  for (const chat of chats.values()) {
-    if (chat.participants.includes(req.userId)) {
-      const otherId = chat.participants.find(id => id !== req.userId);
-      const otherUser = otherId ? users.get(otherId) : null;
-      userChats.push({
-        id: chat.id,
-        type: chat.type,
-        otherUser: otherUser ? getUserSafe(otherUser) : null,
-        lastMessage: chat.messages[chat.messages.length - 1] || null,
-        messageCount: chat.messages.length,
-        pinned: chat.pinned,
-      });
-    }
-  }
-  userChats.sort((a, b) => {
-    const aTime = a.lastMessage?.timestamp || 0;
-    const bTime = b.lastMessage?.timestamp || 0;
-    return bTime - aTime;
-  });
-  res.json({ chats: userChats });
-});
-
-app.get('/api/chats/:chatId/messages', authMiddleware, (req, res) => {
-  const chat = chats.get(req.params.chatId);
-  if (!chat) return res.status(404).json({ error: 'Чат не найден' });
-  if (!chat.participants.includes(req.userId)) return res.status(403).json({ error: 'Нет доступа' });
-
-  const messagesWithUsers = chat.messages.map(m => ({
-    ...m,
-    sender: getUserSafe(users.get(m.senderId)),
-  }));
-
-  res.json({ messages: messagesWithUsers, pinned: chat.pinned });
-});
-
-app.post('/api/chats/:chatId/messages', authMiddleware, checkMute, (req, res) => {
-  const { text, attachments } = req.body;
-  const chat = chats.get(req.params.chatId);
-  if (!chat) return res.status(404).json({ error: 'Чат не найден' });
-  if (!chat.participants.includes(req.userId)) return res.status(403).json({ error: 'Нет доступа' });
-
-  const message = {
-    id: generateId(),
-    senderId: req.userId,
-    text,
-    attachments: attachments || [],
-    edited: false,
-    timestamp: Date.now(),
-  };
-
-  chat.messages.push(message);
-
-  const msgData = { type: 'chat_message', chatId: chat.id, message: { ...message, sender: getUserSafe(req.user) } };
-  broadcastToChat(chat.id, msgData);
-
-  res.json({ message });
-});
-
-app.put('/api/chats/:chatId/messages/:msgId', authMiddleware, (req, res) => {
-  const { text } = req.body;
-  const chat = chats.get(req.params.chatId);
-  if (!chat) return res.status(404).json({ error: 'Чат не найден' });
-
-  const msg = chat.messages.find(m => m.id === req.params.msgId);
-  if (!msg) return res.status(404).json({ error: 'Сообщение не найдено' });
-  if (msg.senderId !== req.userId) return res.status(403).json({ error: 'Нельзя редактировать чужое сообщение' });
-
-  msg.text = text;
-  msg.edited = true;
-
-  broadcastToChat(chat.id, { type: 'chat_message_edited', chatId: chat.id, message: msg });
-  res.json({ message: msg });
-});
-
-app.delete('/api/chats/:chatId/messages/:msgId', authMiddleware, (req, res) => {
-  const chat = chats.get(req.params.chatId);
-  if (!chat) return res.status(404).json({ error: 'Чат не найден' });
-
-  const idx = chat.messages.findIndex(m => m.id === req.params.msgId);
-  if (idx === -1) return res.status(404).json({ error: 'Сообщение не найдено' });
-  const msg = chat.messages[idx];
-  if (msg.senderId !== req.userId && req.user.role !== 'moderator' && req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Нет прав' });
-  }
-
-  chat.messages.splice(idx, 1);
-  broadcastToChat(chat.id, { type: 'chat_message_deleted', chatId: chat.id, messageId: req.params.msgId });
-  res.json({ ok: true });
-});
-
-app.post('/api/chats/:chatId/pin', authMiddleware, (req, res) => {
-  const { messageId } = req.body;
-  const chat = chats.get(req.params.chatId);
-  if (!chat) return res.status(404).json({ error: 'Чат не найден' });
-  if (!chat.participants.includes(req.userId)) return res.status(403).json({ error: 'Нет доступа' });
-
-  const msg = chat.messages.find(m => m.id === messageId);
-  if (!msg) return res.status(404).json({ error: 'Сообщение не найдено' });
-
-  chat.pinned = msg;
-  broadcastToChat(chat.id, { type: 'chat_pinned', chatId: chat.id, message: msg });
-  res.json({ ok: true, pinned: msg });
-});
-
-app.post('/api/chats/:chatId/unpin', authMiddleware, (req, res) => {
-  const chat = chats.get(req.params.chatId);
-  if (!chat) return res.status(404).json({ error: 'Чат не найден' });
-  chat.pinned = null;
-  broadcastToChat(chat.id, { type: 'chat_unpinned', chatId: chat.id });
-  res.json({ ok: true });
-});
-
-// ──────────────────────────────────────────────
-// GROUPS
-// ──────────────────────────────────────────────
-app.post('/api/groups', authMiddleware, (req, res) => {
-  const { name, avatar, isClosed, description } = req.body;
-  if (!name) return res.status(400).json({ error: 'Укажите название' });
-
-  const groupId = generateId();
-  const defaultRole = { name: 'Участник', permissions: { post: true, delete: false, duplicate: false, voiceMute: false } };
-  const ownerRole = { name: 'Владелец', permissions: { post: true, delete: true, duplicate: true, voiceMute: true, manage: true } };
-
-  const group = {
-    id: groupId,
-    name,
-    avatar: avatar || '',
-    isClosed: !!isClosed,
-    description: description || '',
-    owner: req.userId,
-    members: [{ userId: req.userId, role: 'owner' }],
-    roles: { owner: ownerRole, member: defaultRole },
-    channels: { text: [], voice: [] },
-    verified: false,
-    joinRequests: [],
-  };
-
-  // Канал по умолчанию
-  const defaultChannelId = generateId();
-  group.channels.text.push({ id: defaultChannelId, name: 'общий', accessRole: 'member' });
-  groupMessages.set(defaultChannelId, []);
-
-  groups.set(groupId, group);
-  res.json({ group });
-});
-
-app.get('/api/groups', authMiddleware, (req, res) => {
-  const allGroups = [];
-  for (const g of groups.values()) {
-    const isMember = g.members.some(m => m.userId === req.userId);
-    if (!g.isClosed || isMember || req.user.role === 'moderator' || req.user.role === 'admin') {
-      allGroups.push({
-        id: g.id,
-        name: g.name,
-        avatar: g.avatar,
-        isClosed: g.isClosed,
-        memberCount: g.members.length,
-        verified: g.verified,
-        isMember,
-      });
-    }
-  }
-  res.json({ groups: allGroups });
-});
-
-app.get('/api/groups/:groupId', authMiddleware, (req, res) => {
-  const group = groups.get(req.params.groupId);
-  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
-
-  const isMember = group.members.some(m => m.userId === req.userId);
-  if (group.isClosed && !isMember && req.user.role !== 'moderator' && req.user.role !== 'admin') {
-    return res.json({ group: { id: group.id, name: group.name, avatar: group.avatar, isClosed: true, isMember: false } });
-  }
-
-  res.json({
-    group: {
-      ...group,
-      members: group.members.map(m => ({ ...m, user: getUserSafe(users.get(m.userId)) })),
+const groupSchema = new mongoose.Schema({
+  name:        { type: String, required: true, trim: true },
+  avatar:      { type: String, default: "" },
+  description: { type: String, default: "" },
+  isPrivate:   { type: Boolean, default: false },
+  owner:       { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  members:     [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+  joinRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+  roles: [{
+    name:       { type: String, required: true },
+    color:      { type: String, default: "#99aab5" },
+    permissions: {
+      post:    { type: Boolean, default: false },
+      delete:  { type: Boolean, default: false },
+      news:    { type: Boolean, default: false },
+      voice:   { type: Boolean, default: false },
     },
-  });
+    members: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+  }],
+  textChannels: [{
+    name:      { type: String, required: true },
+    accessRole: { type: String, default: "all" },
+  }],
+  voiceChannels: [{
+    name: { type: String, required: true },
+    members: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+  }],
+  isVerified:  { type: Boolean, default: false },
+  verificationRequested: { type: Boolean, default: false },
+  createdAt:   { type: Date, default: Date.now },
 });
 
-app.post('/api/groups/:groupId/join', authMiddleware, (req, res) => {
-  const group = groups.get(req.params.groupId);
-  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
+const newsSchema = new mongoose.Schema({
+  author:    { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  text:      { type: String, default: "" },
+  media:     [{ type: String }],
+  groupId:   { type: mongoose.Schema.Types.ObjectId, ref: "Group", default: null },
+  createdAt: { type: Date, default: Date.now },
+});
 
-  if (group.members.some(m => m.userId === req.userId)) return res.status(400).json({ error: 'Уже участник' });
+const violationSchema = new mongoose.Schema({
+  user:      { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  reason:    { type: String, required: true },
+  reporter:  { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+  createdAt: { type: Date, default: Date.now },
+  resolved:  { type: Boolean, default: false },
+});
 
-  if (group.isClosed) {
-    if (group.joinRequests.includes(req.userId)) return res.status(400).json({ error: 'Заявка уже отправлена' });
-    group.joinRequests.push(req.userId);
-    sendToUser(group.owner, { type: 'group_join_request', groupId: group.id, user: getUserSafe(req.user) });
-    return res.json({ ok: true, message: 'Заявка отправлена' });
+const sessionSchema = new mongoose.Schema({
+  userId:    { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+  token:     { type: String, required: true },
+  createdAt: { type: Date, default: Date.now },
+  expiresAt: { type: Date, required: true },
+});
+
+const User = mongoose.model("User", userSchema);
+const Message = mongoose.model("Message", messageSchema);
+const Chat = mongoose.model("Chat", chatSchema);
+const Group = mongoose.model("Group", groupSchema);
+const News = mongoose.model("News", newsSchema);
+const Violation = mongoose.model("Violation", violationSchema);
+const Session = mongoose.model("Session", sessionSchema);
+
+// ─── JWT Helpers ────────────────────────────────────────────
+const JWT_SECRET = process.env.JWT_SECRET || "super-secret-change-me";
+
+function generateToken(userId) {
+  return jwt.sign({ userId }, JWT_SECRET, { expiresIn: "30d" });
+}
+
+function authMiddleware(req, res, next) {
+  const auth = req.headers.authorization;
+  if (!auth) return res.status(401).json({ error: "No token" });
+  const token = auth.replace("Bearer ", "");
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.userId = decoded.userId;
+    next();
+  } catch {
+    res.status(401).json({ error: "Invalid token" });
   }
-
-  group.members.push({ userId: req.userId, role: 'member' });
-  broadcastToGroup(group.id, { type: 'group_member_joined', groupId: group.id, user: getUserSafe(req.user) });
-  res.json({ ok: true });
-});
-
-app.post('/api/groups/:groupId/join/:userId/accept', authMiddleware, (req, res) => {
-  const group = groups.get(req.params.groupId);
-  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
-  if (group.owner !== req.userId) return res.status(403).json({ error: 'Только владелец может принимать заявки' });
-
-  const idx = group.joinRequests.indexOf(req.params.userId);
-  if (idx === -1) return res.status(400).json({ error: 'Нет такой заявки' });
-
-  group.joinRequests.splice(idx, 1);
-  group.members.push({ userId: req.params.userId, role: 'member' });
-
-  sendToUser(req.params.userId, { type: 'group_join_accepted', groupId: group.id, groupName: group.name });
-  broadcastToGroup(group.id, { type: 'group_member_joined', groupId: group.id, user: getUserSafe(users.get(req.params.userId)) });
-  res.json({ ok: true });
-});
-
-app.post('/api/groups/:groupId/join/:userId/reject', authMiddleware, (req, res) => {
-  const group = groups.get(req.params.groupId);
-  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
-  if (group.owner !== req.userId) return res.status(403).json({ error: 'Только владелец может отклонять заявки' });
-
-  const idx = group.joinRequests.indexOf(req.params.userId);
-  if (idx !== -1) group.joinRequests.splice(idx, 1);
-
-  sendToUser(req.params.userId, { type: 'group_join_rejected', groupId: group.id });
-  res.json({ ok: true });
-});
-
-app.get('/api/groups/:groupId/requests', authMiddleware, (req, res) => {
-  const group = groups.get(req.params.groupId);
-  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
-  if (group.owner !== req.userId) return res.status(403).json({ error: 'Нет доступа' });
-
-  const requests = group.joinRequests.map(uid => getUserSafe(users.get(uid))).filter(Boolean);
-  res.json({ requests });
-});
-
-app.put('/api/groups/:groupId', authMiddleware, (req, res) => {
-  const { name, avatar, isClosed, description } = req.body;
-  const group = groups.get(req.params.groupId);
-  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
-  if (group.owner !== req.userId) return res.status(403).json({ error: 'Только владелец может редактировать' });
-
-  if (name) group.name = name;
-  if (avatar !== undefined) group.avatar = avatar;
-  if (isClosed !== undefined) group.isClosed = isClosed;
-  if (description !== undefined) group.description = description;
-
-  broadcastToGroup(group.id, { type: 'group_updated', group: { id: group.id, name: group.name, avatar: group.avatar, isClosed: group.isClosed } });
-  res.json({ group });
-});
-
-app.delete('/api/groups/:groupId', authMiddleware, (req, res) => {
-  const group = groups.get(req.params.groupId);
-  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
-  if (group.owner !== req.userId) return res.status(403).json({ error: 'Только владелец может удалить группу' });
-
-  broadcastToGroup(group.id, { type: 'group_deleted', groupId: group.id });
-  groups.delete(req.params.groupId);
-  res.json({ ok: true });
-});
-
-app.post('/api/groups/:groupId/leave', authMiddleware, (req, res) => {
-  const group = groups.get(req.params.groupId);
-  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
-
-  const idx = group.members.findIndex(m => m.userId === req.userId);
-  if (idx === -1) return res.status(400).json({ error: 'Вы не участник' });
-
-  if (group.owner === req.userId) return res.status(400).json({ error: 'Владелец не может покинуть группу (удалите её)' });
-
-  group.members.splice(idx, 1);
-  broadcastToGroup(group.id, { type: 'group_member_left', groupId: group.id, userId: req.userId });
-  res.json({ ok: true });
-});
-
-// ── Каналы группы ──
-app.post('/api/groups/:groupId/channels', authMiddleware, (req, res) => {
-  const { name, type, accessRole } = req.body;
-  const group = groups.get(req.params.groupId);
-  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
-  if (group.owner !== req.userId) return res.status(403).json({ error: 'Только владелец может создавать каналы' });
-
-  const channelId = generateId();
-  const channel = { id: channelId, name: name || 'новый канал', accessRole: accessRole || 'member' };
-
-  if (type === 'voice') {
-    group.channels.voice.push(channel);
-  } else {
-    group.channels.text.push(channel);
-    groupMessages.set(channelId, []);
-  }
-
-  broadcastToGroup(group.id, { type: 'group_channel_created', groupId: group.id, channel, channelType: type });
-  res.json({ channel });
-});
-
-app.delete('/api/groups/:groupId/channels/:channelId', authMiddleware, (req, res) => {
-  const group = groups.get(req.params.groupId);
-  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
-  if (group.owner !== req.userId) return res.status(403).json({ error: 'Нет доступа' });
-
-  ['text', 'voice'].forEach(type => {
-    const idx = group.channels[type].findIndex(c => c.id === req.params.channelId);
-    if (idx !== -1) {
-      group.channels[type].splice(idx, 1);
-      if (type === 'text') groupMessages.delete(req.params.channelId);
-    }
-  });
-
-  broadcastToGroup(group.id, { type: 'group_channel_deleted', groupId: group.id, channelId: req.params.channelId });
-  res.json({ ok: true });
-});
-
-// ── Сообщения канала ──
-app.get('/api/groups/:groupId/channels/:channelId/messages', authMiddleware, (req, res) => {
-  const group = groups.get(req.params.groupId);
-  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
-  if (!group.members.some(m => m.userId === req.userId)) return res.status(403).json({ error: 'Нет доступа' });
-
-  const messages = groupMessages.get(req.params.channelId) || [];
-  const messagesWithUsers = messages.map(m => ({ ...m, sender: getUserSafe(users.get(m.senderId)) }));
-  res.json({ messages: messagesWithUsers });
-});
-
-app.post('/api/groups/:groupId/channels/:channelId/messages', authMiddleware, checkMute, (req, res) => {
-  const { text, attachments, duplicateToNews } = req.body;
-  const group = groups.get(req.params.groupId);
-  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
-  if (!group.members.some(m => m.userId === req.userId)) return res.status(403).json({ error: 'Нет доступа' });
-
-  const channel = [...group.channels.text, ...group.channels.voice].find(c => c.id === req.params.channelId);
-  if (!channel) return res.status(404).json({ error: 'Канал не найден' });
-
-  const message = {
-    id: generateId(),
-    senderId: req.userId,
-    text,
-    attachments: attachments || [],
-    edited: false,
-    timestamp: Date.now(),
-  };
-
-  if (!groupMessages.has(req.params.channelId)) groupMessages.set(req.params.channelId, []);
-  groupMessages.get(req.params.channelId).push(message);
-
-  broadcastToGroup(group.id, {
-    type: 'group_message',
-    groupId: group.id,
-    channelId: req.params.channelId,
-    message: { ...message, sender: getUserSafe(req.user) },
-  });
-
-  // Дублирование в новости
-  if (duplicateToNews) {
-    const newsId = generateId();
-    const newsItem = {
-      id: newsId,
-      authorId: req.userId,
-      groupId: group.id,
-      groupName: group.name,
-      text,
-      media: attachments || [],
-      timestamp: Date.now(),
-    };
-    news.set(newsId, newsItem);
-  }
-
-  res.json({ message });
-});
-
-app.put('/api/groups/:groupId/channels/:channelId/messages/:msgId', authMiddleware, (req, res) => {
-  const { text } = req.body;
-  const messages = groupMessages.get(req.params.channelId);
-  if (!messages) return res.status(404).json({ error: 'Канал не найден' });
-
-  const msg = messages.find(m => m.id === req.params.msgId);
-  if (!msg) return res.status(404).json({ error: 'Сообщение не найдено' });
-  if (msg.senderId !== req.userId) return res.status(403).json({ error: 'Нельзя редактировать чужое сообщение' });
-
-  msg.text = text;
-  msg.edited = true;
-
-  const group = groups.get(req.params.groupId);
-  broadcastToGroup(group.id, {
-    type: 'group_message_edited',
-    groupId: group.id,
-    channelId: req.params.channelId,
-    message: msg,
-  });
-  res.json({ message: msg });
-});
-
-app.delete('/api/groups/:groupId/channels/:channelId/messages/:msgId', authMiddleware, (req, res) => {
-  const group = groups.get(req.params.groupId);
-  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
-
-  const messages = groupMessages.get(req.params.channelId);
-  if (!messages) return res.status(404).json({ error: 'Канал не найден' });
-
-  const idx = messages.findIndex(m => m.id === req.params.msgId);
-  if (idx === -1) return res.status(404).json({ error: 'Сообщение не найдено' });
-
-  const msg = messages[idx];
-  const member = group.members.find(m => m.userId === req.userId);
-  if (!member) return res.status(403).json({ error: 'Нет доступа' });
-
-  const canDelete = msg.senderId === req.userId || member.role === 'owner' || member.role === 'moderator';
-  if (!canDelete) return res.status(403).json({ error: 'Нет прав на удаление' });
-
-  messages.splice(idx, 1);
-  broadcastToGroup(group.id, { type: 'group_message_deleted', groupId: group.id, channelId: req.params.channelId, messageId: req.params.msgId });
-  res.json({ ok: true });
-});
-
-// ── Роли ──
-app.post('/api/groups/:groupId/roles', authMiddleware, (req, res) => {
-  const { name, permissions } = req.body;
-  const group = groups.get(req.params.groupId);
-  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
-  if (group.owner !== req.userId) return res.status(403).json({ error: 'Только владелец может управлять ролями' });
-
-  const roleId = generateId();
-  group.roles[roleId] = { name, permissions };
-
-  res.json({ roleId, role: group.roles[roleId] });
-});
-
-app.put('/api/groups/:groupId/members/:userId/role', authMiddleware, (req, res) => {
-  const { role } = req.body;
-  const group = groups.get(req.params.groupId);
-  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
-  if (group.owner !== req.userId) return res.status(403).json({ error: 'Только владелец может менять роли' });
-
-  const member = group.members.find(m => m.userId === req.params.userId);
-  if (!member) return res.status(404).json({ error: 'Участник не найден' });
-
-  member.role = role;
-  broadcastToGroup(group.id, { type: 'group_member_role_changed', groupId: group.id, userId: req.params.userId, role });
-  res.json({ ok: true });
-});
-
-// ──────────────────────────────────────────────
-// NEWS
-// ──────────────────────────────────────────────
-app.get('/api/news', authMiddleware, (req, res) => {
-  const newsList = [];
-  for (const item of news.values()) {
-    newsList.push({
-      ...item,
-      author: getUserSafe(users.get(item.authorId)),
-    });
-  }
-  newsList.sort((a, b) => b.timestamp - a.timestamp);
-  res.json({ news: newsList });
-});
-
-app.post('/api/news', authMiddleware, checkMute, (req, res) => {
-  const { text, media } = req.body;
-  if (!text) return res.status(400).json({ error: 'Текст обязателен' });
-
-  const newsId = generateId();
-  const newsItem = {
-    id: newsId,
-    authorId: req.userId,
-    text,
-    media: media || [],
-    timestamp: Date.now(),
-  };
-  news.set(newsId, newsItem);
-
-  res.json({ news: { ...newsItem, author: getUserSafe(req.user) } });
-});
-
-// ──────────────────────────────────────────────
-// RADIO
-// ──────────────────────────────────────────────
-app.get('/api/radio', authMiddleware, (req, res) => {
-  res.json({ stations: radioStations });
-});
-
-// ──────────────────────────────────────────────
-// MODERATION
-// ──────────────────────────────────────────────
-app.post('/api/mod/mute', authMiddleware, (req, res) => {
-  const { userId, reason, duration } = req.body;
-  if (req.user.role !== 'moderator' && req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Нет прав модератора' });
-  }
-
-  const target = users.get(userId);
-  if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
-
-  const minutes = Math.min(Math.max(parseInt(duration) || 1, 1), 9999);
-  target.muted = true;
-  target.muteUntil = Date.now() + minutes * 60 * 1000;
-  target.muteReason = reason || 'Нарушение правил';
-
-  sendToUser(userId, {
-    type: 'muted',
-    muteUntil: target.muteUntil,
-    muteReason: target.muteReason,
-  });
-
-  res.json({ ok: true, user: getUserSafe(target) });
-});
-
-app.post('/api/mod/unmute', authMiddleware, (req, res) => {
-  const { userId } = req.body;
-  if (req.user.role !== 'moderator' && req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Нет прав модератора' });
-  }
-
-  const target = users.get(userId);
-  if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
-
-  target.muted = false;
-  target.muteUntil = 0;
-  target.muteReason = '';
-
-  sendToUser(userId, { type: 'unmuted' });
-  res.json({ ok: true, user: getUserSafe(target) });
-});
-
-app.post('/api/mod/violation', authMiddleware, (req, res) => {
-  const { targetId, reason } = req.body;
-  const violationId = generateId();
-  const violation = {
-    id: violationId,
-    reporterId: req.userId,
-    targetId,
-    reason: reason || 'Нарушение правил',
-    timestamp: Date.now(),
-    resolved: false,
-  };
-  violations.set(violationId, violation);
-  res.json({ violation });
-});
-
-app.get('/api/mod/violations', authMiddleware, (req, res) => {
-  if (req.user.role !== 'moderator' && req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Нет прав модератора' });
-  }
-  const list = [];
-  for (const v of violations.values()) {
-    list.push({
-      ...v,
-      reporter: getUserSafe(users.get(v.reporterId)),
-      target: getUserSafe(users.get(v.targetId)),
-    });
-  }
-  list.sort((a, b) => b.timestamp - a.timestamp);
-  res.json({ violations: list });
-});
-
-app.get('/api/mod/muted', authMiddleware, (req, res) => {
-  if (req.user.role !== 'moderator' && req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Нет прав модератора' });
-  }
-  const mutedUsers = [];
-  for (const u of users.values()) {
-    if (u.muted && u.muteUntil > Date.now()) {
-      mutedUsers.push(getUserSafe(u));
-    }
-  }
-  res.json({ muted: mutedUsers });
-});
-
-// ── Верификация сообществ ──
-app.post('/api/mod/verification/request', authMiddleware, (req, res) => {
-  const { groupId } = req.body;
-  const group = groups.get(groupId);
-  if (!group) return res.status(404).json({ error: 'Группа не найдена' });
-  if (group.owner !== req.userId) return res.status(403).json({ error: 'Только владелец может запросить верификацию' });
-
-  const existing = [...verificationRequests.values()].find(v => v.groupId === groupId && v.status === 'pending');
-  if (existing) return res.status(400).json({ error: 'Заявка уже подана' });
-
-  const requestId = generateId();
-  verificationRequests.set(requestId, {
-    id: requestId,
-    groupId,
-    groupName: group.name,
-    requestedBy: req.userId,
-    timestamp: Date.now(),
-    status: 'pending',
-  });
-
-  res.json({ ok: true, requestId });
-});
-
-app.get('/api/mod/verification', authMiddleware, (req, res) => {
-  if (req.user.role !== 'moderator' && req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Нет прав модератора' });
-  }
-  const list = [];
-  for (const v of verificationRequests.values()) {
-    if (v.status === 'pending') {
-      list.push({
-        ...v,
-        group: groups.get(v.groupId) ? { id: groups.get(v.groupId).id, name: groups.get(v.groupId).name, avatar: groups.get(v.groupId).avatar } : null,
-        requestedByUser: getUserSafe(users.get(v.requestedBy)),
-      });
-    }
-  }
-  list.sort((a, b) => b.timestamp - a.timestamp);
-  res.json({ requests: list });
-});
-
-app.post('/api/mod/verification/:requestId/:action', authMiddleware, (req, res) => {
-  if (req.user.role !== 'moderator' && req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Нет прав модератора' });
-  }
-
-  const v = verificationRequests.get(req.params.requestId);
-  if (!v) return res.status(404).json({ error: 'Заявка не найдена' });
-
-  if (req.params.action === 'approve') {
-    v.status = 'approved';
-    const group = groups.get(v.groupId);
-    if (group) group.verified = true;
-    sendToUser(v.requestedBy, { type: 'verification_approved', groupId: v.groupId });
-  } else if (req.params.action === 'reject') {
-    v.status = 'rejected';
-    sendToUser(v.requestedBy, { type: 'verification_rejected', groupId: v.groupId });
-  }
-
-  res.json({ ok: true });
-});
-
-// ──────────────────────────────────────────────
-// USER ROLE (глобальная)
-// ──────────────────────────────────────────────
-app.put('/api/admin/user/:userId/role', authMiddleware, (req, res) => {
-  const { role } = req.body;
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Нет прав администратора' });
-
-  const target = users.get(req.params.userId);
-  if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
-
-  target.role = role;
-  res.json({ ok: true, user: getUserSafe(target) });
-});
-
-// ──────────────────────────────────────────────
-// WebSocket
-// ──────────────────────────────────────────────
-wss.on('connection', (ws, req) => {
-  const url = new URL(req.url, 'http://localhost');
-  const token = url.searchParams.get('token');
-
-  if (!token) {
-    ws.close();
+}
+
+// ─── WebSocket Server ───────────────────────────────────────
+const wss = new WebSocketServer({ server, path: "/ws" });
+
+// userId → Set<ws>
+const onlineClients = new Map();
+
+wss.on("connection", (ws, req) => {
+  const url = new URL(req.url, "http://localhost");
+  const token = url.searchParams.get("token");
+  let userId = null;
+
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    userId = decoded.userId;
+  } catch {
+    ws.close(4001, "Invalid token");
     return;
   }
 
-  const userId = sessions.get(token);
-  if (!userId) {
-    ws.close();
-    return;
-  }
+  // Register
+  if (!onlineClients.has(userId)) onlineClients.set(userId, new Set());
+  onlineClients.get(userId).add(ws);
+  User.findByIdAndUpdate(userId, { lastSeen: new Date() }).exec();
+  broadcastPresence(userId, "online");
 
-  if (!wsClients.has(userId)) wsClients.set(userId, new Set());
-  wsClients.get(userId).add(ws);
-  ws.userId = userId;
-
-  ws.on('message', (raw) => {
+  ws.on("message", async (raw) => {
     let data;
     try {
       data = JSON.parse(raw);
@@ -974,126 +207,614 @@ wss.on('connection', (ws, req) => {
     }
 
     switch (data.type) {
-      // WebRTC сигналинг
-      case 'call_offer': {
-        sendToUser(data.targetUserId, {
-          type: 'call_offer',
-          fromUserId: userId,
-          fromUser: getUserSafe(users.get(userId)),
-          sdp: data.sdp,
+      // ── Chat message ──
+      case "message": {
+        const { chatId, text, attachments, replyTo } = data;
+        const msg = await Message.create({
+          chatId, sender: userId, text: text || "",
+          attachments: attachments || [], replyTo: replyTo || null,
+        });
+        const populated = await Message.findById(msg._id).populate("sender", "login name avatar");
+        const chat = await Chat.findById(chatId);
+        chat.participants.forEach((p) => sendToUser(p.toString(), {
+          type: "message", message: populated,
+        }));
+        break;
+      }
+
+      // ── Typing indicator ──
+      case "typing": {
+        const { chatId } = data;
+        const chat = await Chat.findById(chatId);
+        chat.participants.forEach((p) => {
+          if (p.toString() !== userId) {
+            sendToUser(p.toString(), { type: "typing", chatId, userId });
+          }
         });
         break;
       }
 
-      case 'call_answer': {
-        sendToUser(data.targetUserId, {
-          type: 'call_answer',
+      // ── Message edit ──
+      case "edit_message": {
+        const { messageId, text } = data;
+        const msg = await Message.findById(messageId);
+        if (!msg || msg.sender.toString() !== userId) return;
+        msg.text = text;
+        msg.edited = true;
+        await msg.save();
+        const chat = await Chat.findById(msg.chatId);
+        chat.participants.forEach((p) => sendToUser(p.toString(), {
+          type: "edit_message", messageId, text, chatId: msg.chatId,
+        }));
+        break;
+      }
+
+      // ── Message delete ──
+      case "delete_message": {
+        const { messageId } = data;
+        const msg = await Message.findById(messageId);
+        if (!msg) return;
+        // Only sender or group moderator/admin can delete
+        const chat = await Chat.findById(msg.chatId);
+        const isMember = chat.participants.some((p) => p.toString() === userId);
+        const isOwner = msg.sender.toString() === userId;
+        if (!isOwner && !isMember) return;
+        msg.deleted = true;
+        await msg.save();
+        chat.participants.forEach((p) => sendToUser(p.toString(), {
+          type: "delete_message", messageId, chatId: msg.chatId,
+        }));
+        break;
+      }
+
+      // ── Pin message ──
+      case "pin_message": {
+        const { messageId, chatId } = data;
+        await Chat.findByIdAndUpdate(chatId, { pinnedMessageId: messageId });
+        await Message.findByIdAndUpdate(messageId, { pinned: true });
+        const chat = await Chat.findById(chatId);
+        chat.participants.forEach((p) => sendToUser(p.toString(), {
+          type: "pin_message", messageId, chatId,
+        }));
+        break;
+      }
+
+      // ── Voice call: WebRTC signaling ──
+      case "webrtc_offer":
+      case "webrtc_answer":
+      case "webrtc_ice":
+      case "call_end": {
+        const { targetUserId } = data;
+        sendToUser(targetUserId, {
+          type: data.type,
           fromUserId: userId,
-          sdp: data.sdp,
+          data: data.data,
         });
         break;
       }
 
-      case 'call_ice': {
-        sendToUser(data.targetUserId, {
-          type: 'call_ice',
-          fromUserId: userId,
-          candidate: data.candidate,
-        });
-        break;
-      }
-
-      case 'call_reject': {
-        sendToUser(data.targetUserId, { type: 'call_reject', fromUserId: userId });
-        break;
-      }
-
-      case 'call_end': {
-        sendToUser(data.targetUserId, { type: 'call_end', fromUserId: userId });
-        break;
-      }
-
-      // Голосовой канал группы
-      case 'voice_channel_join': {
-        const group = groups.get(data.groupId);
+      // ── Voice channel join/leave ──
+      case "voice_join": {
+        const { groupId, channelId } = data;
+        const group = await Group.findById(groupId);
         if (!group) return;
-        broadcastToGroup(group.id, {
-          type: 'voice_channel_user_joined',
-          groupId: data.groupId,
-          channelId: data.channelId,
-          userId,
-        });
+        const vc = group.voiceChannels.id(channelId);
+        if (!vc) return;
+        if (!vc.members.includes(userId)) vc.members.push(userId);
+        await group.save();
+        group.members.forEach((m) => sendToUser(m.toString(), {
+          type: "voice_update", groupId, channelId, members: vc.members,
+        }));
         break;
       }
 
-      case 'voice_channel_leave': {
-        const group = groups.get(data.groupId);
+      case "voice_leave": {
+        const { groupId, channelId } = data;
+        const group = await Group.findById(groupId);
         if (!group) return;
-        broadcastToGroup(group.id, {
-          type: 'voice_channel_user_left',
-          groupId: data.groupId,
-          channelId: data.channelId,
-          userId,
-        });
+        const vc = group.voiceChannels.id(channelId);
+        if (!vc) return;
+        vc.members = vc.members.filter((m) => m.toString() !== userId);
+        await group.save();
+        group.members.forEach((m) => sendToUser(m.toString(), {
+          type: "voice_update", groupId, channelId, members: vc.members,
+        }));
         break;
       }
 
-      case 'voice_channel_offer': {
-        sendToUser(data.targetUserId, {
-          type: 'voice_channel_offer',
-          fromUserId: userId,
-          groupId: data.groupId,
-          channelId: data.channelId,
-          sdp: data.sdp,
+      // ── Voice channel WebRTC relay ──
+      case "voice_signal": {
+        const { groupId, channelId, targetUserId, signal } = data;
+        sendToUser(targetUserId, {
+          type: "voice_signal", groupId, channelId, fromUserId: userId, signal,
         });
-        break;
-      }
-
-      case 'voice_channel_answer': {
-        sendToUser(data.targetUserId, {
-          type: 'voice_channel_answer',
-          fromUserId: userId,
-          channelId: data.channelId,
-          sdp: data.sdp,
-        });
-        break;
-      }
-
-      case 'voice_channel_ice': {
-        sendToUser(data.targetUserId, {
-          type: 'voice_channel_ice',
-          fromUserId: userId,
-          candidate: data.candidate,
-        });
-        break;
-      }
-
-      // Набор текста
-      case 'typing': {
-        const chat = chats.get(data.chatId);
-        if (chat) {
-          chat.participants.forEach(uid => {
-            if (uid !== userId) sendToUser(uid, { type: 'typing', chatId: data.chatId, userId });
-          });
-        }
         break;
       }
     }
   });
 
-  ws.on('close', () => {
-    const clients = wsClients.get(userId);
+  ws.on("close", () => {
+    const clients = onlineClients.get(userId);
     if (clients) {
       clients.delete(ws);
-      if (clients.size === 0) wsClients.delete(userId);
+      if (clients.size === 0) {
+        onlineClients.delete(userId);
+        User.findByIdAndUpdate(userId, { lastSeen: new Date() }).exec();
+        broadcastPresence(userId, "offline");
+      }
     }
   });
 });
 
-// ──────────────────────────────────────────────
-// Запуск
-// ──────────────────────────────────────────────
+function sendToUser(userId, payload) {
+  const clients = onlineClients.get(userId);
+  if (!clients) return;
+  const msg = JSON.stringify(payload);
+  clients.forEach((ws) => {
+    if (ws.readyState === ws.OPEN) ws.send(msg);
+  });
+}
+
+function broadcastPresence(userId, status) {
+  // Notify all friends
+  User.findById(userId).then((user) => {
+    if (!user) return;
+    user.friends.forEach((f) => {
+      sendToUser(f.toString(), { type: "presence", userId, status });
+    });
+  });
+}
+
+// ─── REST API: Auth ─────────────────────────────────────────
+
+app.post("/api/register", async (req, res) => {
+  const { login, name, password, confirmPassword } = req.body;
+  if (!login || !name || !password) return res.status(400).json({ error: "Заполните все поля" });
+  if (password !== confirmPassword) return res.status(400).json({ error: "Пароли не совпадают" });
+  const exists = await User.findOne({ login });
+  if (exists) return res.status(409).json({ error: "Логин занят" });
+  const hash = await bcrypt.hash(password, 10);
+  const user = await User.create({ login, name, password: hash });
+  const token = generateToken(user._id);
+  res.json({ token, user: sanitizeUser(user) });
+});
+
+app.post("/api/login", async (req, res) => {
+  const { login, password, saveSession } = req.body;
+  const user = await User.findOne({ login });
+  if (!user) return res.status(401).json({ error: "Неверный логин или пароль" });
+  const ok = await bcrypt.compare(password, user.password);
+  if (!ok) return res.status(401).json({ error: "Неверный логин или пароль" });
+  const token = generateToken(user._id);
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  await Session.create({ userId: user._id, token, expiresAt });
+  res.json({ token, user: sanitizeUser(user), saveSession: !!saveSession });
+});
+
+app.get("/api/me", authMiddleware, async (req, res) => {
+  const user = await User.findById(req.userId);
+  if (!user) return res.status(404).json({ error: "Not found" });
+  res.json({ user: sanitizeUser(user) });
+});
+
+// ─── REST API: Profile ──────────────────────────────────────
+
+app.put("/api/profile", authMiddleware, async (req, res) => {
+  const { name, bio, email, avatar } = req.body;
+  const update = {};
+  if (name) update.name = name;
+  if (bio !== undefined) update.bio = bio;
+  if (email !== undefined) update.email = email;
+  if (avatar !== undefined) update.avatar = avatar;
+  const user = await User.findByIdAndUpdate(req.userId, update, { new: true });
+  res.json({ user: sanitizeUser(user) });
+});
+
+app.put("/api/password", authMiddleware, async (req, res) => {
+  const { newPassword } = req.body;
+  if (!newPassword || newPassword.length < 6)
+    return res.status(400).json({ error: "Минимум 6 символов" });
+  const hash = await bcrypt.hash(newPassword, 10);
+  await User.findByIdAndUpdate(req.userId, { password: hash });
+  res.json({ ok: true });
+});
+
+app.post("/api/upload", authMiddleware, upload.single("file"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file" });
+  res.json({ url: `/uploads/${req.file.filename}` });
+});
+
+// ─── REST API: Friends ──────────────────────────────────────
+
+app.post("/api/friends/request", authMiddleware, async (req, res) => {
+  const { login } = req.body;
+  const target = await User.findOne({ login });
+  if (!target) return res.status(404).json({ error: "Пользователь не найден" });
+  if (target._id.equals(req.userId)) return res.status(400).json({ error: "Нельзя добавить себя" });
+  if (target.friendRequests.includes(req.userId))
+    return res.status(400).json({ error: "Заявка уже отправлена" });
+  if (target.friends.includes(req.userId))
+    return res.status(400).json({ error: "Уже в друзьях" });
+  target.friendRequests.push(req.userId);
+  await target.save();
+  const me = await User.findById(req.userId);
+  me.friendRequestsSent.push(target._id);
+  await me.save();
+  sendToUser(target._id.toString(), { type: "friend_request", from: sanitizeUser(me) });
+  res.json({ ok: true });
+});
+
+app.post("/api/friends/accept", authMiddleware, async (req, res) => {
+  const { userId: fromId } = req.body;
+  const me = await User.findById(req.userId);
+  const from = await User.findById(fromId);
+  if (!from) return res.status(404).json({ error: "Not found" });
+  me.friendRequests = me.friendRequests.filter((r) => r.toString() !== fromId);
+  me.friends.push(fromId);
+  await me.save();
+  from.friendRequestsSent = from.friendRequestsSent.filter((r) => r.toString() !== me._id.toString());
+  from.friends.push(me._id);
+  await from.save();
+  // Create direct chat
+  let chat = await Chat.findOne({
+    type: "direct",
+    participants: { $all: [me._id, fromId], $size: 2 },
+  });
+  if (!chat) {
+    chat = await Chat.create({ type: "direct", participants: [me._id, fromId] });
+  }
+  sendToUser(fromId, { type: "friend_accepted", from: sanitizeUser(me) });
+  res.json({ ok: true, chatId: chat._id });
+});
+
+app.post("/api/friends/decline", authMiddleware, async (req, res) => {
+  const { userId: fromId } = req.body;
+  await User.findByIdAndUpdate(req.userId, {
+    $pull: { friendRequests: fromId },
+  });
+  await User.findByIdAndUpdate(fromId, {
+    $pull: { friendRequestsSent: req.userId },
+  });
+  res.json({ ok: true });
+});
+
+app.get("/api/friends", authMiddleware, async (req, res) => {
+  const me = await User.findById(req.userId).populate("friends friendRequests", "login name avatar lastSeen");
+  res.json({
+    friends: me.friends.map(sanitizeUser),
+    requests: me.friendRequests.map(sanitizeUser),
+  });
+});
+
+app.delete("/api/friends/:userId", authMiddleware, async (req, res) => {
+  const targetId = req.params.userId;
+  await User.findByIdAndUpdate(req.userId, { $pull: { friends: targetId } });
+  await User.findByIdAndUpdate(targetId, { $pull: { friends: req.userId } });
+  res.json({ ok: true });
+});
+
+// ─── REST API: Direct & Group Chats ─────────────────────────
+
+app.get("/api/chats", authMiddleware, async (req, res) => {
+  const chats = await Chat.find({ participants: req.userId })
+    .populate("participants", "login name avatar lastSeen")
+    .populate({
+      path: "pinnedMessageId",
+      populate: { path: "sender", select: "login name avatar" },
+    });
+  res.json({ chats });
+});
+
+app.get("/api/chats/:chatId/messages", authMiddleware, async (req, res) => {
+  const { chatId } = req.params;
+  const { limit = 50, before } = req.query;
+  const filter = { chatId, deleted: false };
+  if (before) filter.createdAt = { $lt: new Date(before) };
+  const messages = await Message.find(filter)
+    .sort({ createdAt: -1 })
+    .limit(parseInt(limit))
+    .populate("sender", "login name avatar")
+    .populate("replyTo");
+  res.json({ messages: messages.reverse() });
+});
+
+// ─── REST API: Groups ──────────────────────────────────────
+
+app.post("/api/groups", authMiddleware, async (req, res) => {
+  const { name, description, isPrivate } = req.body;
+  const group = await Group.create({
+    name, description, isPrivate: !!isPrivate,
+    owner: req.userId,
+    members: [req.userId],
+    roles: [{
+      name: "Owner", color: "#e74c3c",
+      permissions: { post: true, delete: true, news: true, voice: true },
+      members: [req.userId],
+    }],
+  });
+  let chat = await Chat.create({
+    type: "group", name, groupId: group._id, participants: [req.userId],
+  });
+  group.textChannels.push({ name: "general", accessRole: "all" });
+  group.voiceChannels.push({ name: "General", members: [] });
+  await group.save();
+  res.json({ group, chat });
+});
+
+app.get("/api/groups", authMiddleware, async (req, res) => {
+  const groups = await Group.find({
+    $or: [{ isPrivate: false }, { members: req.userId }],
+  }).populate("owner", "login name avatar");
+  res.json({ groups });
+});
+
+app.get("/api/groups/:groupId", authMiddleware, async (req, res) => {
+  const group = await Group.findById(req.params.groupId)
+    .populate("members", "login name avatar lastSeen")
+    .populate("owner", "login name avatar")
+    .populate("joinRequests", "login name avatar");
+  if (!group) return res.status(404).json({ error: "Not found" });
+  res.json({ group });
+});
+
+app.post("/api/groups/:groupId/join", authMiddleware, async (req, res) => {
+  const group = await Group.findById(req.params.groupId);
+  if (!group) return res.status(404).json({ error: "Not found" });
+  if (group.isPrivate) {
+    if (!group.joinRequests.includes(req.userId)) {
+      group.joinRequests.push(req.userId);
+      await group.save();
+    }
+    return res.json({ status: "requested" });
+  }
+  if (!group.members.includes(req.userId)) {
+    group.members.push(req.userId);
+    await group.save();
+  }
+  res.json({ status: "joined", group });
+});
+
+app.post("/api/groups/:groupId/leave", authMiddleware, async (req, res) => {
+  const group = await Group.findById(req.params.groupId);
+  if (!group) return res.status(404).json({ error: "Not found" });
+  group.members = group.members.filter((m) => m.toString() !== req.userId);
+  await group.save();
+  res.json({ ok: true });
+});
+
+app.put("/api/groups/:groupId", authMiddleware, async (req, res) => {
+  const group = await Group.findById(req.params.groupId);
+  if (!group) return res.status(404).json({ error: "Not found" });
+  if (!group.owner.equals(req.userId) && !hasPermission(group, req.userId, "delete"))
+    return res.status(403).json({ error: "Нет прав" });
+  const { name, description, avatar, isPrivate } = req.body;
+  if (name) group.name = name;
+  if (description !== undefined) group.description = description;
+  if (avatar !== undefined) group.avatar = avatar;
+  if (isPrivate !== undefined) group.isPrivate = isPrivate;
+  await group.save();
+  res.json({ group });
+});
+
+app.delete("/api/groups/:groupId", authMiddleware, async (req, res) => {
+  const group = await Group.findById(req.params.groupId);
+  if (!group) return res.status(404).json({ error: "Not found" });
+  if (!group.owner.equals(req.userId))
+    return res.status(403).json({ error: "Только владелец может удалить группу" });
+  await Chat.deleteMany({ groupId: group._id });
+  await Group.deleteOne({ _id: group._id });
+  res.json({ ok: true });
+});
+
+// ─── Group: Channels ───────────────────────────────────────
+
+app.post("/api/groups/:groupId/channels", authMiddleware, async (req, res) => {
+  const { name, type, accessRole } = req.body;
+  const group = await Group.findById(req.params.groupId);
+  if (!group) return res.status(404).json({ error: "Not found" });
+  if (!group.owner.equals(req.userId) && !hasPermission(group, req.userId, "voice"))
+    return res.status(403).json({ error: "Нет прав" });
+  if (type === "voice") {
+    group.voiceChannels.push({ name, members: [] });
+  } else {
+    group.textChannels.push({ name, accessRole: accessRole || "all" });
+  }
+  await group.save();
+  res.json({ group });
+});
+
+// ─── Group: Roles & Members ───────────────────────────────
+
+app.post("/api/groups/:groupId/roles", authMiddleware, async (req, res) => {
+  const group = await Group.findById(req.params.groupId);
+  if (!group) return res.status(404).json({ error: "Not found" });
+  if (!group.owner.equals(req.userId))
+    return res.status(403).json({ error: "Только владелец" });
+  const { name, color, permissions } = req.body;
+  group.roles.push({ name, color: color || "#99aab5", permissions: permissions || {} });
+  await group.save();
+  res.json({ group });
+});
+
+app.put("/api/groups/:groupId/members/:userId", authMiddleware, async (req, res) => {
+  const group = await Group.findById(req.params.groupId);
+  if (!group) return res.status(404).json({ error: "Not found" });
+  if (!group.owner.equals(req.userId))
+    return res.status(403).json({ error: "Нет прав" });
+  const { roleId } = req.body;
+  group.roles.forEach((r) => {
+    r.members = r.members.filter((m) => m.toString() !== req.params.userId);
+  });
+  if (roleId) {
+    const role = group.roles.id(roleId);
+    if (role) role.members.push(req.params.userId);
+  }
+  await group.save();
+  res.json({ group });
+});
+
+app.post("/api/groups/:groupId/join-requests/:userId/accept", authMiddleware, async (req, res) => {
+  const group = await Group.findById(req.params.groupId);
+  if (!group) return res.status(404).json({ error: "Not found" });
+  if (!group.owner.equals(req.userId))
+    return res.status(403).json({ error: "Нет прав" });
+  group.joinRequests = group.joinRequests.filter((r) => r.toString() !== req.params.userId);
+  if (!group.members.includes(req.params.userId)) group.members.push(req.params.userId);
+  await group.save();
+  res.json({ group });
+});
+
+function hasPermission(group, userId, perm) {
+  if (group.owner.equals(userId)) return true;
+  return group.roles.some((r) =>
+    r.members.includes(userId) && r.permissions && r.permissions[perm]
+  );
+}
+
+// ─── REST API: News Feed ───────────────────────────────────
+
+app.get("/api/news", authMiddleware, async (req, res) => {
+  const news = await News.find()
+    .sort({ createdAt: -1 })
+    .limit(50)
+    .populate("author", "login name avatar")
+    .populate("groupId", "name avatar");
+  res.json({ news });
+});
+
+app.post("/api/news", authMiddleware, async (req, res) => {
+  const { text, media, groupId } = req.body;
+  const item = await News.create({
+    author: req.userId, text: text || "", media: media || [],
+    groupId: groupId || null,
+  });
+  const populated = await News.findById(item._id)
+    .populate("author", "login name avatar")
+    .populate("groupId", "name avatar");
+  res.json({ news: populated });
+});
+
+// ─── REST API: Moderation ──────────────────────────────────
+
+app.get("/api/moderation/violations", authMiddleware, async (req, res) => {
+  const me = await User.findById(req.userId);
+  if (me.globalRole !== "moderator" && me.globalRole !== "admin")
+    return res.status(403).json({ error: "Нет доступа" });
+  const violations = await Violation.find({ resolved: false })
+    .populate("user", "login name avatar")
+    .populate("reporter", "login name")
+    .sort({ createdAt: -1 });
+  res.json({ violations });
+});
+
+app.get("/api/moderation/muted", authMiddleware, async (req, res) => {
+  const me = await User.findById(req.userId);
+  if (me.globalRole !== "moderator" && me.globalRole !== "admin")
+    return res.status(403).json({ error: "Нет доступа" });
+  const muted = await User.find({
+    isMuted: true,
+    $or: [{ muteUntil: null }, { muteUntil: { $gt: new Date() } }],
+  }).select("login name avatar muteReason muteUntil");
+  res.json({ muted });
+});
+
+app.post("/api/moderation/mute", authMiddleware, async (req, res) => {
+  const me = await User.findById(req.userId);
+  if (me.globalRole !== "moderator" && me.globalRole !== "admin")
+    return res.status(403).json({ error: "Нет доступа" });
+  const { userId, reason, durationMinutes } = req.body;
+  const muteUntil = durationMinutes
+    ? new Date(Date.now() + durationMinutes * 60 * 1000)
+    : null;
+  await User.findByIdAndUpdate(userId, {
+    isMuted: true, muteReason: reason || "Нарушение правил", muteUntil,
+  });
+  await Violation.create({ user: userId, reason, reporter: req.userId });
+  sendToUser(userId, { type: "muted", reason, muteUntil });
+  res.json({ ok: true });
+});
+
+app.post("/api/moderation/unmute", authMiddleware, async (req, res) => {
+  const me = await User.findById(req.userId);
+  if (me.globalRole !== "moderator" && me.globalRole !== "admin")
+    return res.status(403).json({ error: "Нет доступа" });
+  const { userId } = req.body;
+  await User.findByIdAndUpdate(userId, { isMuted: false, muteReason: "", muteUntil: null });
+  sendToUser(userId, { type: "unmuted" });
+  res.json({ ok: true });
+});
+
+app.post("/api/moderation/role", authMiddleware, async (req, res) => {
+  const me = await User.findById(req.userId);
+  if (me.globalRole !== "admin")
+    return res.status(403).json({ error: "Только админ" });
+  const { userId, role } = req.body;
+  await User.findByIdAndUpdate(userId, { globalRole: role });
+  res.json({ ok: true });
+});
+
+app.get("/api/moderation/verification-requests", authMiddleware, async (req, res) => {
+  const me = await User.findById(req.userId);
+  if (me.globalRole !== "moderator" && me.globalRole !== "admin")
+    return res.status(403).json({ error: "Нет доступа" });
+  const groups = await Group.find({ verificationRequested: true, isVerified: false })
+    .populate("owner", "login name avatar");
+  res.json({ groups });
+});
+
+app.post("/api/groups/:groupId/request-verification", authMiddleware, async (req, res) => {
+  const group = await Group.findById(req.params.groupId);
+  if (!group) return res.status(404).json({ error: "Not found" });
+  if (!group.owner.equals(req.userId))
+    return res.status(403).json({ error: "Нет прав" });
+  group.verificationRequested = true;
+  await group.save();
+  res.json({ ok: true });
+});
+
+app.post("/api/moderation/verify/:groupId", authMiddleware, async (req, res) => {
+  const me = await User.findById(req.userId);
+  if (me.globalRole !== "moderator" && me.globalRole !== "admin")
+    return res.status(403).json({ error: "Нет доступа" });
+  const group = await Group.findById(req.params.groupId);
+  if (!group) return res.status(404).json({ error: "Not found" });
+  group.isVerified = true;
+  group.verificationRequested = false;
+  await group.save();
+  res.json({ ok: true });
+});
+
+// ─── Helper: sanitize user ─────────────────────────────────
+function sanitizeUser(user) {
+  if (!user) return null;
+  const obj = user.toObject ? user.toObject() : user;
+  delete obj.password;
+  delete obj.friendRequests;
+  delete obj.friendRequestsSent;
+  return obj;
+}
+
+// ─── Health check ──────────────────────────────────────────
+app.get("/health", (req, res) => {
+  res.json({ status: "ok", online: onlineClients.size, uptime: process.uptime() });
+});
+
+// ─── Static frontend (если HTML/CSS/JS лежит в /public) ────
+app.use(express.static(path.join(__dirname, "public")));
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
+
+// ─── Start ─────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`Сервер мессенджера запущен на http://localhost:${PORT}`);
+  console.log(`[Server] Running on port ${PORT}`);
+  console.log(`[WebSocket] ws://localhost:${PORT}/ws`);
+});
+
+// Graceful shutdown
+process.on("SIGTERM", () => {
+  server.close(() => {
+    mongoose.connection.close(false, () => process.exit(0));
+  });
 });
