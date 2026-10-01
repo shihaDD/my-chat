@@ -107,6 +107,15 @@ async function initDatabase() {
     }
 }
 
+// --- DEBOUNCE для ускорения ---
+function debounce(func, delay) {
+    let timeoutId;
+    return (...args) => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => func(...args), delay);
+    };
+}
+
 async function saveDb() {
     try {
         await AppState.findOneAndUpdate(
@@ -133,6 +142,24 @@ async function saveDb() {
     } catch (e) {
         console.error('Ошибка сохранения базы данных в MongoDB:', e);
     }
+}
+
+function broadcastDb() {
+    io.emit('update-db', db);
+}
+
+// Debounced версии: сохраняем раз в 800мс, рассылаем раз в 200мс
+const debouncedSave = debounce(saveDb, 800);
+const debouncedBroadcast = debounce(broadcastDb, 200);
+
+function saveAndBroadcast() {
+    debouncedSave();
+    debouncedBroadcast();
+}
+
+// Принудительное сохранение (для критичных операций)
+async function saveDbNow() {
+    await saveDb();
 }
 
 function getUserGlobalRole(login) {
@@ -172,7 +199,7 @@ app.post('/api/register', async (req, res) => {
     db.friendRequests[cleanLogin] = [];
     db.outgoingRequests[cleanLogin] = [];
     db.lastSeen[cleanLogin] = Date.now();
-    await saveDb();
+    saveAndBroadcast();
 
     res.json({ success: true, user: db.users[cleanLogin], db });
 });
@@ -193,7 +220,7 @@ app.post('/api/login', async (req, res) => {
     }
 
     db.lastSeen[cleanLogin] = Date.now();
-    await saveDb();
+    saveAndBroadcast();
     res.json({ success: true, user, db });
 });
 
@@ -204,7 +231,7 @@ app.post('/api/restore-session', async (req, res) => {
     const user = db.users[cleanLogin];
     if (!user) return res.json({ success: false });
     db.lastSeen[cleanLogin] = Date.now();
-    await saveDb();
+    saveAndBroadcast();
     res.json({ success: true, user, db });
 });
 
@@ -219,8 +246,8 @@ app.post('/api/update-profile', async (req, res) => {
     if (bio !== undefined) db.users[cleanLogin].bio = bio.trim();
     if (avatar) db.users[cleanLogin].avatar = avatar;
     if (password) db.users[cleanLogin].password = password;
-    await saveDb();
-    res.json({ success: true, user: db.users[cleanLogin], db });
+    saveAndBroadcast();
+    res.json({ success: true, user: db.users[cleanLogin] });
 });
 
 app.post('/api/set-global-role', async (req, res) => {
@@ -231,9 +258,8 @@ app.post('/api/set-global-role', async (req, res) => {
     }
     if (!db.globalRoles) db.globalRoles = {};
     db.globalRoles[targetLogin.trim().toLowerCase()] = newRole;
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/remove-global-mute', async (req, res) => {
@@ -245,12 +271,10 @@ app.post('/api/remove-global-mute', async (req, res) => {
     if (db.mutedUsers && targetLogin) {
         delete db.mutedUsers[targetLogin.trim().toLowerCase()];
     }
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
-// FIX #14: /api/issue-global-mute - missing endpoint
 app.post('/api/issue-global-mute', async (req, res) => {
     const { login, targetLogin, muteMinutes, reason } = req.body;
     if (!hasFullAccess(login)) {
@@ -263,9 +287,8 @@ app.post('/api/issue-global-mute', async (req, res) => {
         expires: Date.now() + (clampedMins * 60 * 1000),
         reason: reason || 'Нарушение правил'
     };
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/add-friend', async (req, res) => {
@@ -287,9 +310,8 @@ app.post('/api/add-friend', async (req, res) => {
 
     db.friendRequests[cleanTarget].push(login);
     db.outgoingRequests[login].push(cleanTarget);
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/cancel-friend-request', async (req, res) => {
@@ -300,9 +322,8 @@ app.post('/api/cancel-friend-request', async (req, res) => {
     if (db.friendRequests && db.friendRequests[targetLogin]) {
         db.friendRequests[targetLogin] = db.friendRequests[targetLogin].filter(l => l !== login);
     }
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/respond-friend-request', async (req, res) => {
@@ -321,18 +342,16 @@ app.post('/api/respond-friend-request', async (req, res) => {
         if (!db.friends[login].includes(requesterLogin)) db.friends[login].push(requesterLogin);
         if (!db.friends[requesterLogin].includes(login)) db.friends[requesterLogin].push(login);
     }
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/remove-friend', async (req, res) => {
     const { login, targetLogin } = req.body;
     if (db.friends[login]) db.friends[login] = db.friends[login].filter(l => l !== targetLogin);
     if (db.friends[targetLogin]) db.friends[targetLogin] = db.friends[targetLogin].filter(l => l !== login);
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/create-group', async (req, res) => {
@@ -363,9 +382,8 @@ app.post('/api/create-group', async (req, res) => {
         isVerified: false,
         verificationPending: false
     };
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/delete-group', async (req, res) => {
@@ -380,12 +398,10 @@ app.post('/api/delete-group', async (req, res) => {
         return res.json({ success: false, error: 'Недостаточно прав!' });
     }
     delete db.groups[groupId];
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
-// FIX #12: /api/update-group-settings - alias for /api/update-group
 app.post('/api/update-group-settings', async (req, res) => {
     const { groupId, name, avatar, isClosed, login } = req.body;
     const group = db.groups[groupId];
@@ -396,9 +412,8 @@ app.post('/api/update-group-settings', async (req, res) => {
     if (name) group.name = name.trim();
     if (avatar) group.avatar = avatar;
     if (isClosed !== undefined) group.isClosed = !!isClosed;
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db, group });
+    saveAndBroadcast();
+    res.json({ success: true, group });
 });
 
 app.post('/api/update-group', async (req, res) => {
@@ -411,9 +426,8 @@ app.post('/api/update-group', async (req, res) => {
     if (name) group.name = name.trim();
     if (avatar) group.avatar = avatar;
     if (isClosed !== undefined) group.isClosed = !!isClosed;
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db, group });
+    saveAndBroadcast();
+    res.json({ success: true, group });
 });
 
 app.post('/api/leave-group', async (req, res) => {
@@ -426,9 +440,8 @@ app.post('/api/leave-group', async (req, res) => {
         const otherMembers = group.members.filter(m => m !== login);
         if (otherMembers.length === 0) {
             delete db.groups[groupId];
-            await saveDb();
-            io.emit('update-db', db);
-            return res.json({ success: true, db });
+            saveAndBroadcast();
+            return res.json({ success: true });
         }
         let nextLeader = otherMembers.find(m => group.roles?.[m] === 'Админ') || otherMembers[0];
         group.creator = nextLeader;
@@ -440,9 +453,8 @@ app.post('/api/leave-group', async (req, res) => {
     if (group.groupMutedUsers) delete group.groupMutedUsers[login];
     if (group.groupNicknames) delete group.groupNicknames[login];
 
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/group-mute-member', async (req, res) => {
@@ -469,9 +481,8 @@ app.post('/api/group-mute-member', async (req, res) => {
         };
     }
 
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/group-set-nickname', async (req, res) => {
@@ -496,9 +507,8 @@ app.post('/api/group-set-nickname', async (req, res) => {
         group.groupNicknames[targetLogin.toLowerCase()] = cleanNick;
     }
 
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/request-verification', async (req, res) => {
@@ -523,9 +533,8 @@ app.post('/api/request-verification', async (req, res) => {
         timestamp: Date.now()
     });
 
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/resolve-verification', async (req, res) => {
@@ -545,9 +554,8 @@ app.post('/api/resolve-verification', async (req, res) => {
     }
 
     db.verificationRequests = db.verificationRequests.filter(r => r.id !== requestId);
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/join-group', async (req, res) => {
@@ -562,10 +570,9 @@ app.post('/api/join-group', async (req, res) => {
     if (!group.members.includes(login)) {
         group.members.push(login);
         group.roles[login] = 'Участник';
-        await saveDb();
-        io.emit('update-db', db);
+        saveAndBroadcast();
     }
-    res.json({ success: true, db });
+    res.json({ success: true });
 });
 
 app.post('/api/request-join-group', async (req, res) => {
@@ -577,10 +584,9 @@ app.post('/api/request-join-group', async (req, res) => {
     if (!group.joinRequests) group.joinRequests = [];
     if (!group.joinRequests.includes(login)) {
         group.joinRequests.push(login);
-        await saveDb();
-        io.emit('update-db', db);
+        saveAndBroadcast();
     }
-    res.json({ success: true, db });
+    res.json({ success: true });
 });
 
 app.post('/api/respond-join-request', async (req, res) => {
@@ -603,9 +609,8 @@ app.post('/api/respond-join-request', async (req, res) => {
             group.roles[targetLogin] = 'Участник';
         }
     }
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/set-group-role', async (req, res) => {
@@ -619,12 +624,10 @@ app.post('/api/set-group-role', async (req, res) => {
     }
     if (!group.roles) group.roles = {};
     group.roles[targetLogin] = newRole;
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
-// FIX #13: /api/change-group-member-role - alias for /api/set-group-role
 app.post('/api/change-group-member-role', async (req, res) => {
     const { groupId, login, targetLogin, newRole } = req.body;
     const group = db.groups[groupId];
@@ -636,9 +639,8 @@ app.post('/api/change-group-member-role', async (req, res) => {
     }
     if (!group.roles) group.roles = {};
     group.roles[targetLogin] = newRole;
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/create-custom-role', async (req, res) => {
@@ -653,9 +655,8 @@ app.post('/api/create-custom-role', async (req, res) => {
     if (!cleanName) return res.json({ success: false, error: 'Введите название роли' });
 
     group.customRoles[cleanName] = permissions || { canPost: true, canDelete: true, canVoice: true, canDuplicateNews: false, canVoiceControl: false };
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/update-role-permissions', async (req, res) => {
@@ -667,9 +668,8 @@ app.post('/api/update-role-permissions', async (req, res) => {
     }
     if (!group.customRoles) group.customRoles = {};
     group.customRoles[roleName] = permissions;
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/delete-custom-role', async (req, res) => {
@@ -684,10 +684,9 @@ app.post('/api/delete-custom-role', async (req, res) => {
     }
     if (group.customRoles && group.customRoles[roleName]) {
         delete group.customRoles[roleName];
-        await saveDb();
-        io.emit('update-db', db);
+        saveAndBroadcast();
     }
-    res.json({ success: true, db });
+    res.json({ success: true });
 });
 
 app.post('/api/kick-group-member', async (req, res) => {
@@ -708,9 +707,8 @@ app.post('/api/kick-group-member', async (req, res) => {
     if (group.roles) delete group.roles[targetLogin];
     if (group.groupMutedUsers) delete group.groupMutedUsers[targetLogin];
     if (group.groupNicknames) delete group.groupNicknames[targetLogin];
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/create-subgroup', async (req, res) => {
@@ -729,9 +727,8 @@ app.post('/api/create-subgroup', async (req, res) => {
         type: type || 'text',
         allowedRole: allowedRole || 'all'
     });
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/delete-subgroup', async (req, res) => {
@@ -745,15 +742,10 @@ app.post('/api/delete-subgroup', async (req, res) => {
     if (group.subgroups) {
         group.subgroups = group.subgroups.filter(s => s.id !== subId);
     }
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
-// FIX #21: Client uses socket events send-message/send-group-message instead of HTTP API
-// These are handled in the socket.io section below
-
-// FIX #16: /api/edit-message - accept msgId (client) instead of messageId (server)
 app.post('/api/edit-message', async (req, res) => {
     const { login, msgId, messageId, newText } = req.body;
     const id = msgId || messageId;
@@ -773,15 +765,13 @@ app.post('/api/edit-message', async (req, res) => {
     }
 
     if (found) {
-        await saveDb();
-        io.emit('update-db', db);
-        res.json({ success: true, db });
+        saveAndBroadcast();
+        res.json({ success: true });
     } else {
         res.json({ success: false, error: 'Сообщение не найдено' });
     }
 });
 
-// FIX #17: /api/delete-message - accept msgId (client) instead of messageId (server)
 app.post('/api/delete-message', async (req, res) => {
     const { login, msgId, messageId } = req.body;
     const id = msgId || messageId;
@@ -802,9 +792,8 @@ app.post('/api/delete-message', async (req, res) => {
     }
 
     if (found) {
-        await saveDb();
-        io.emit('update-db', db);
-        res.json({ success: true, db });
+        saveAndBroadcast();
+        res.json({ success: true });
     } else {
         res.json({ success: false, error: 'Сообщение не найдено' });
     }
@@ -814,22 +803,19 @@ app.post('/api/pin-message', async (req, res) => {
     const { login, messageId, chatKey } = req.body;
     if (!db.pinnedMessages) db.pinnedMessages = {};
     db.pinnedMessages[chatKey] = messageId;
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/unpin-message', async (req, res) => {
     const { chatKey } = req.body;
     if (db.pinnedMessages && db.pinnedMessages[chatKey]) {
         delete db.pinnedMessages[chatKey];
-        await saveDb();
-        io.emit('update-db', db);
+        saveAndBroadcast();
     }
-    res.json({ success: true, db });
+    res.json({ success: true });
 });
 
-// FIX #11: /api/create-news - alias for /api/publish-news (client uses /api/create-news)
 app.post('/api/create-news', async (req, res) => {
     const { login, text, media } = req.body;
     if (!hasFullAccess(login)) {
@@ -858,9 +844,8 @@ app.post('/api/create-news', async (req, res) => {
         });
     }
 
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/publish-news', async (req, res) => {
@@ -891,9 +876,8 @@ app.post('/api/publish-news', async (req, res) => {
         });
     }
 
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/delete-news', async (req, res) => {
@@ -904,13 +888,10 @@ app.post('/api/delete-news', async (req, res) => {
         return res.json({ success: false, error: 'Недостаточно прав' });
     }
     db.news = db.news.filter(p => p.id !== postId);
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
-// FIX #10: /api/create-group-post - alias for /api/publish-group-post
-// FIX #5: Client sends isAnnouncement, server expects announcement
 app.post('/api/create-group-post', async (req, res) => {
     const { groupId, login, text, isAnnouncement, announcement } = req.body;
     const group = db.groups[groupId];
@@ -966,9 +947,8 @@ app.post('/api/create-group-post', async (req, res) => {
         });
     }
 
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/publish-group-post', async (req, res) => {
@@ -1025,9 +1005,8 @@ app.post('/api/publish-group-post', async (req, res) => {
         });
     }
 
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/delete-group-post', async (req, res) => {
@@ -1048,9 +1027,8 @@ app.post('/api/delete-group-post', async (req, res) => {
     }
 
     group.posts = group.posts.filter(p => p.id !== postId);
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
 app.post('/api/resolve-violation-action', async (req, res) => {
@@ -1106,12 +1084,10 @@ app.post('/api/resolve-violation-action', async (req, res) => {
     }
 
     db.violations = db.violations.filter(v => v.id !== violId);
-    await saveDb();
-    io.emit('update-db', db);
-    res.json({ success: true, db });
+    saveAndBroadcast();
+    res.json({ success: true });
 });
 
-// FIX #15: /api/internet-news - missing endpoint
 app.get('/api/internet-news', async (req, res) => {
     try {
         const response = await fetch('https://newsapi.org/v2/top-headlines?country=ru&apiKey=demo&pageSize=10');
@@ -1133,7 +1109,6 @@ app.get('/api/internet-news', async (req, res) => {
 });
 
 // ====== SOCKET.IO ======
-// All socket events rewritten to match the client's event names and properties
 
 io.on('connection', (socket) => {
     socket.on('register', (login) => {
@@ -1145,42 +1120,33 @@ io.on('connection', (socket) => {
     });
 
     socket.on('refresh-db', () => {
-        io.emit('update-db', db);
+        socket.emit('update-db', db);
     });
 
     socket.on('join-group-room', (groupId) => {
         socket.join(`group_${groupId}`);
     });
 
-    // FIX #1: call-user - client sends { offer, to, from }
     socket.on('call-user', ({ offer, to, from }) => {
         io.to(to.toLowerCase()).emit('incoming-call', { offer, from });
     });
 
-    // FIX #2: make-answer - client sends { answer, to }
-    // FIX #22: client listens for call-answered (not call-accepted)
     socket.on('make-answer', ({ answer, to }) => {
         io.to(to.toLowerCase()).emit('call-answered', { answer, from: socket.userLogin });
     });
 
-    // FIX #3: reject-call - client sends { to }
     socket.on('reject-call', ({ to }) => {
         io.to(to.toLowerCase()).emit('call-rejected');
     });
 
-    // FIX #4: hang-up - client sends { to }
-    // FIX #23: client listens for call-ended (not call-hangup)
     socket.on('hang-up', ({ to }) => {
         io.to(to.toLowerCase()).emit('call-ended');
     });
 
-    // FIX #4b: ice-candidate - client sends { candidate, to }
-    // Client listens for ice-candidate with { candidate, from }
     socket.on('ice-candidate', ({ candidate, to }) => {
         io.to(to.toLowerCase()).emit('ice-candidate', { candidate, from: socket.userLogin });
     });
 
-    // FIX #21: send-message - client sends { sender, receiver, msg }
     socket.on('send-message', ({ sender, receiver, msg }) => {
         const storeKey = [sender, receiver].sort().join('_');
         if (!db.messagesStore[storeKey]) db.messagesStore[storeKey] = [];
@@ -1199,21 +1165,18 @@ io.on('connection', (socket) => {
         }
         
         db.messagesStore[storeKey].push(msg);
-        saveDb();
+        saveAndBroadcast();
         
         io.to(receiver.toLowerCase()).emit('receive-message', { sender, receiver, msg });
         io.to(sender.toLowerCase()).emit('receive-message', { sender, receiver, msg });
-        io.emit('update-db', db);
     });
 
-    // FIX #21b: send-group-message - client sends { groupId, subgroup, msg }
     socket.on('send-group-message', ({ groupId, subgroup, msg }) => {
         const group = db.groups[groupId];
         if (!group) return;
         
         const sender = msg.sender;
         
-        // Check group mute
         if (group.groupMutedUsers?.[sender.toLowerCase()] && group.groupMutedUsers[sender.toLowerCase()].expires > Date.now()) {
             return;
         }
@@ -1237,15 +1200,11 @@ io.on('connection', (socket) => {
         }
         
         db.messagesStore[storeKey].push(msg);
-        saveDb();
+        saveAndBroadcast();
         
         io.emit('receive-group-message', { groupId, msg, subgroup: subgroup || 'main' });
-        io.emit('update-db', db);
     });
 
-    // FIX #5: join-voice-room - client sends { roomKey, login }
-    // FIX #8: client listens for voice-room-update (not voice-participants-update)
-    // FIX #9: client listens for voice-user-joined (not user-joined-voice)
     socket.on('join-voice-room', ({ roomKey, login }) => {
         socket.join(roomKey);
         socket.roomKey = roomKey;
@@ -1257,14 +1216,10 @@ io.on('connection', (socket) => {
 
         const participants = Array.from(global.voiceRooms[roomKey]);
         
-        // Send updated participant list to everyone in the room
         io.to(roomKey).emit('voice-room-update', { roomKey, participants });
-        
-        // Notify others that a new user joined
         socket.to(roomKey).emit('voice-user-joined', { login });
     });
 
-    // FIX #6: leave-voice-room - client sends { roomKey, login }
     socket.on('leave-voice-room', ({ roomKey, login }) => {
         socket.leave(roomKey);
         
@@ -1278,23 +1233,18 @@ io.on('connection', (socket) => {
         socket.voiceLogin = null;
     });
 
-    // FIX #20: voice-speaking - client sends { roomKey, login, isSpeaking }
     socket.on('voice-speaking', ({ roomKey, login, isSpeaking }) => {
         socket.to(roomKey).emit('user-speaking', { login, isSpeaking });
     });
 
-    // FIX #7a: voice-offer - client sends { offer, to, from }
     socket.on('voice-offer', ({ offer, to, from }) => {
         io.to(to.toLowerCase()).emit('voice-offer', { offer, from });
     });
 
-    // FIX #7b: voice-answer - client sends { answer, to }
-    // Client expects { answer, from }
     socket.on('voice-answer', ({ answer, to }) => {
         io.to(to.toLowerCase()).emit('voice-answer', { answer, from: socket.userLogin });
     });
 
-    // Admin voice action (kick/mute from voice channel)
     socket.on('admin-voice-action', ({ groupId, subId, targetLogin, action, adminLogin }) => {
         const group = db.groups[groupId];
         if (!group) return;
