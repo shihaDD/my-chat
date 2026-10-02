@@ -479,12 +479,8 @@
                             </div>
                         </div>
 
-                        <!-- Кнопка выхода из активного голосового канала -->
-                        <div id="active-voice-leave-bar" class="hidden">
-                            <button onclick="leaveGroupVoiceConference()" class="w-full bg-red-600 hover:bg-red-500 text-white py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-2 shadow">
-                                <span>🚪 Покинуть голосовой канал</span>
-                            </button>
-                        </div>
+                        <!-- Кнопка выхода скрыта — теперь ✕ рядом с ником -->
+                        <div id="active-voice-leave-bar" class="hidden"></div>
 
                         <div class="flex-1 overflow-y-auto p-3 space-y-4">
                             <div>
@@ -3056,10 +3052,10 @@
                             participants.forEach(pLogin => {
                                 const userObj = db.users[pLogin] || {};
                                 const isSpk = !!speakingUsersMap[pLogin];
-                                const isMe = (pLogin === currentUser.login);
+                                const isMe = pLogin === currentUser.login;
                                 participantsHTML += `
                                     <div class="flex items-center space-x-2 text-[11px] text-gray-300">
-                                        ${isMe ? `<button onclick="leaveGroupVoiceConference()" class="flex-shrink-0 w-5 h-5 flex items-center justify-center text-red-400 hover:text-red-300 hover:bg-red-900/40 rounded transition" title="Покинуть канал">✕</button>` : '<span class="flex-shrink-0 w-5 h-5"></span>'}
+                                        ${isMe ? '<button onclick="leaveGroupVoiceConference()" title="Покинуть канал" class="text-red-500 hover:text-red-400 font-bold text-sm flex-shrink-0 w-4 text-center leading-none transition">✕</button>' : '<span class="w-4 flex-shrink-0"></span>'}
                                         <div class="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 ${isSpk ? 'speaking-glow' : 'border border-gray-700'}">
                                             <img src="${getAvatar(userObj.avatar)}" class="w-full h-full object-cover">
                                         </div>
@@ -3876,14 +3872,13 @@
             hangUpCall();
         });
 
-        async function joinGroupVoiceConference(groupId, subgroupId) {
+        async async function joinGroupVoiceConference(groupId, subgroupId) {
             activeVoiceGroup = groupId;
             activeVoiceChannel = subgroupId;
             activeVoiceRoomKey = `${groupId}_sub_${subgroupId}`;
             isInCallOrConference = true;
 
-            document.getElementById('active-voice-leave-bar').classList.remove('hidden');
-            showCustomModal('Голосовой канал', 'Вы подключились к голосовому каналу группы!', false, null, '🎙️');
+                        showCustomModal('Голосовой канал', 'Вы подключились к голосовому каналу группы!', false, null, '🎙️');
 
             socket.emit('join-voice-room', { roomKey: activeVoiceRoomKey, login: currentUser.login });
 
@@ -3897,6 +3892,12 @@
         function leaveGroupVoiceConference() {
             if (activeVoiceRoomKey) {
                 socket.emit('leave-voice-room', { roomKey: activeVoiceRoomKey, login: currentUser.login });
+                // Локально обновляем список участников до очистки переменных
+                if (activeVoiceRoomsMap[activeVoiceRoomKey]) {
+                    activeVoiceRoomsMap[activeVoiceRoomKey] = activeVoiceRoomsMap[activeVoiceRoomKey].filter(l => l !== currentUser.login);
+                }
+                const grp = db.groups[activeGroupWorkspaceId];
+                if (grp) renderGroupWorkspaceSidebar(grp);
             }
             activeVoiceGroup = null;
             activeVoiceChannel = null;
@@ -3911,7 +3912,6 @@
             Object.values(voicePeerConnections).forEach(pc => pc.close());
             voicePeerConnections = {};
 
-            document.getElementById('active-voice-leave-bar').classList.add('hidden');
             showCustomModal('Голосовой канал', 'Вы покинули голосовой канал.', false, null, '🚪');
         }
 
