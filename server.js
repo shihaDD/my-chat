@@ -107,11 +107,11 @@ async function initDatabase() {
     }
 }
 
-// --- DEBOUNCE для записи в MongoDB ---
-let saveDbTimer = null;
+// --- DEBOUNCE для ускорения ---
+let saveTimer = null;
 let broadcastTimer = null;
 
-async function saveDbNow() {
+async function saveDb() {
     try {
         await AppState.findOneAndUpdate(
             { key: 'main_db' },
@@ -139,28 +139,27 @@ async function saveDbNow() {
     }
 }
 
-function saveDb() {
-    if (saveDbTimer) clearTimeout(saveDbTimer);
-    saveDbTimer = setTimeout(() => {
-        saveDbNow();
-        saveDbTimer = null;
-    }, 800);
-}
-
 function broadcastDb() {
-    if (broadcastTimer) clearTimeout(broadcastTimer);
-    broadcastTimer = setTimeout(() => {
-        io.emit('update-db', db);
-        broadcastTimer = null;
-    }, 200);
+    io.emit('update-db', db);
 }
 
-// Единая функция: сохраняет БД (debounced), рассылает (debounced), и возвращает ответ с db
+// Debounced версии: запись в БД не чаще 800мс, рассылка не чаще 200мс
+function debouncedSave() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => { saveDb(); saveTimer = null; }, 800);
+}
+
+function debouncedBroadcast() {
+    if (broadcastTimer) clearTimeout(broadcastTimer);
+    broadcastTimer = setTimeout(() => { broadcastDb(); broadcastTimer = null; }, 200);
+}
+
+// Единая функция: сохраняет (debounced), рассылает (debounced), возвращает db для ответа API
 function saveAndBroadcast(res, extra) {
-    saveDb();
-    broadcastDb();
+    debouncedSave();
+    debouncedBroadcast();
     if (res && typeof res.json === 'function') {
-        res.json({ success: true, db, ...extra });
+        res.json({ success: true, db, ...(extra || {}) });
     }
 }
 
@@ -201,9 +200,8 @@ app.post('/api/register', async (req, res) => {
     db.friendRequests[cleanLogin] = [];
     db.outgoingRequests[cleanLogin] = [];
     db.lastSeen[cleanLogin] = Date.now();
-    saveDb();
 
-    res.json({ success: true, user: db.users[cleanLogin], db });
+    saveAndBroadcast(res, { user: db.users[cleanLogin] });
 });
 
 app.post('/api/login', async (req, res) => {
@@ -222,8 +220,7 @@ app.post('/api/login', async (req, res) => {
     }
 
     db.lastSeen[cleanLogin] = Date.now();
-    saveDb();
-    res.json({ success: true, user, db });
+    saveAndBroadcast(res, { user });
 });
 
 app.post('/api/restore-session', async (req, res) => {
@@ -233,8 +230,7 @@ app.post('/api/restore-session', async (req, res) => {
     const user = db.users[cleanLogin];
     if (!user) return res.json({ success: false });
     db.lastSeen[cleanLogin] = Date.now();
-    saveDb();
-    res.json({ success: true, user, db });
+    saveAndBroadcast(res, { user });
 });
 
 app.post('/api/update-profile', async (req, res) => {
@@ -248,9 +244,7 @@ app.post('/api/update-profile', async (req, res) => {
     if (bio !== undefined) db.users[cleanLogin].bio = bio.trim();
     if (avatar) db.users[cleanLogin].avatar = avatar;
     if (password) db.users[cleanLogin].password = password;
-    saveDb();
-    broadcastDb();
-    res.json({ success: true, user: db.users[cleanLogin], db });
+    saveAndBroadcast(res, { user: db.users[cleanLogin] });
 });
 
 app.post('/api/set-global-role', async (req, res) => {
@@ -557,10 +551,8 @@ app.post('/api/join-group', async (req, res) => {
     if (!group.members.includes(login)) {
         group.members.push(login);
         group.roles[login] = 'Участник';
-        saveAndBroadcast(res);
-        return;
     }
-    res.json({ success: true, db });
+    saveAndBroadcast(res);
 });
 
 app.post('/api/request-join-group', async (req, res) => {
@@ -572,10 +564,8 @@ app.post('/api/request-join-group', async (req, res) => {
     if (!group.joinRequests) group.joinRequests = [];
     if (!group.joinRequests.includes(login)) {
         group.joinRequests.push(login);
-        saveAndBroadcast(res);
-        return;
     }
-    res.json({ success: true, db });
+    saveAndBroadcast(res);
 });
 
 app.post('/api/respond-join-request', async (req, res) => {
@@ -668,10 +658,8 @@ app.post('/api/delete-custom-role', async (req, res) => {
     }
     if (group.customRoles && group.customRoles[roleName]) {
         delete group.customRoles[roleName];
-        saveAndBroadcast(res);
-        return;
     }
-    res.json({ success: true, db });
+    saveAndBroadcast(res);
 });
 
 app.post('/api/kick-group-member', async (req, res) => {
@@ -790,10 +778,8 @@ app.post('/api/unpin-message', async (req, res) => {
     const { chatKey } = req.body;
     if (db.pinnedMessages && db.pinnedMessages[chatKey]) {
         delete db.pinnedMessages[chatKey];
-        saveAndBroadcast(res);
-        return;
     }
-    res.json({ success: true, db });
+    saveAndBroadcast(res);
 });
 
 app.post('/api/create-news', async (req, res) => {
@@ -1093,7 +1079,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('refresh-db', () => {
-        socket.emit('update-db', db);
+        io.emit('update-db', db);
     });
 
     socket.on('join-group-room', (groupId) => {
@@ -1138,11 +1124,11 @@ io.on('connection', (socket) => {
         }
         
         db.messagesStore[storeKey].push(msg);
-        saveDb();
+        debouncedSave();
         
         io.to(receiver.toLowerCase()).emit('receive-message', { sender, receiver, msg });
         io.to(sender.toLowerCase()).emit('receive-message', { sender, receiver, msg });
-        broadcastDb();
+        debouncedBroadcast();
     });
 
     socket.on('send-group-message', ({ groupId, subgroup, msg }) => {
@@ -1174,10 +1160,10 @@ io.on('connection', (socket) => {
         }
         
         db.messagesStore[storeKey].push(msg);
-        saveDb();
+        debouncedSave();
         
         io.emit('receive-group-message', { groupId, msg, subgroup: subgroup || 'main' });
-        broadcastDb();
+        debouncedBroadcast();
     });
 
     socket.on('join-voice-room', ({ roomKey, login }) => {
@@ -1201,7 +1187,9 @@ io.on('connection', (socket) => {
         if (global.voiceRooms && global.voiceRooms[roomKey] && login) {
             global.voiceRooms[roomKey].delete(login);
             const participants = Array.from(global.voiceRooms[roomKey]);
+            // Отправляем обновление всем в комнате И уходящему пользователю
             io.to(roomKey).emit('voice-room-update', { roomKey, participants });
+            socket.emit('voice-room-update', { roomKey, participants });
         }
         
         socket.roomKey = null;
