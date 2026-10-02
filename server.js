@@ -55,47 +55,6 @@ let db = {
     mutedUsers: {}
 };
 
-// ====== DEBOUNCE для ускорения ======
-let saveDbTimer = null;
-let broadcastTimer = null;
-let savePending = false;
-let broadcastPending = false;
-
-function saveDbDebounced() {
-    savePending = true;
-    if (saveDbTimer) return;
-    saveDbTimer = setTimeout(async () => {
-        saveDbTimer = null;
-        if (savePending) {
-            savePending = false;
-            await saveDb();
-        }
-    }, 800);
-}
-
-function broadcastDbDebounced() {
-    broadcastPending = true;
-    if (broadcastTimer) return;
-    broadcastTimer = setTimeout(() => {
-        broadcastTimer = null;
-        if (broadcastPending) {
-            broadcastPending = false;
-            io.emit('update-db', db);
-        }
-    }, 200);
-}
-
-// ВАЖНО: res.json отдаёт db мгновенно из памяти (без ожидания записи)
-// saveDb и broadcast — дебаунсятся
-function saveAndBroadcast(res, extra) {
-    saveDbDebounced();
-    broadcastDbDebounced();
-    if (res) {
-        const payload = { success: true, db, ...(extra || {}) };
-        return res.json(payload);
-    }
-}
-
 async function initDatabase() {
     try {
         await mongoose.connect(MONGO_URI);
@@ -148,6 +107,10 @@ async function initDatabase() {
     }
 }
 
+// --- Debounced saveDb and broadcastDb for performance ---
+let saveTimer = null;
+let broadcastTimer = null;
+
 async function saveDb() {
     try {
         await AppState.findOneAndUpdate(
@@ -174,6 +137,29 @@ async function saveDb() {
     } catch (e) {
         console.error('Ошибка сохранения базы данных в MongoDB:', e);
     }
+}
+
+function broadcastDb() {
+    io.emit('update-db', db);
+}
+
+function debouncedSave() {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => { saveDb(); }, 800);
+}
+
+function debouncedBroadcast() {
+    if (broadcastTimer) clearTimeout(broadcastTimer);
+    broadcastTimer = setTimeout(() => { broadcastDb(); }, 200);
+}
+
+// Helper: save, broadcast, and return db in response
+function saveAndBroadcast(res, extra) {
+    debouncedSave();
+    debouncedBroadcast();
+    const response = { success: true, db };
+    if (extra) Object.assign(response, extra);
+    return res.json(response);
 }
 
 function getUserGlobalRole(login) {
@@ -213,8 +199,8 @@ app.post('/api/register', async (req, res) => {
     db.friendRequests[cleanLogin] = [];
     db.outgoingRequests[cleanLogin] = [];
     db.lastSeen[cleanLogin] = Date.now();
-    
-    return saveAndBroadcast(res, { user: db.users[cleanLogin] });
+
+    return saveAndBroadcast(res);
 });
 
 app.post('/api/login', async (req, res) => {
@@ -233,10 +219,7 @@ app.post('/api/login', async (req, res) => {
     }
 
     db.lastSeen[cleanLogin] = Date.now();
-    saveDbDebounced();
-    
-    // Возвращаем db мгновенно — без ожидания записи
-    return res.json({ success: true, user, db });
+    return saveAndBroadcast(res, { user });
 });
 
 app.post('/api/restore-session', async (req, res) => {
@@ -246,8 +229,7 @@ app.post('/api/restore-session', async (req, res) => {
     const user = db.users[cleanLogin];
     if (!user) return res.json({ success: false });
     db.lastSeen[cleanLogin] = Date.now();
-    saveDbDebounced();
-    return res.json({ success: true, user, db });
+    return saveAndBroadcast(res, { user });
 });
 
 app.post('/api/update-profile', async (req, res) => {
@@ -261,7 +243,6 @@ app.post('/api/update-profile', async (req, res) => {
     if (bio !== undefined) db.users[cleanLogin].bio = bio.trim();
     if (avatar) db.users[cleanLogin].avatar = avatar;
     if (password) db.users[cleanLogin].password = password;
-    
     return saveAndBroadcast(res, { user: db.users[cleanLogin] });
 });
 
@@ -837,13 +818,14 @@ app.post('/api/publish-news', async (req, res) => {
     }
     if (!db.news) db.news = [];
     const postId = 'news_' + Date.now();
-    db.news.unshift({
+    const post = {
         id: postId,
         author: login,
         text: text || '',
         media: media || null,
         timestamp: Date.now()
-    });
+    };
+    db.news.unshift(post);
 
     if (containsMat(text)) {
         if (!db.violations) db.violations = [];
@@ -1007,6 +989,9 @@ app.post('/api/delete-group-post', async (req, res) => {
     return saveAndBroadcast(res);
 });
 
+// ====== ИСПРАВЛЕНИЕ: resolve-violation-action ======
+// При редактировании нарушения теперь обновляется не только новость,
+// но и оригинальный пост в ленте постов сообщества
 app.post('/api/resolve-violation-action', async (req, res) => {
     const { login, violId, action, newText, muteMinutes, reason } = req.body;
     if (!hasFullAccess(login)) return res.json({ success: false, error: 'Недостаточно прав' });
@@ -1036,6 +1021,23 @@ app.post('/api/resolve-violation-action', async (req, res) => {
             text: newText,
             timestamp: Date.now()
         });
+        // ИСПРАВЛЕНИЕ: Также обновляем оригинальный пост в ленте постов сообщества
+        if (viol.groupId && viol.groupPostId && db.groups[viol.groupId]) {
+            const grp = db.groups[viol.groupId];
+            if (grp.posts) {
+                const gpost = grp.posts.find(p => p.id === viol.groupPostId);
+                if (gpost) {
+                    gpost.text = newText;
+                }
+            }
+        }
+        // Также обновляем сообщение в чате, если нарушение из чата
+        if (viol.messageId && viol.storeKey && db.messagesStore[viol.storeKey]) {
+            const msg = db.messagesStore[viol.storeKey].find(m => m.id === viol.messageId);
+            if (msg) {
+                msg.text = newText;
+            }
+        }
     } else if (action === 'mute') {
         if (!db.mutedUsers) db.mutedUsers = {};
         const mins = parseInt(muteMinutes) || 60;
@@ -1084,7 +1086,6 @@ app.get('/api/internet-news', async (req, res) => {
 });
 
 // ====== SOCKET.IO ======
-
 io.on('connection', (socket) => {
     socket.on('register', (login) => {
         if (login) {
@@ -1095,7 +1096,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('refresh-db', () => {
-        io.emit('update-db', db);
+        broadcastDb();
     });
 
     socket.on('join-group-room', (groupId) => {
@@ -1140,11 +1141,11 @@ io.on('connection', (socket) => {
         }
         
         db.messagesStore[storeKey].push(msg);
-        saveDbDebounced();
+        debouncedSave();
         
         io.to(receiver.toLowerCase()).emit('receive-message', { sender, receiver, msg });
         io.to(sender.toLowerCase()).emit('receive-message', { sender, receiver, msg });
-        broadcastDbDebounced();
+        debouncedBroadcast();
     });
 
     socket.on('send-group-message', ({ groupId, subgroup, msg }) => {
@@ -1176,10 +1177,10 @@ io.on('connection', (socket) => {
         }
         
         db.messagesStore[storeKey].push(msg);
-        saveDbDebounced();
+        debouncedSave();
         
         io.emit('receive-group-message', { groupId, msg, subgroup: subgroup || 'main' });
-        broadcastDbDebounced();
+        debouncedBroadcast();
     });
 
     socket.on('join-voice-room', ({ roomKey, login }) => {
@@ -1194,7 +1195,6 @@ io.on('connection', (socket) => {
         const participants = Array.from(global.voiceRooms[roomKey]);
         
         io.to(roomKey).emit('voice-room-update', { roomKey, participants });
-        
         socket.to(roomKey).emit('voice-user-joined', { login });
     });
 
@@ -1204,8 +1204,8 @@ io.on('connection', (socket) => {
         if (global.voiceRooms && global.voiceRooms[roomKey] && login) {
             global.voiceRooms[roomKey].delete(login);
             const participants = Array.from(global.voiceRooms[roomKey]);
-            // Отправляем ВСЕМ, включая уходящего
             io.to(roomKey).emit('voice-room-update', { roomKey, participants });
+            // Также отправляем уходящему пользователю обновлённый список
             socket.emit('voice-room-update', { roomKey, participants });
         }
         
@@ -1240,7 +1240,6 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         if (socket.userLogin) {
             db.lastSeen[socket.userLogin] = Date.now();
-            saveDbDebounced();
         }
         if (socket.roomKey && socket.voiceLogin) {
             if (global.voiceRooms && global.voiceRooms[socket.roomKey]) {
