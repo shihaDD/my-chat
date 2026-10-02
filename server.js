@@ -182,15 +182,12 @@ function containsMat(text) {
     return matRegex.test(text);
 }
 
-// Helper: extract groupId from roomKey (format: group_id_sub_subgroupId)
+// ====== Helper: extract group ID from voice room key ======
 function extractGroupIdFromRoomKey(roomKey) {
-    if (!roomKey) return null;
-    const parts = roomKey.split('_sub_');
-    if (parts.length >= 2) {
-        // parts[0] is like "group_1234567890" — return the full group id
-        return parts[0];
-    }
-    return null;
+    const match = roomKey.match(/^group_(.+?)_(?:sub_|voice_)/);
+    if (match) return match[1];
+    const match2 = roomKey.match(/^group_(.+?)$/);
+    return match2 ? match2[1] : null;
 }
 
 // ====== API ROUTES ======
@@ -998,7 +995,7 @@ app.post('/api/delete-group-post', async (req, res) => {
     return saveAndBroadcast(res);
 });
 
-// ====== ИСПРАВЛЕНИЕ: resolve-violation-action ======
+// ====== resolve-violation-action ======
 app.post('/api/resolve-violation-action', async (req, res) => {
     const { login, violId, action, newText, muteMinutes, reason } = req.body;
     if (!hasFullAccess(login)) return res.json({ success: false, error: 'Недостаточно прав' });
@@ -1012,7 +1009,7 @@ app.post('/api/resolve-violation-action', async (req, res) => {
         db.news.unshift({
             id: 'news_' + Date.now(),
             author: viol.author,
-            sourceGroup: viol.groupId ? { name: viol.groupName || '', isVerified: !!db.groups[viol.groupId]?.isVerified, avatar: db.groups[viol.groupId]?.avatar || '' } : null,
+            sourceGroup: viol.groupName ? { name: viol.groupName, isVerified: viol.groupId ? !!db.groups[viol.groupId]?.isVerified : false } : null,
             text: viol.text,
             timestamp: Date.now()
         });
@@ -1022,7 +1019,7 @@ app.post('/api/resolve-violation-action', async (req, res) => {
         db.news.unshift({
             id: 'news_' + Date.now(),
             author: viol.author,
-            sourceGroup: viol.groupId ? { name: viol.groupName || '', isVerified: !!db.groups[viol.groupId]?.isVerified, avatar: db.groups[viol.groupId]?.avatar || '' } : null,
+            sourceGroup: viol.groupName ? { name: viol.groupName, isVerified: viol.groupId ? !!db.groups[viol.groupId]?.isVerified : false } : null,
             text: newText,
             timestamp: Date.now()
         });
@@ -1106,15 +1103,23 @@ io.on('connection', (socket) => {
         socket.join(`group_${groupId}`);
     });
 
-    // ===== NEW: workspace room for real-time voice updates =====
     socket.on('join-group-workspace', (groupId) => {
         socket.join(`workspace_${groupId}`);
-        socket.workspaceGroupId = groupId;
     });
 
     socket.on('leave-group-workspace', (groupId) => {
         socket.leave(`workspace_${groupId}`);
-        socket.workspaceGroupId = null;
+    });
+
+    socket.on('send-saved-message', ({ login, msg }) => {
+        if (!login) return;
+        const chatKey = `saved_${login.toLowerCase()}`;
+        if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
+        if (!db.messagesStore[chatKey].find(m => m.id === msg.id)) {
+            db.messagesStore[chatKey].push(msg);
+        }
+        debouncedSave();
+        debouncedBroadcast();
     });
 
     socket.on('call-user', ({ offer, to, from }) => {
@@ -1208,14 +1213,12 @@ io.on('connection', (socket) => {
 
         const participants = Array.from(global.voiceRooms[roomKey]);
         
-        // Emit to voice room participants
         io.to(roomKey).emit('voice-room-update', { roomKey, participants });
-        // ===== NEW: Also emit to workspace room so non-voice users see real-time updates =====
-        const gid = extractGroupIdFromRoomKey(roomKey);
-        if (gid) {
-            io.to(`workspace_${gid}`).emit('voice-room-update', { roomKey, participants });
-        }
         socket.to(roomKey).emit('voice-user-joined', { login });
+        
+        // Also notify workspace
+        const gid = extractGroupIdFromRoomKey(roomKey);
+        if (gid) io.to(`workspace_${gid}`).emit('voice-room-update', { roomKey, participants });
     });
 
     socket.on('leave-voice-room', ({ roomKey, login }) => {
@@ -1224,15 +1227,11 @@ io.on('connection', (socket) => {
         if (global.voiceRooms && global.voiceRooms[roomKey] && login) {
             global.voiceRooms[roomKey].delete(login);
             const participants = Array.from(global.voiceRooms[roomKey]);
-            // Emit to voice room participants
             io.to(roomKey).emit('voice-room-update', { roomKey, participants });
-            // Also to the leaving user
             socket.emit('voice-room-update', { roomKey, participants });
-            // ===== NEW: Also emit to workspace room =====
+            
             const gid = extractGroupIdFromRoomKey(roomKey);
-            if (gid) {
-                io.to(`workspace_${gid}`).emit('voice-room-update', { roomKey, participants });
-            }
+            if (gid) io.to(`workspace_${gid}`).emit('voice-room-update', { roomKey, participants });
         }
         
         socket.roomKey = null;
@@ -1241,11 +1240,8 @@ io.on('connection', (socket) => {
 
     socket.on('voice-speaking', ({ roomKey, login, isSpeaking }) => {
         socket.to(roomKey).emit('user-speaking', { login, isSpeaking });
-        // ===== NEW: Also emit to workspace room =====
         const gid = extractGroupIdFromRoomKey(roomKey);
-        if (gid) {
-            socket.to(`workspace_${gid}`).emit('user-speaking', { login, isSpeaking });
-        }
+        if (gid) socket.to(`workspace_${gid}`).emit('user-speaking', { login, isSpeaking });
     });
 
     socket.on('voice-offer', ({ offer, to, from }) => {
@@ -1277,11 +1273,9 @@ io.on('connection', (socket) => {
                 global.voiceRooms[socket.roomKey].delete(socket.voiceLogin);
                 const participants = Array.from(global.voiceRooms[socket.roomKey]);
                 io.to(socket.roomKey).emit('voice-room-update', { roomKey: socket.roomKey, participants });
-                // ===== NEW: Also emit to workspace room =====
+                
                 const gid = extractGroupIdFromRoomKey(socket.roomKey);
-                if (gid) {
-                    io.to(`workspace_${gid}`).emit('voice-room-update', { roomKey: socket.roomKey, participants });
-                }
+                if (gid) io.to(`workspace_${gid}`).emit('voice-room-update', { roomKey: socket.roomKey, participants });
             }
         }
     });
