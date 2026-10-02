@@ -480,11 +480,7 @@
                         </div>
 
                         <!-- Кнопка выхода из активного голосового канала -->
-                        <div id="active-voice-leave-bar" class="p-2 border-b border-gray-800 bg-red-950/40 hidden">
-                            <button onclick="leaveGroupVoiceConference()" class="w-full bg-red-600 hover:bg-red-500 text-white py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-2 shadow">
-                                <span>🚪 Покинуть голосовой канал</span>
-                            </button>
-                        </div>
+                        <div id="active-voice-leave-bar" class="hidden"></div>
 
                         <div class="flex-1 overflow-y-auto p-3 space-y-4">
                             <div>
@@ -3056,12 +3052,14 @@
                             participants.forEach(pLogin => {
                                 const userObj = db.users[pLogin] || {};
                                 const isSpk = !!speakingUsersMap[pLogin];
+                                const isSelf = pLogin === currentUser.login;
                                 participantsHTML += `
                                     <div class="flex items-center space-x-2 text-[11px] text-gray-300">
+                                        ${isSelf ? `<button onclick="leaveGroupVoiceConference()" title="Покинуть канал" class="w-5 h-5 flex items-center justify-center flex-shrink-0 text-red-400 hover:text-red-300 hover:bg-red-600/20 rounded-md transition font-bold text-xs">✕</button>` : '<div class="w-5 h-5 flex-shrink-0"></div>'}
                                         <div class="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 ${isSpk ? 'speaking-glow' : 'border border-gray-700'}">
                                             <img src="${getAvatar(userObj.avatar)}" class="w-full h-full object-cover">
                                         </div>
-                                        <span class="truncate font-medium text-gray-200">@${pLogin}</span>
+                                        <span class="truncate font-medium ${isSpk ? 'text-green-400 font-bold' : 'text-gray-200'}">@${pLogin}</span>
                                         ${isSpk ? '<span class="text-[9px] text-green-400 ml-auto animate-pulse">🎤</span>' : ''}
                                     </div>
                                 `;
@@ -3250,8 +3248,7 @@
 
             let allPosts = [];
             Object.values(db.groups || {}).forEach(g => {
-                // Показываем посты только из групп, в которых состоит пользователь
-                if (g.posts && g.members && g.members.includes(currentUser.login)) {
+                if (g.posts) {
                     g.posts.forEach(p => {
                         allPosts.push({ ...p, groupName: g.name, groupAvatar: g.avatar, groupId: g.id, isGroupVerified: g.isVerified });
                     });
@@ -3896,7 +3893,11 @@
         function leaveGroupVoiceConference() {
             if (activeVoiceRoomKey) {
                 socket.emit('leave-voice-room', { roomKey: activeVoiceRoomKey, login: currentUser.login });
+                if (activeVoiceRoomsMap[activeVoiceRoomKey]) {
+                    activeVoiceRoomsMap[activeVoiceRoomKey] = activeVoiceRoomsMap[activeVoiceRoomKey].filter(l => l !== currentUser.login);
+                }
             }
+            const grp = db.groups[activeGroupWorkspaceId];
             activeVoiceGroup = null;
             activeVoiceChannel = null;
             activeVoiceRoomKey = null;
@@ -3911,7 +3912,7 @@
             voicePeerConnections = {};
 
             document.getElementById('active-voice-leave-bar').classList.add('hidden');
-            showCustomModal('Голосовой канал', 'Вы покинули голосовой канал.', false, null, '🚪');
+            if (grp) renderGroupWorkspaceSidebar(grp);
         }
 
         socket.on('voice-user-joined', async ({ login }) => {
@@ -3931,6 +3932,7 @@
                 localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
             }
             await pc.setRemoteDescription(new RTCSessionDescription(offer));
+            processIceCandidateQueue(from);
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
             socket.emit('voice-answer', { answer, to: from });
@@ -3938,7 +3940,10 @@
 
         socket.on('voice-answer', async ({ answer, from }) => {
             const pc = voicePeerConnections[from];
-            if (pc) await pc.setRemoteDescription(new RTCSessionDescription(answer));
+            if (pc) {
+                await pc.setRemoteDescription(new RTCSessionDescription(answer));
+                processIceCandidateQueue(from);
+            }
         });
 
         function createVoicePeerConnection(targetLogin) {
@@ -4024,6 +4029,27 @@
                     authorHeaderHTML = `
                         <div class="flex items-center space-x-3">
                             <img src="${getAvatar(item.sourceGroup.avatar)}" class="w-10 h-10 rounded-2xl object-cover border border-purple-500">
+                            <div>
+                                <div class="flex items-center space-x-1">${groupNameHTML}</div>
+                                <div class="text-[10px] text-gray-400 flex items-center space-x-1">
+                                    <span>Автор:</span>
+                                    <span class="${roleBadge.color} font-medium ${isMuted ? 'line-through text-red-500' : ''}">@${item.author}</span>
+                                    ${roleBadge.badge ? `<span>${roleBadge.badge}</span>` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else if (item.groupName) {
+                    const isGroupVerified = !!item.groupVerified;
+                    const groupNameHTML = isGroupVerified ? 
+                        `<span class="verified-gradient-name font-bold text-sm">${item.groupName}</span> <span class="text-blue-400">✅</span>` : 
+                        `<span class="font-bold text-white text-sm">${item.groupName}</span>`;
+
+                    authorHeaderHTML = `
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 rounded-2xl bg-purple-600/20 flex items-center justify-center border border-purple-500">
+                                <span class="text-purple-300 text-lg">🏢</span>
+                            </div>
                             <div>
                                 <div class="flex items-center space-x-1">${groupNameHTML}</div>
                                 <div class="text-[10px] text-gray-400 flex items-center space-x-1">
