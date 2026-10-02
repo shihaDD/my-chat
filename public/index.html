@@ -898,7 +898,6 @@
         const socket = io();
 
         let currentUser = null;
-        const draftMap = {};
         let db = { users: {}, messagesStore: {}, friendRequests: {}, outgoingRequests: {}, friends: [], news: [], customNicknames: {}, groups: {}, lastSeen: {}, pinnedMessages: {}, globalRoles: {}, violations: [], groupPostRequests: {}, verificationRequests: {}, mutedUsers: {} };
         let activeChat = null;
         let activeGroupWorkspaceId = null;
@@ -1284,6 +1283,21 @@
         window.addEventListener('DOMContentLoaded', async () => {
             const savedLogin = localStorage.getItem('currentUserLogin');
             if (savedLogin) {
+                // IMMEDIATELY hide auth screen — show loading overlay
+                const authScreen = document.getElementById('auth-screen');
+                if (authScreen) {
+                    authScreen.classList.add('hidden');
+                }
+                // Show loading splash
+                let splash = document.getElementById('session-restore-splash');
+                if (!splash) {
+                    splash = document.createElement('div');
+                    splash.id = 'session-restore-splash';
+                    splash.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#0a0a0f;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px;';
+                    splash.innerHTML = '<div style="width:48px;height:48px;border:4px solid #a855f7;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;"></div><div style="color:#a855f7;font-size:14px;font-weight:600;">Восстановление сессии...</div><style>@keyframes spin{to{transform:rotate(360deg)}}</style>';
+                    document.body.appendChild(splash);
+                }
+
                 try {
                     const res = await fetch('/api/restore-session', {
                         method: 'POST',
@@ -1294,11 +1308,21 @@
                     if (data.success) {
                         currentUser = data.user;
                         db = data.db;
+                        // Remove splash
+                        splash.remove();
                         initApp();
                         checkUrlHashAction();
                         return;
+                    } else {
+                        // Session invalid — show auth screen
+                        splash.remove();
+                        if (authScreen) authScreen.classList.remove('hidden');
                     }
-                } catch (e) {}
+                } catch (e) {
+                    // Network error — show auth screen
+                    splash.remove();
+                    if (authScreen) authScreen.classList.remove('hidden');
+                }
             }
             checkUrlHashAction();
         });
@@ -1472,7 +1496,6 @@
                 `;
             }
 
-            renderFriends._lastKey = null;
             socket.emit('register', currentUser.login);
             requestNotificationPermission();
 
@@ -2053,21 +2076,22 @@
             const friendsListEl = document.getElementById('friends-list');
             if (!friendsListEl) return;
 
-            // Diff-based rendering: only rebuild if data actually changed
-            const myFriendsNow = (db.friends && currentUser && db.friends[currentUser.login]) ? db.friends[currentUser.login] : [];
-            const myRequestsNow = (db.friendRequests && currentUser && db.friendRequests[currentUser.login]) ? db.friendRequests[currentUser.login] : [];
-            const myOutgoingNow = (db.outgoingRequests && currentUser && db.outgoingRequests[currentUser.login]) ? db.outgoingRequests[currentUser.login] : [];
-            const friendsKey = myFriendsNow.join(',') + '|' + myRequestsNow.join(',') + '|' + myOutgoingNow.join(',');
-            if (renderFriends._lastKey === friendsKey && friendsListEl.children.length > 0) {
-                return; // No change — skip re-render to prevent flicker
+            // DIFF-RENDER: Compute fingerprint and skip if unchanged
+            if (!currentUser) return;
+            const myFriendsRaw = db.friends[currentUser.login] || [];
+            const myRequestsRaw = db.friendRequests[currentUser.login] || [];
+            const myOutgoingRaw = (db.outgoingRequests && db.outgoingRequests[currentUser.login]) || [];
+            const fingerprint = 'f:' + myFriendsRaw.join(',') + '|r:' + myRequestsRaw.join(',') + '|o:' + myOutgoingRaw.join(',');
+            if (renderFriends._lastFingerprint === fingerprint) {
+                return; // Nothing changed — don't rebuild DOM
             }
-            renderFriends._lastKey = friendsKey;
+            renderFriends._lastFingerprint = fingerprint;
 
             friendsListEl.innerHTML = '';
             
             const reqSection = document.getElementById('friend-requests-section');
             const reqList = document.getElementById('friend-requests-list');
-            const myRequests = db.friendRequests[currentUser.login] || [];
+            const myRequests = myRequestsRaw;
 
             updateFriendsBadge();
 
@@ -2221,19 +2245,32 @@
         }
 
         socket.on('update-db', (updatedDb) => {
-            if (!currentUser) { db = updatedDb; return; }
-            const oldRequestsCount = (db.friendRequests && db.friendRequests[currentUser.login]) ? db.friendRequests[currentUser.login].length : 0;
-            // Merge local messages before replacing db
+            // PROTECTION: Don't crash if currentUser is null (before login)
+            if (!currentUser) {
+                db = updatedDb;
+                return;
+            }
+
+            // Merge local optimistic messages into the new db
             if (db.messagesStore && updatedDb.messagesStore) {
                 for (let key in db.messagesStore) {
-                    if (!updatedDb.messagesStore[key]) updatedDb.messagesStore[key] = db.messagesStore[key];
-                    else {
-                        const localIds = new Set(db.messagesStore[key].map(m => m.id));
-                        const serverOnly = updatedDb.messagesStore[key].filter(m => !localIds.has(m.id));
-                        updatedDb.messagesStore[key] = [...db.messagesStore[key], ...serverOnly];
+                    if (!updatedDb.messagesStore[key]) {
+                        updatedDb.messagesStore[key] = [];
+                    }
+                    for (let m of db.messagesStore[key]) {
+                        if (!updatedDb.messagesStore[key].some(x => x.id === m.id)) {
+                            updatedDb.messagesStore[key].push(m);
+                        }
                     }
                 }
             }
+
+            const oldRequestsCount = (db.friendRequests && db.friendRequests[currentUser.login]) ? db.friendRequests[currentUser.login].length : 0;
+            
+            // Save current input value before replacing db
+            const inputEl = document.getElementById('message-input');
+            const savedInputValue = inputEl ? inputEl.value : '';
+            
             db = updatedDb;
             const newRequestsCount = (db.friendRequests && db.friendRequests[currentUser.login]) ? db.friendRequests[currentUser.login].length : 0;
 
@@ -2242,10 +2279,7 @@
                 showWebNotification('Новая заявка в друзья', 'У вас появился новый запрос на добавление в друзья!');
             }
 
-            // Save current input value before re-rendering
-            const _savedInput = document.getElementById(activeGroupWorkspaceId ? 'ws-message-input' : 'message-input');
-            const _savedInputVal = _savedInput ? _savedInput.value : '';
-
+            // Diff-render: only render friends if the data actually changed
             renderFriends();
             renderChatsList();
             renderGroups();
@@ -2258,11 +2292,10 @@
                 const grp = db.groups[activeGroupWorkspaceId];
                 if (grp) renderGroupWorkspaceSidebar(grp);
             }
-
-            // Restore input value after re-render
-            const _restoreInput = document.getElementById(activeGroupWorkspaceId ? 'ws-message-input' : 'message-input');
-            if (_restoreInput && _savedInputVal && !_restoreInput.value) {
-                _restoreInput.value = _savedInputVal;
+            
+            // Restore input value
+            if (inputEl && savedInputValue) {
+                inputEl.value = savedInputValue;
             }
         });
 
@@ -2272,7 +2305,9 @@
             const key = [sender, receiver].sort().join('_');
             if (!db.messagesStore[key]) db.messagesStore[key] = [];
             // Deduplicate by msg.id
-            if (db.messagesStore[key].some(m => m.id === msg.id)) return;
+            if (db.messagesStore[key].some(m => m.id === msg.id)) {
+                return;
+            }
             db.messagesStore[key].push(msg);
 
             if (sender !== currentUser.login) {
@@ -2290,11 +2325,14 @@
 
         socket.on('receive-group-message', ({ groupId, msg, subgroup }) => {
             if (!currentUser) return;
-            if (!db.messagesStore) db.messagesStore = {};
+            // Save to local store (was missing before!)
             const storeKey = `group_${groupId}_${subgroup || 'main'}`;
+            if (!db.messagesStore) db.messagesStore = {};
             if (!db.messagesStore[storeKey]) db.messagesStore[storeKey] = [];
             // Deduplicate by msg.id
-            if (db.messagesStore[storeKey].some(m => m.id === msg.id)) return;
+            if (db.messagesStore[storeKey].some(m => m.id === msg.id)) {
+                return;
+            }
             db.messagesStore[storeKey].push(msg);
 
             if (msg.sender !== currentUser.login) {
@@ -3049,7 +3087,15 @@
         }
 
         function openGroupWorkspace(groupId) {
+            // Save draft before switching
+            const inputEl = document.getElementById('message-input');
+            if (activeChat && inputEl) {
+                const oldKey = getChatDraftKey(activeChat);
+                if (oldKey) draftMap[oldKey] = inputEl.value;
+            }
+
             activeGroupWorkspaceId = groupId;
+            renderMessages._lastKey = null; // Reset render cache
             const group = db.groups[groupId];
             if (!group) return;
 
@@ -3064,15 +3110,15 @@
 
         function closeGroupWorkspace() {
             // Save draft before closing
-            if (activeGroupWorkspaceId && activeSubgroup) {
-                const wsInput = document.getElementById('ws-message-input');
-                if (wsInput) {
-                    const wsKey = `group_${activeGroupWorkspaceId}_${activeSubgroup}`;
-                    draftMap[wsKey] = wsInput.value;
-                }
+            const inputEl = document.getElementById('message-input');
+            if (activeChat && inputEl) {
+                const oldKey = getChatDraftKey(activeChat);
+                if (oldKey) draftMap[oldKey] = inputEl.value;
             }
+
             activeGroupWorkspaceId = null;
             activeSubgroup = 'main';
+            renderMessages._lastKey = null; // Reset render cache
             if (activeChat && activeChat.type === 'group') {
                 activeChat = null;
                 document.getElementById('no-chat-selected')?.classList.remove('hidden');
@@ -3162,16 +3208,15 @@
         }
 
         function selectSubgroup(subgroupId) {
-            // Save draft from current subgroup
-            if (activeGroupWorkspaceId && activeSubgroup) {
-                const oldInput = document.getElementById('ws-message-input');
-                if (oldInput) {
-                    const oldKey = `group_${activeGroupWorkspaceId}_${activeSubgroup}`;
-                    draftMap[oldKey] = oldInput.value;
-                }
+            // Save draft for old subgroup before switching
+            const inputEl = document.getElementById('message-input');
+            if (activeChat && inputEl) {
+                const oldKey = getChatDraftKey(activeChat);
+                if (oldKey) draftMap[oldKey] = inputEl.value;
             }
 
             activeSubgroup = subgroupId;
+            renderMessages._lastKey = null; // Reset render cache
             const group = db.groups[activeGroupWorkspaceId];
             if (!group) return;
 
@@ -3195,13 +3240,6 @@
             }
 
             selectChat({ type: 'group', id: group.id, subgroup: subgroupId });
-
-            // Restore draft for new subgroup
-            const subInput = document.getElementById('ws-message-input');
-            if (subInput) {
-                const newKey = `group_${group.id}_${subgroupId}`;
-                subInput.value = draftMap[newKey] || '';
-            }
         }
 
         let pendingChannelType = 'text';
@@ -3410,20 +3448,30 @@
             }, '⚠️');
         }
 
+        const draftMap = {};
+
+        function getChatDraftKey(chatInfo) {
+            if (!chatInfo) return null;
+            if (chatInfo.type === 'saved') return 'saved_' + chatInfo.id;
+            if (chatInfo.type === 'user') return 'user_' + chatInfo.id;
+            if (chatInfo.type === 'group') return 'group_' + chatInfo.id + '_' + (chatInfo.subgroup || 'main');
+            return null;
+        }
+
         function selectChat(chatInfo) {
-            // Save draft from current chat before switching
-            if (activeChat && currentUser) {
-                const oldInput = document.getElementById(activeGroupWorkspaceId ? 'ws-message-input' : 'message-input');
-                if (oldInput) {
-                    let oldKey = '';
-                    if (activeChat.type === 'saved') oldKey = `saved_${currentUser.login}`;
-                    else if (activeChat.type === 'user') oldKey = `user_${activeChat.id}`;
-                    else if (activeChat.type === 'group') oldKey = `group_${activeChat.id}_${activeChat.subgroup || 'main'}`;
-                    if (oldKey) draftMap[oldKey] = oldInput.value;
-                }
+            // Save draft for the OLD chat before switching
+            const inputEl = document.getElementById('message-input');
+            if (activeChat && inputEl) {
+                const oldKey = getChatDraftKey(activeChat);
+                if (oldKey) draftMap[oldKey] = inputEl.value;
             }
 
             activeChat = chatInfo;
+            
+            // Reset render cache so the new chat renders immediately
+            renderMessages._lastKey = null;
+            renderFriends._lastFingerprint = null;
+
             document.getElementById('no-chat-selected').classList.add('hidden');
             document.getElementById('chat-window').classList.remove('hidden');
 
@@ -3463,18 +3511,12 @@
             renderMessages();
             renderPinnedMessageBanner();
 
-            // Restore draft for new chat
-            const newInput = document.getElementById(activeGroupWorkspaceId ? 'ws-message-input' : 'message-input');
-            if (newInput && currentUser) {
-                let newKey = '';
-                if (chatInfo.type === 'saved') newKey = `saved_${currentUser.login}`;
-                else if (chatInfo.type === 'user') newKey = `user_${chatInfo.id}`;
-                else if (chatInfo.type === 'group') newKey = `group_${chatInfo.id}_${chatInfo.subgroup || 'main'}`;
-                newInput.value = (newKey && draftMap[newKey]) ? draftMap[newKey] : '';
+            // Restore draft for the NEW chat
+            const inputEl2 = document.getElementById('message-input');
+            if (inputEl2) {
+                const newKey = getChatDraftKey(chatInfo);
+                inputEl2.value = (newKey && draftMap[newKey]) ? draftMap[newKey] : '';
             }
-
-            // Reset renderMessages cache for new chat
-            renderMessages._lastKey = null;
             
             if (window.innerWidth <= 768) {
                 document.getElementById('chat-list-panel').classList.add('mobile-hidden');
@@ -3487,7 +3529,7 @@
 
         function renderMessages() {
             const container = document.getElementById(activeGroupWorkspaceId ? 'ws-messages-container' : 'messages-container');
-            if (!container || !activeChat) return;
+            if (!container || !activeChat || !currentUser) return;
             if (activeChat.type === 'group' && !activeGroupWorkspaceId) return;
 
             let messages = [];
@@ -3504,9 +3546,9 @@
                 messages = db.messagesStore[chatKey] || [];
             }
 
-            // Skip re-render if chat and message count unchanged
-            const renderKey = chatKey + '_' + messages.length;
-            if (renderMessages._lastKey === renderKey && container.children.length === messages.length && messages.length > 0) {
+            // RENDER CACHE: Skip if chat key and message count haven't changed
+            const renderKey = chatKey + ':' + messages.length + ':' + (messages.length > 0 ? messages[messages.length - 1].id : '');
+            if (renderMessages._lastKey === renderKey) {
                 return;
             }
             renderMessages._lastKey = renderKey;
@@ -3706,12 +3748,14 @@
                 db.messagesStore[chatKey].push(msgObj);
                 renderMessages();
             } else if (activeChat.type === 'user') {
+                // OPTIMISTIC UI: Add to local store immediately
                 const chatKey = [currentUser.login, activeChat.id].sort().join('_');
                 if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
                 db.messagesStore[chatKey].push(msgObj);
                 renderMessages();
                 socket.emit('send-message', { sender: currentUser.login, receiver: activeChat.id, msg: msgObj });
             } else if (activeChat.type === 'group') {
+                // OPTIMISTIC UI: Add to local store immediately
                 const chatKey = `group_${activeChat.id}_${activeChat.subgroup || 'main'}`;
                 if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
                 db.messagesStore[chatKey].push(msgObj);
@@ -3719,14 +3763,10 @@
                 socket.emit('send-group-message', { groupId: activeChat.id, subgroup: activeChat.subgroup || 'main', msg: msgObj });
             }
 
-            // Clear draft
-            let draftKey = '';
-            if (activeChat.type === 'saved') draftKey = `saved_${currentUser.login}`;
-            else if (activeChat.type === 'user') draftKey = `user_${activeChat.id}`;
-            else if (activeChat.type === 'group') draftKey = `group_${activeChat.id}_${activeChat.subgroup || 'main'}`;
-            if (draftKey) delete draftMap[draftKey];
-
             inputEl.value = '';
+            // Clear draft for this chat
+            const draftKey = getChatDraftKey(activeChat);
+            if (draftKey) delete draftMap[draftKey];
             currentUploadedMedia = null;
         }
 
