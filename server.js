@@ -16,7 +16,8 @@ process.on('unhandledRejection', (err) => {
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-    cors: { origin: "*" }
+    cors: { origin: "*" },
+    maxHttpBufferSize: 1e8 // 100MB
 });
 
 app.use(express.json({ limit: '25mb' }));
@@ -66,7 +67,10 @@ let db = {
 
 async function initDatabase() {
     try {
-        await mongoose.connect(MONGO_URI);
+        await mongoose.connect(MONGO_URI, {
+            serverSelectionTimeoutMS: 3000,
+            connectTimeoutMS: 5000
+        });
         console.log('Успешное подключение к MongoDB');
         
         let doc = await AppState.findOne({ key: 'main_db' });
@@ -112,15 +116,22 @@ async function initDatabase() {
             if (!db.groups[gId].groupNicknames) db.groups[gId].groupNicknames = {};
         }
     } catch (e) {
-        console.error('Ошибка подключения к MongoDB:', e);
+        console.error('Ошибка подключения к MongoDB:', e.message);
+        console.log('Сервер будет работать с данными в памяти (без MongoDB)');
     }
 }
 
 // --- Debounced saveDb and broadcastDb for performance ---
 let saveTimer = null;
 let broadcastTimer = null;
+let isBroadcasting = false;
+let isSaving = false;
 
 async function saveDb() {
+    // Не сохраняем если MongoDB не подключена
+    if (mongoose.connection.readyState !== 1) return;
+    if (isSaving) return;
+    isSaving = true;
     try {
         await AppState.findOneAndUpdate(
             { key: 'main_db' },
@@ -144,30 +155,81 @@ async function saveDb() {
             { upsert: true, new: true }
         );
     } catch (e) {
-        console.error('Ошибка сохранения базы данных в MongoDB:', e);
+        console.error('Ошибка сохранения БД:', e.message);
+    } finally {
+        isSaving = false;
     }
 }
 
+// Лёгкая версия db для рассылки — без паролей и без тяжёлых аватаров
+function buildLightDb() {
+    // Создаём копию users без паролей
+    const lightUsers = {};
+    for (let login in db.users) {
+        lightUsers[login] = { ...db.users[login] };
+        delete lightUsers[login].password;
+    }
+    return {
+        users: lightUsers,
+        messagesStore: db.messagesStore,
+        friends: db.friends,
+        friendRequests: db.friendRequests,
+        outgoingRequests: db.outgoingRequests,
+        customNicknames: db.customNicknames,
+        groups: db.groups,
+        globalChannels: db.globalChannels,
+        news: db.news,
+        lastSeen: db.lastSeen,
+        pinnedMessages: db.pinnedMessages,
+        globalRoles: db.globalRoles,
+        violations: db.violations,
+        verificationRequests: db.verificationRequests,
+        mutedUsers: db.mutedUsers
+    };
+}
+
 function broadcastDb() {
-    try { io.emit('update-db', db); } catch(e) { console.error('broadcastDb error:', e.message); }
+    if (isBroadcasting) return; // Не запускаем новую рассылку, если предыдущая ещё идёт
+    isBroadcasting = true;
+    try {
+        const lightDb = buildLightDb();
+        io.emit('update-db', lightDb);
+    } catch(e) {
+        console.error('broadcastDb error:', e.message);
+    } finally {
+        // Сбрасываем флаг через короткий таймер, чтобы дать event loop передышку
+        setTimeout(() => { isBroadcasting = false; }, 50);
+    }
 }
 
 function debouncedSave() {
     if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => { saveDb(); }, 800);
+    saveTimer = setTimeout(() => { saveDb(); }, 1000); // Увеличили до 1 сек
 }
 
 function debouncedBroadcast() {
     if (broadcastTimer) clearTimeout(broadcastTimer);
-    broadcastTimer = setTimeout(() => { broadcastDb(); }, 200);
+    // Увеличили задержку до 500мс — меньше нагрузка на event loop
+    broadcastTimer = setTimeout(() => { broadcastDb(); }, 500);
 }
 
 // Helper: save, broadcast, and return db in response
 function saveAndBroadcast(res, extra) {
     debouncedSave();
     debouncedBroadcast();
-    const response = { success: true, db };
-    if (extra) Object.assign(response, extra);
+    // Возвращаем лёгкую версию (без паролей)
+    const lightDb = buildLightDb();
+    const response = { success: true, db: lightDb };
+    if (extra) {
+        // Убираем пароль из user-объекта, если есть
+        if (extra.user) {
+            const safeUser = { ...extra.user };
+            delete safeUser.password;
+            response.user = safeUser;
+        } else {
+            Object.assign(response, extra);
+        }
+    }
     return res.json(response);
 }
 
@@ -191,7 +253,6 @@ function containsMat(text) {
     return matRegex.test(text);
 }
 
-// Безопасная отправка в комнату — не падает при undefined
 function safeToRoom(target) {
     if (!target || typeof target !== 'string') return null;
     return target.toLowerCase();
@@ -1185,7 +1246,6 @@ app.get('/api/internet-news', async (req, res) => {
 function extractGroupIdFromRoomKey(roomKey) {
     if (!roomKey || typeof roomKey !== 'string') return null;
     const parts = roomKey.split('_');
-    // group_123456_sub_789 -> ['group','123456','sub','789']
     if (parts.length >= 2 && parts[0] === 'group') return parts[1];
     return null;
 }
@@ -1203,7 +1263,10 @@ io.on('connection', (socket) => {
     });
 
     socket.on('refresh-db', () => {
-        try { broadcastDb(); } catch(e) { console.error('refresh-db error:', e.message); }
+        try {
+            const lightDb = buildLightDb();
+            socket.emit('update-db', lightDb);
+        } catch(e) { console.error('refresh-db error:', e.message); }
     });
 
     socket.on('join-group-room', (groupId) => {
@@ -1345,7 +1408,6 @@ io.on('connection', (socket) => {
         io.to(roomKey).emit('voice-room-update', { roomKey, participants });
         socket.to(roomKey).emit('voice-user-joined', { login });
 
-        // Также уведомляем всех, кто в workspace группы
         const gId = extractGroupIdFromRoomKey(roomKey);
         if (gId) io.to(`workspace_${gId}`).emit('voice-room-update', { roomKey, participants });
         } catch(e) { console.error('join-voice-room error:', e.message); }
@@ -1437,7 +1499,6 @@ initDatabase().then(() => {
     });
 }).catch(e => {
     console.error('Ошибка инициализации БД:', e);
-    // Запускаем сервер даже без БД — данные будут в памяти
     server.listen(PORT, () => {
         console.log(`Сервер запущен на порту ${PORT} (без подключения к MongoDB)`);
     });
