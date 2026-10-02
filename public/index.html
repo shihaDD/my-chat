@@ -479,8 +479,12 @@
                             </div>
                         </div>
 
-                        <!-- Кнопка выхода из активного голосового канала (скрыта, перенесена к нику) -->
-                        <div id="active-voice-leave-bar" class="hidden"></div>
+                        <!-- Кнопка выхода из активного голосового канала -->
+                        <div id="active-voice-leave-bar" class="p-2 border-b border-gray-800 bg-red-950/40 hidden">
+                            <button onclick="leaveGroupVoiceConference()" class="w-full bg-red-600 hover:bg-red-500 text-white py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-2 shadow">
+                                <span>🚪 Покинуть голосовой канал</span>
+                            </button>
+                        </div>
 
                         <div class="flex-1 overflow-y-auto p-3 space-y-4">
                             <div>
@@ -3048,23 +3052,20 @@
                         
                         let participantsHTML = '';
                         if (participants.length > 0) {
-                            participantsHTML = `<div class="pl-3 pr-2 pb-2 space-y-1.5 mt-1 border-t border-gray-800/80 pt-1.5">`;
+                            participantsHTML = `<div class="pl-7 pr-2 pb-2 space-y-1.5 mt-1 border-t border-gray-800/80 pt-1.5">`;
                             participants.forEach(pLogin => {
                                 const userObj = db.users[pLogin] || {};
                                 const isSpk = !!speakingUsersMap[pLogin];
-                                const isMe = pLogin === currentUser.login;
-                                participantsHTML += `
-                                    <div class="flex items-center space-x-1.5 text-[11px] text-gray-300 group">
-                                        ${isMe ? `<button onclick="leaveGroupVoiceConference()" title="Покинуть канал" class="flex-shrink-0 w-5 h-5 flex items-center justify-center text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded transition font-bold text-sm leading-none">✕</button>` : '<span class="flex-shrink-0 w-5"></span>'}
+participantsHTML += `
+                                    <div class="flex items-center space-x-2 text-[11px] text-gray-300">
+                                        ${pLogin.toLowerCase() === currentUser.login.toLowerCase() ? `<button onclick="leaveGroupVoiceConference()" title="Покинуть канал" class="text-red-400 hover:text-red-300 font-bold text-sm leading-none flex-shrink-0 w-5 h-5 flex items-center justify-center hover:bg-red-600/20 rounded transition">✕</button>` : '<span class="flex-shrink-0 w-5"></span>'}
                                         <div class="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 ${isSpk ? 'speaking-glow' : 'border border-gray-700'}">
                                             <img src="${getAvatar(userObj.avatar)}" class="w-full h-full object-cover">
                                         </div>
-                                        <span class="truncate font-medium ${isSpk ? 'text-green-400' : 'text-gray-200'}">@${pLogin}</span>
+                                        <span class="truncate font-medium ${isSpk ? 'text-green-400 font-bold' : 'text-gray-200'}">@${pLogin}</span>
                                         ${isSpk ? '<span class="text-[9px] text-green-400 ml-auto animate-pulse">🎤</span>' : ''}
                                     </div>
                                 `;
-                            });
-                            participantsHTML += `</div>`;
                         }
 
                         const btn = document.createElement('button');
@@ -3878,7 +3879,7 @@
             activeVoiceRoomKey = `${groupId}_sub_${subgroupId}`;
             isInCallOrConference = true;
 
-            document.getElementById('active-voice-leave-bar').classList.remove('hidden');
+            document.getElementById('active-voice-leave-bar').classList.add('hidden');
             showCustomModal('Голосовой канал', 'Вы подключились к голосовому каналу группы!', false, null, '🎙️');
 
             socket.emit('join-voice-room', { roomKey: activeVoiceRoomKey, login: currentUser.login });
