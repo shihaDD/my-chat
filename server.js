@@ -178,18 +178,19 @@ function hasFullAccess(login) {
 
 function containsMat(text) {
     if (!text) return false;
-    const matRegex = /(\u0445\u0443[\u0439\u044f\u0451\u0435\u0438\u044e]|\u043f\u0438\u0437\u0434|\u0431\u043b\u044f[\u0434\u0442]|\u0435\u0431\u0430\u0442|\u0435\u0431\u0430\u043b|\u0435\u0431\u043d\u0443|\u0441\u0443\u043a[\u0430\u0438\u0443]|mraz|\u043c\u0440\u0430\u0437[\u044c\u044e]|\u0443\u0451\u0431|\u0432\u044b\u0451\u0431|\u0437\u0430\u0451\u0431|\u043f\u043e\u0451\u0431|\u043d\u0430\u0451\u0431|\u043e\u0442\u0451\u0431|\u0433\u0430\u043d\u0434\u043e\u043d|\u0433\u043e\u043d\u0434\u043e\u043d|\u043c\u0443\u0434\u0430\u043a|\u043f\u0438\u0434\u043e\u0440|\u043f\u0435\u0434\u0438\u043a|\u043f\u0438\u0434\u0430\u0440|\u0447\u043c\u043e|\u0448\u043b\u044e\u0445|\u0431\u043b\u044f\u0434|\u0441\u0443\u043a[\u0430\u0438]|\u043c\u0430\u043d\u0434\u0430\u0432\u043e\u0448|\u043c\u0430\u043d\u0434\u0430|\u0435\u043f\u0442|\u0435\u043f\u0440\u0441\u0442)/i;
+    const matRegex = /(ху[йяёеию]|пизд|бля[дт]|ебат|ебал|ебну|сук[аиу]|mraz|мраз[ью]|уёб|выёб|заёб|поёб|наёб|отёб|гандон|гондон|мудак|пидор|педик|пидар|чмо|шлюх|бляд|сук[аи]|мандавош|манда|епт|епрст)/i;
     return matRegex.test(text);
 }
 
-// Helper: enrich news item with author info
-function enrichNewsItem(item) {
-    const user = db.users[item.author];
-    if (user) {
-        item.authorName = user.name || item.author;
-        item.authorAvatar = user.avatar || '';
+// Helper: extract groupId from roomKey (format: group_id_sub_subgroupId)
+function extractGroupIdFromRoomKey(roomKey) {
+    if (!roomKey) return null;
+    const parts = roomKey.split('_sub_');
+    if (parts.length >= 2) {
+        // parts[0] is like "group_1234567890" — return the full group id
+        return parts[0];
     }
-    return item;
+    return null;
 }
 
 // ====== API ROUTES ======
@@ -797,13 +798,13 @@ app.post('/api/create-news', async (req, res) => {
     }
     if (!db.news) db.news = [];
     const postId = 'news_' + Date.now();
-    const post = enrichNewsItem({
+    const post = {
         id: postId,
         author: login,
         text: text || '',
         media: media || null,
         timestamp: Date.now()
-    });
+    };
     db.news.unshift(post);
 
     if (containsMat(text)) {
@@ -828,13 +829,13 @@ app.post('/api/publish-news', async (req, res) => {
     }
     if (!db.news) db.news = [];
     const postId = 'news_' + Date.now();
-    const post = enrichNewsItem({
+    const post = {
         id: postId,
         author: login,
         text: text || '',
         media: media || null,
         timestamp: Date.now()
-    });
+    };
     db.news.unshift(post);
 
     if (containsMat(text)) {
@@ -894,13 +895,13 @@ app.post('/api/create-group-post', async (req, res) => {
 
     if (shouldAnnounce && group.isVerified) {
         if (!db.news) db.news = [];
-        db.news.unshift(enrichNewsItem({
+        db.news.unshift({
             id: 'news_' + Date.now(),
             author: login,
-            sourceGroup: { name: group.name, isVerified: group.isVerified, avatar: group.avatar },
+            sourceGroup: { name: group.name, isVerified: true, avatar: group.avatar },
             text: text,
             timestamp: Date.now()
-        }));
+        });
     }
 
     if (containsMat(text)) {
@@ -950,13 +951,13 @@ app.post('/api/publish-group-post', async (req, res) => {
 
     if (announcement && group.isVerified) {
         if (!db.news) db.news = [];
-        db.news.unshift(enrichNewsItem({
+        db.news.unshift({
             id: 'news_' + Date.now(),
             author: login,
-            sourceGroup: { name: group.name, isVerified: group.isVerified, avatar: group.avatar },
+            sourceGroup: { name: group.name, isVerified: true, avatar: group.avatar },
             text: text,
             timestamp: Date.now()
-        }));
+        });
     }
 
     if (containsMat(text)) {
@@ -997,7 +998,7 @@ app.post('/api/delete-group-post', async (req, res) => {
     return saveAndBroadcast(res);
 });
 
-// ====== resolve-violation-action ======
+// ====== ИСПРАВЛЕНИЕ: resolve-violation-action ======
 app.post('/api/resolve-violation-action', async (req, res) => {
     const { login, violId, action, newText, muteMinutes, reason } = req.body;
     if (!hasFullAccess(login)) return res.json({ success: false, error: 'Недостаточно прав' });
@@ -1008,29 +1009,23 @@ app.post('/api/resolve-violation-action', async (req, res) => {
 
     if (action === 'approve') {
         if (!db.news) db.news = [];
-        const sourceGroup = viol.groupId && db.groups[viol.groupId] ? 
-            { name: db.groups[viol.groupId].name, isVerified: db.groups[viol.groupId].isVerified, avatar: db.groups[viol.groupId].avatar } : 
-            (viol.groupName ? { name: viol.groupName, isVerified: false, avatar: '' } : null);
-        db.news.unshift(enrichNewsItem({
+        db.news.unshift({
             id: 'news_' + Date.now(),
             author: viol.author,
-            sourceGroup,
+            sourceGroup: viol.groupId ? { name: viol.groupName || '', isVerified: !!db.groups[viol.groupId]?.isVerified, avatar: db.groups[viol.groupId]?.avatar || '' } : null,
             text: viol.text,
             timestamp: Date.now()
-        }));
+        });
     } else if (action === 'edit') {
         viol.text = newText;
         if (!db.news) db.news = [];
-        const sourceGroup = viol.groupId && db.groups[viol.groupId] ? 
-            { name: db.groups[viol.groupId].name, isVerified: db.groups[viol.groupId].isVerified, avatar: db.groups[viol.groupId].avatar } : 
-            (viol.groupName ? { name: viol.groupName, isVerified: false, avatar: '' } : null);
-        db.news.unshift(enrichNewsItem({
+        db.news.unshift({
             id: 'news_' + Date.now(),
             author: viol.author,
-            sourceGroup,
+            sourceGroup: viol.groupId ? { name: viol.groupName || '', isVerified: !!db.groups[viol.groupId]?.isVerified, avatar: db.groups[viol.groupId]?.avatar || '' } : null,
             text: newText,
             timestamp: Date.now()
-        }));
+        });
         if (viol.groupId && viol.groupPostId && db.groups[viol.groupId]) {
             const grp = db.groups[viol.groupId];
             if (grp.posts) {
@@ -1109,6 +1104,17 @@ io.on('connection', (socket) => {
 
     socket.on('join-group-room', (groupId) => {
         socket.join(`group_${groupId}`);
+    });
+
+    // ===== NEW: workspace room for real-time voice updates =====
+    socket.on('join-group-workspace', (groupId) => {
+        socket.join(`workspace_${groupId}`);
+        socket.workspaceGroupId = groupId;
+    });
+
+    socket.on('leave-group-workspace', (groupId) => {
+        socket.leave(`workspace_${groupId}`);
+        socket.workspaceGroupId = null;
     });
 
     socket.on('call-user', ({ offer, to, from }) => {
@@ -1202,7 +1208,13 @@ io.on('connection', (socket) => {
 
         const participants = Array.from(global.voiceRooms[roomKey]);
         
+        // Emit to voice room participants
         io.to(roomKey).emit('voice-room-update', { roomKey, participants });
+        // ===== NEW: Also emit to workspace room so non-voice users see real-time updates =====
+        const gid = extractGroupIdFromRoomKey(roomKey);
+        if (gid) {
+            io.to(`workspace_${gid}`).emit('voice-room-update', { roomKey, participants });
+        }
         socket.to(roomKey).emit('voice-user-joined', { login });
     });
 
@@ -1212,8 +1224,15 @@ io.on('connection', (socket) => {
         if (global.voiceRooms && global.voiceRooms[roomKey] && login) {
             global.voiceRooms[roomKey].delete(login);
             const participants = Array.from(global.voiceRooms[roomKey]);
+            // Emit to voice room participants
             io.to(roomKey).emit('voice-room-update', { roomKey, participants });
+            // Also to the leaving user
             socket.emit('voice-room-update', { roomKey, participants });
+            // ===== NEW: Also emit to workspace room =====
+            const gid = extractGroupIdFromRoomKey(roomKey);
+            if (gid) {
+                io.to(`workspace_${gid}`).emit('voice-room-update', { roomKey, participants });
+            }
         }
         
         socket.roomKey = null;
@@ -1222,6 +1241,11 @@ io.on('connection', (socket) => {
 
     socket.on('voice-speaking', ({ roomKey, login, isSpeaking }) => {
         socket.to(roomKey).emit('user-speaking', { login, isSpeaking });
+        // ===== NEW: Also emit to workspace room =====
+        const gid = extractGroupIdFromRoomKey(roomKey);
+        if (gid) {
+            socket.to(`workspace_${gid}`).emit('user-speaking', { login, isSpeaking });
+        }
     });
 
     socket.on('voice-offer', ({ offer, to, from }) => {
@@ -1253,6 +1277,11 @@ io.on('connection', (socket) => {
                 global.voiceRooms[socket.roomKey].delete(socket.voiceLogin);
                 const participants = Array.from(global.voiceRooms[socket.roomKey]);
                 io.to(socket.roomKey).emit('voice-room-update', { roomKey: socket.roomKey, participants });
+                // ===== NEW: Also emit to workspace room =====
+                const gid = extractGroupIdFromRoomKey(socket.roomKey);
+                if (gid) {
+                    io.to(`workspace_${gid}`).emit('voice-room-update', { roomKey: socket.roomKey, participants });
+                }
             }
         }
     });
