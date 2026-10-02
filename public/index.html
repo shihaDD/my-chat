@@ -479,7 +479,7 @@
                             </div>
                         </div>
 
-                        <!-- Кнопка выхода скрыта — теперь ✕ рядом с ником -->
+                        <!-- Кнопка выхода скрыта, перемещена к нику в списке участников -->
                         <div id="active-voice-leave-bar" class="hidden"></div>
 
                         <div class="flex-1 overflow-y-auto p-3 space-y-4">
@@ -3053,13 +3053,17 @@
                                 const userObj = db.users[pLogin] || {};
                                 const isSpk = !!speakingUsersMap[pLogin];
                                 const isMe = pLogin === currentUser.login;
+                                const leaveBtnHTML = isMe
+                                    ? `<button onclick="leaveGroupVoiceConference()" class="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded text-red-400 hover:text-red-300 hover:bg-red-900/40 transition text-xs font-bold" title="Покинуть канал">✕</button>`
+                                    : `<span class="flex-shrink-0 w-5 h-5"></span>`;
+                                const nameClass = isSpk ? 'truncate font-bold text-green-400' : 'truncate font-medium text-gray-200';
                                 participantsHTML += `
                                     <div class="flex items-center space-x-2 text-[11px] text-gray-300">
-                                        ${isMe ? '<button onclick="leaveGroupVoiceConference()" title="Покинуть канал" class="text-red-500 hover:text-red-400 font-bold text-sm flex-shrink-0 w-4 text-center leading-none transition">✕</button>' : '<span class="w-4 flex-shrink-0"></span>'}
+                                        ${leaveBtnHTML}
                                         <div class="w-6 h-6 rounded-full overflow-hidden flex-shrink-0 ${isSpk ? 'speaking-glow' : 'border border-gray-700'}">
                                             <img src="${getAvatar(userObj.avatar)}" class="w-full h-full object-cover">
                                         </div>
-                                        <span class="truncate font-medium ${isSpk ? 'text-green-400 font-bold' : 'text-gray-200'}">@${pLogin}</span>
+                                        <span class="${nameClass}">@${pLogin}</span>
                                         ${isSpk ? '<span class="text-[9px] text-green-400 ml-auto animate-pulse">🎤</span>' : ''}
                                     </div>
                                 `;
@@ -3872,13 +3876,14 @@
             hangUpCall();
         });
 
-        async async function joinGroupVoiceConference(groupId, subgroupId) {
+        async function joinGroupVoiceConference(groupId, subgroupId) {
             activeVoiceGroup = groupId;
             activeVoiceChannel = subgroupId;
             activeVoiceRoomKey = `${groupId}_sub_${subgroupId}`;
             isInCallOrConference = true;
 
-                        showCustomModal('Голосовой канал', 'Вы подключились к голосовому каналу группы!', false, null, '🎙️');
+            document.getElementById('active-voice-leave-bar').classList.remove('hidden');
+            showCustomModal('Голосовой канал', 'Вы подключились к голосовому каналу группы!', false, null, '🎙️');
 
             socket.emit('join-voice-room', { roomKey: activeVoiceRoomKey, login: currentUser.login });
 
@@ -3892,7 +3897,7 @@
         function leaveGroupVoiceConference() {
             if (activeVoiceRoomKey) {
                 socket.emit('leave-voice-room', { roomKey: activeVoiceRoomKey, login: currentUser.login });
-                // Локально обновляем список участников до очистки переменных
+                // Локально обновляем список участников ДО очистки
                 if (activeVoiceRoomsMap[activeVoiceRoomKey]) {
                     activeVoiceRoomsMap[activeVoiceRoomKey] = activeVoiceRoomsMap[activeVoiceRoomKey].filter(l => l !== currentUser.login);
                 }
