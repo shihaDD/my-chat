@@ -4,6 +4,15 @@ const { Server } = require('socket.io');
 const path = require('path');
 const mongoose = require('mongoose');
 
+// ====== ГЛОБАЛЬНЫЕ ERROR HANDLERS — не дают серверу упасть ======
+process.on('uncaughtException', (err) => {
+    console.error('⚠️ uncaughtException:', err.message);
+    console.error(err.stack);
+});
+process.on('unhandledRejection', (err) => {
+    console.error('⚠️ unhandledRejection:', err && err.message ? err.message : err);
+});
+
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -140,7 +149,7 @@ async function saveDb() {
 }
 
 function broadcastDb() {
-    io.emit('update-db', db);
+    try { io.emit('update-db', db); } catch(e) { console.error('broadcastDb error:', e.message); }
 }
 
 function debouncedSave() {
@@ -182,17 +191,16 @@ function containsMat(text) {
     return matRegex.test(text);
 }
 
-// ====== Helper: extract group ID from voice room key ======
-function extractGroupIdFromRoomKey(roomKey) {
-    const match = roomKey.match(/^group_(.+?)_(?:sub_|voice_)/);
-    if (match) return match[1];
-    const match2 = roomKey.match(/^group_(.+?)$/);
-    return match2 ? match2[1] : null;
+// Безопасная отправка в комнату — не падает при undefined
+function safeToRoom(target) {
+    if (!target || typeof target !== 'string') return null;
+    return target.toLowerCase();
 }
 
 // ====== API ROUTES ======
 
 app.post('/api/register', async (req, res) => {
+    try {
     const { login, name, password, email, avatar } = req.body;
     if (!login || !name || !password) {
         return res.json({ success: false, error: 'Заполните обязательные поля!' });
@@ -209,9 +217,11 @@ app.post('/api/register', async (req, res) => {
     db.lastSeen[cleanLogin] = Date.now();
 
     return saveAndBroadcast(res);
+    } catch(e) { console.error('register error:', e); return res.json({ success: false, error: 'Внутренняя ошибка сервера' }); }
 });
 
 app.post('/api/login', async (req, res) => {
+    try {
     const { login, password } = req.body;
     if (!login || !password) {
         return res.json({ success: false, error: 'Введите логин и пароль!' });
@@ -228,9 +238,11 @@ app.post('/api/login', async (req, res) => {
 
     db.lastSeen[cleanLogin] = Date.now();
     return saveAndBroadcast(res, { user });
+    } catch(e) { console.error('login error:', e); return res.json({ success: false, error: 'Внутренняя ошибка сервера' }); }
 });
 
 app.post('/api/restore-session', async (req, res) => {
+    try {
     const { login } = req.body;
     if (!login) return res.json({ success: false });
     const cleanLogin = login.trim().toLowerCase();
@@ -238,9 +250,11 @@ app.post('/api/restore-session', async (req, res) => {
     if (!user) return res.json({ success: false });
     db.lastSeen[cleanLogin] = Date.now();
     return saveAndBroadcast(res, { user });
+    } catch(e) { console.error('restore-session error:', e); return res.json({ success: false }); }
 });
 
 app.post('/api/update-profile', async (req, res) => {
+    try {
     const { login, name, email, bio, avatar, password } = req.body;
     if (!login) return res.json({ success: false, error: 'Логин не передан' });
     const cleanLogin = login.trim().toLowerCase();
@@ -252,9 +266,11 @@ app.post('/api/update-profile', async (req, res) => {
     if (avatar) db.users[cleanLogin].avatar = avatar;
     if (password) db.users[cleanLogin].password = password;
     return saveAndBroadcast(res, { user: db.users[cleanLogin] });
+    } catch(e) { console.error('update-profile error:', e); return res.json({ success: false, error: 'Внутренняя ошибка сервера' }); }
 });
 
 app.post('/api/set-global-role', async (req, res) => {
+    try {
     const { login, targetLogin, newRole } = req.body;
     const cleanLogin = login ? login.trim().toLowerCase() : '';
     if (cleanLogin !== 'warren' && getUserGlobalRole(cleanLogin) !== 'main_moderator') {
@@ -263,9 +279,11 @@ app.post('/api/set-global-role', async (req, res) => {
     if (!db.globalRoles) db.globalRoles = {};
     db.globalRoles[targetLogin.trim().toLowerCase()] = newRole;
     return saveAndBroadcast(res);
+    } catch(e) { console.error('set-global-role error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/remove-global-mute', async (req, res) => {
+    try {
     const { login, targetLogin } = req.body;
     const cleanLogin = login ? login.trim().toLowerCase() : '';
     if (!hasFullAccess(cleanLogin)) {
@@ -275,9 +293,11 @@ app.post('/api/remove-global-mute', async (req, res) => {
         delete db.mutedUsers[targetLogin.trim().toLowerCase()];
     }
     return saveAndBroadcast(res);
+    } catch(e) { console.error('remove-global-mute error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/issue-global-mute', async (req, res) => {
+    try {
     const { login, targetLogin, muteMinutes, reason } = req.body;
     if (!hasFullAccess(login)) {
         return res.json({ success: false, error: 'Недостаточно прав!' });
@@ -290,9 +310,11 @@ app.post('/api/issue-global-mute', async (req, res) => {
         reason: reason || 'Нарушение правил'
     };
     return saveAndBroadcast(res);
+    } catch(e) { console.error('issue-global-mute error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/add-friend', async (req, res) => {
+    try {
     const { login, targetLogin } = req.body;
     const cleanTarget = targetLogin.trim().toLowerCase();
 
@@ -312,9 +334,11 @@ app.post('/api/add-friend', async (req, res) => {
     db.friendRequests[cleanTarget].push(login);
     db.outgoingRequests[login].push(cleanTarget);
     return saveAndBroadcast(res);
+    } catch(e) { console.error('add-friend error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/cancel-friend-request', async (req, res) => {
+    try {
     const { login, targetLogin } = req.body;
     if (db.outgoingRequests && db.outgoingRequests[login]) {
         db.outgoingRequests[login] = db.outgoingRequests[login].filter(l => l !== targetLogin);
@@ -323,9 +347,11 @@ app.post('/api/cancel-friend-request', async (req, res) => {
         db.friendRequests[targetLogin] = db.friendRequests[targetLogin].filter(l => l !== login);
     }
     return saveAndBroadcast(res);
+    } catch(e) { console.error('cancel-friend error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/respond-friend-request', async (req, res) => {
+    try {
     const { login, requesterLogin, accept } = req.body;
     if (db.friendRequests && db.friendRequests[login]) {
         db.friendRequests[login] = db.friendRequests[login].filter(l => l !== requesterLogin);
@@ -342,16 +368,20 @@ app.post('/api/respond-friend-request', async (req, res) => {
         if (!db.friends[requesterLogin].includes(login)) db.friends[requesterLogin].push(login);
     }
     return saveAndBroadcast(res);
+    } catch(e) { console.error('respond-friend error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/remove-friend', async (req, res) => {
+    try {
     const { login, targetLogin } = req.body;
     if (db.friends[login]) db.friends[login] = db.friends[login].filter(l => l !== targetLogin);
     if (db.friends[targetLogin]) db.friends[targetLogin] = db.friends[targetLogin].filter(l => l !== login);
     return saveAndBroadcast(res);
+    } catch(e) { console.error('remove-friend error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/create-group', async (req, res) => {
+    try {
     const { name, isClosed } = req.body;
     const creator = req.body.creator || req.body.login;
     if (!name || !creator) return res.json({ success: false, error: 'Недостаточно данных' });
@@ -380,9 +410,11 @@ app.post('/api/create-group', async (req, res) => {
         verificationPending: false
     };
     return saveAndBroadcast(res);
+    } catch(e) { console.error('create-group error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/delete-group', async (req, res) => {
+    try {
     const { groupId, login } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
@@ -395,9 +427,11 @@ app.post('/api/delete-group', async (req, res) => {
     }
     delete db.groups[groupId];
     return saveAndBroadcast(res);
+    } catch(e) { console.error('delete-group error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/update-group-settings', async (req, res) => {
+    try {
     const { groupId, name, avatar, isClosed, login } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
@@ -408,9 +442,11 @@ app.post('/api/update-group-settings', async (req, res) => {
     if (avatar) group.avatar = avatar;
     if (isClosed !== undefined) group.isClosed = !!isClosed;
     return saveAndBroadcast(res, { group });
+    } catch(e) { console.error('update-group-settings error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/update-group', async (req, res) => {
+    try {
     const { groupId, name, avatar, isClosed, login } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
@@ -421,9 +457,11 @@ app.post('/api/update-group', async (req, res) => {
     if (avatar) group.avatar = avatar;
     if (isClosed !== undefined) group.isClosed = !!isClosed;
     return saveAndBroadcast(res, { group });
+    } catch(e) { console.error('update-group error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/leave-group', async (req, res) => {
+    try {
     const { groupId, login } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
@@ -446,9 +484,11 @@ app.post('/api/leave-group', async (req, res) => {
     if (group.groupNicknames) delete group.groupNicknames[login];
 
     return saveAndBroadcast(res);
+    } catch(e) { console.error('leave-group error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/group-mute-member', async (req, res) => {
+    try {
     const { groupId, login, targetLogin, muteMinutes, reason } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
@@ -473,9 +513,11 @@ app.post('/api/group-mute-member', async (req, res) => {
     }
 
     return saveAndBroadcast(res);
+    } catch(e) { console.error('group-mute error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/group-set-nickname', async (req, res) => {
+    try {
     const { groupId, login, targetLogin, nickname } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
@@ -498,9 +540,11 @@ app.post('/api/group-set-nickname', async (req, res) => {
     }
 
     return saveAndBroadcast(res);
+    } catch(e) { console.error('group-set-nickname error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/request-verification', async (req, res) => {
+    try {
     const { groupId, login } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
@@ -523,9 +567,11 @@ app.post('/api/request-verification', async (req, res) => {
     });
 
     return saveAndBroadcast(res);
+    } catch(e) { console.error('request-verification error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/resolve-verification', async (req, res) => {
+    try {
     const { login, requestId, accept } = req.body;
     if (!hasFullAccess(login)) return res.json({ success: false, error: 'Недостаточно прав' });
     if (!db.verificationRequests) db.verificationRequests = [];
@@ -543,9 +589,11 @@ app.post('/api/resolve-verification', async (req, res) => {
 
     db.verificationRequests = db.verificationRequests.filter(r => r.id !== requestId);
     return saveAndBroadcast(res);
+    } catch(e) { console.error('resolve-verification error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/join-group', async (req, res) => {
+    try {
     const { groupId, login } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
@@ -559,9 +607,11 @@ app.post('/api/join-group', async (req, res) => {
         group.roles[login] = 'Участник';
     }
     return saveAndBroadcast(res);
+    } catch(e) { console.error('join-group error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/request-join-group', async (req, res) => {
+    try {
     const { groupId, login } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
@@ -572,9 +622,11 @@ app.post('/api/request-join-group', async (req, res) => {
         group.joinRequests.push(login);
     }
     return saveAndBroadcast(res);
+    } catch(e) { console.error('request-join-group error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/respond-join-request', async (req, res) => {
+    try {
     const { groupId, login, targetLogin, accept } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
@@ -595,9 +647,11 @@ app.post('/api/respond-join-request', async (req, res) => {
         }
     }
     return saveAndBroadcast(res);
+    } catch(e) { console.error('respond-join-request error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/set-group-role', async (req, res) => {
+    try {
     const { groupId, login, targetLogin, newRole } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
@@ -609,9 +663,11 @@ app.post('/api/set-group-role', async (req, res) => {
     if (!group.roles) group.roles = {};
     group.roles[targetLogin] = newRole;
     return saveAndBroadcast(res);
+    } catch(e) { console.error('set-group-role error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/change-group-member-role', async (req, res) => {
+    try {
     const { groupId, login, targetLogin, newRole } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
@@ -623,9 +679,11 @@ app.post('/api/change-group-member-role', async (req, res) => {
     if (!group.roles) group.roles = {};
     group.roles[targetLogin] = newRole;
     return saveAndBroadcast(res);
+    } catch(e) { console.error('change-group-member-role error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/create-custom-role', async (req, res) => {
+    try {
     const { groupId, login, roleName, permissions } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
@@ -638,9 +696,11 @@ app.post('/api/create-custom-role', async (req, res) => {
 
     group.customRoles[cleanName] = permissions || { canPost: true, canDelete: true, canVoice: true, canDuplicateNews: false, canVoiceControl: false };
     return saveAndBroadcast(res);
+    } catch(e) { console.error('create-custom-role error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/update-role-permissions', async (req, res) => {
+    try {
     const { groupId, login, roleName, permissions } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
@@ -650,9 +710,11 @@ app.post('/api/update-role-permissions', async (req, res) => {
     if (!group.customRoles) group.customRoles = {};
     group.customRoles[roleName] = permissions;
     return saveAndBroadcast(res);
+    } catch(e) { console.error('update-role-permissions error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/delete-custom-role', async (req, res) => {
+    try {
     const { groupId, login, roleName } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
@@ -666,9 +728,11 @@ app.post('/api/delete-custom-role', async (req, res) => {
         delete group.customRoles[roleName];
     }
     return saveAndBroadcast(res);
+    } catch(e) { console.error('delete-custom-role error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/kick-group-member', async (req, res) => {
+    try {
     const { groupId, login, targetLogin } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Сообщество не найдено' });
@@ -687,9 +751,11 @@ app.post('/api/kick-group-member', async (req, res) => {
     if (group.groupMutedUsers) delete group.groupMutedUsers[targetLogin];
     if (group.groupNicknames) delete group.groupNicknames[targetLogin];
     return saveAndBroadcast(res);
+    } catch(e) { console.error('kick-group-member error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/create-subgroup', async (req, res) => {
+    try {
     const { groupId, name, type, allowedRole, login } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
@@ -706,9 +772,11 @@ app.post('/api/create-subgroup', async (req, res) => {
         allowedRole: allowedRole || 'all'
     });
     return saveAndBroadcast(res);
+    } catch(e) { console.error('create-subgroup error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/delete-subgroup', async (req, res) => {
+    try {
     const { groupId, subId, login } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
@@ -720,9 +788,11 @@ app.post('/api/delete-subgroup', async (req, res) => {
         group.subgroups = group.subgroups.filter(s => s.id !== subId);
     }
     return saveAndBroadcast(res);
+    } catch(e) { console.error('delete-subgroup error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/edit-message', async (req, res) => {
+    try {
     const { login, msgId, messageId, newText } = req.body;
     const id = msgId || messageId;
     let found = false;
@@ -745,9 +815,11 @@ app.post('/api/edit-message', async (req, res) => {
     } else {
         res.json({ success: false, error: 'Сообщение не найдено' });
     }
+    } catch(e) { console.error('edit-message error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/delete-message', async (req, res) => {
+    try {
     const { login, msgId, messageId } = req.body;
     const id = msgId || messageId;
     let found = false;
@@ -771,24 +843,30 @@ app.post('/api/delete-message', async (req, res) => {
     } else {
         res.json({ success: false, error: 'Сообщение не найдено' });
     }
+    } catch(e) { console.error('delete-message error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/pin-message', async (req, res) => {
+    try {
     const { login, messageId, chatKey } = req.body;
     if (!db.pinnedMessages) db.pinnedMessages = {};
     db.pinnedMessages[chatKey] = messageId;
     return saveAndBroadcast(res);
+    } catch(e) { console.error('pin-message error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/unpin-message', async (req, res) => {
+    try {
     const { chatKey } = req.body;
     if (db.pinnedMessages && db.pinnedMessages[chatKey]) {
         delete db.pinnedMessages[chatKey];
     }
     return saveAndBroadcast(res);
+    } catch(e) { console.error('unpin-message error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/create-news', async (req, res) => {
+    try {
     const { login, text, media } = req.body;
     if (!hasFullAccess(login)) {
         return res.json({ success: false, error: 'Только модераторы могут публиковать в ленту новостей!' });
@@ -817,9 +895,11 @@ app.post('/api/create-news', async (req, res) => {
     }
 
     return saveAndBroadcast(res);
+    } catch(e) { console.error('create-news error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/publish-news', async (req, res) => {
+    try {
     const { login, text, media } = req.body;
     if (!hasFullAccess(login)) {
         return res.json({ success: false, error: 'Только модераторы могут публиковать в ленту новостей!' });
@@ -848,9 +928,11 @@ app.post('/api/publish-news', async (req, res) => {
     }
 
     return saveAndBroadcast(res);
+    } catch(e) { console.error('publish-news error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/delete-news', async (req, res) => {
+    try {
     const { login, postId } = req.body;
     const post = (db.news || []).find(p => p.id === postId);
     if (!post) return res.json({ success: false, error: 'Новость не найдена' });
@@ -859,9 +941,11 @@ app.post('/api/delete-news', async (req, res) => {
     }
     db.news = db.news.filter(p => p.id !== postId);
     return saveAndBroadcast(res);
+    } catch(e) { console.error('delete-news error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/create-group-post', async (req, res) => {
+    try {
     const { groupId, login, text, isAnnouncement, announcement } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
@@ -892,10 +976,11 @@ app.post('/api/create-group-post', async (req, res) => {
 
     if (shouldAnnounce && group.isVerified) {
         if (!db.news) db.news = [];
+        const grp = db.groups[groupId];
         db.news.unshift({
             id: 'news_' + Date.now(),
             author: login,
-            sourceGroup: { name: group.name, isVerified: true, avatar: group.avatar },
+            sourceGroup: { name: grp.name, isVerified: grp.isVerified, avatar: grp.avatar || '' },
             text: text,
             timestamp: Date.now()
         });
@@ -916,9 +1001,11 @@ app.post('/api/create-group-post', async (req, res) => {
     }
 
     return saveAndBroadcast(res);
+    } catch(e) { console.error('create-group-post error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/publish-group-post', async (req, res) => {
+    try {
     const { groupId, login, text, announcement } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
@@ -948,10 +1035,11 @@ app.post('/api/publish-group-post', async (req, res) => {
 
     if (announcement && group.isVerified) {
         if (!db.news) db.news = [];
+        const grp = db.groups[groupId];
         db.news.unshift({
             id: 'news_' + Date.now(),
             author: login,
-            sourceGroup: { name: group.name, isVerified: true, avatar: group.avatar },
+            sourceGroup: { name: grp.name, isVerified: grp.isVerified, avatar: grp.avatar || '' },
             text: text,
             timestamp: Date.now()
         });
@@ -972,9 +1060,11 @@ app.post('/api/publish-group-post', async (req, res) => {
     }
 
     return saveAndBroadcast(res);
+    } catch(e) { console.error('publish-group-post error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.post('/api/delete-group-post', async (req, res) => {
+    try {
     const { login, groupId, postId } = req.body;
     const group = db.groups[groupId];
     if (!group) return res.json({ success: false, error: 'Группа не найдена' });
@@ -993,10 +1083,11 @@ app.post('/api/delete-group-post', async (req, res) => {
 
     group.posts = group.posts.filter(p => p.id !== postId);
     return saveAndBroadcast(res);
+    } catch(e) { console.error('delete-group-post error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
-// ====== resolve-violation-action ======
 app.post('/api/resolve-violation-action', async (req, res) => {
+    try {
     const { login, violId, action, newText, muteMinutes, reason } = req.body;
     if (!hasFullAccess(login)) return res.json({ success: false, error: 'Недостаточно прав' });
     if (!db.violations) db.violations = [];
@@ -1006,27 +1097,29 @@ app.post('/api/resolve-violation-action', async (req, res) => {
 
     if (action === 'approve') {
         if (!db.news) db.news = [];
+        const grp = viol.groupId ? db.groups[viol.groupId] : null;
         db.news.unshift({
             id: 'news_' + Date.now(),
             author: viol.author,
-            sourceGroup: viol.groupName ? { name: viol.groupName, isVerified: viol.groupId ? !!db.groups[viol.groupId]?.isVerified : false } : null,
+            sourceGroup: grp ? { name: grp.name, isVerified: grp.isVerified, avatar: grp.avatar || '' } : null,
             text: viol.text,
             timestamp: Date.now()
         });
     } else if (action === 'edit') {
         viol.text = newText;
         if (!db.news) db.news = [];
+        const grp = viol.groupId ? db.groups[viol.groupId] : null;
         db.news.unshift({
             id: 'news_' + Date.now(),
             author: viol.author,
-            sourceGroup: viol.groupName ? { name: viol.groupName, isVerified: viol.groupId ? !!db.groups[viol.groupId]?.isVerified : false } : null,
+            sourceGroup: grp ? { name: grp.name, isVerified: grp.isVerified, avatar: grp.avatar || '' } : null,
             text: newText,
             timestamp: Date.now()
         });
         if (viol.groupId && viol.groupPostId && db.groups[viol.groupId]) {
-            const grp = db.groups[viol.groupId];
-            if (grp.posts) {
-                const gpost = grp.posts.find(p => p.id === viol.groupPostId);
+            const g = db.groups[viol.groupId];
+            if (g.posts) {
+                const gpost = g.posts.find(p => p.id === viol.groupPostId);
                 if (gpost) {
                     gpost.text = newText;
                 }
@@ -1054,19 +1147,21 @@ app.post('/api/resolve-violation-action', async (req, res) => {
             db.news = db.news.filter(n => n.id !== viol.postId);
         }
         if (viol.groupId && viol.groupPostId && db.groups[viol.groupId]) {
-            const grp = db.groups[viol.groupId];
-            if (grp.posts) {
-                grp.posts = grp.posts.filter(p => p.id !== viol.groupPostId);
+            const g = db.groups[viol.groupId];
+            if (g.posts) {
+                g.posts = g.posts.filter(p => p.id !== viol.groupPostId);
             }
         }
     }
 
     db.violations = db.violations.filter(v => v.id !== violId);
     return saveAndBroadcast(res);
+    } catch(e) { console.error('resolve-violation-action error:', e); return res.json({ success: false, error: 'Внутренняя ошибка' }); }
 });
 
 app.get('/api/internet-news', async (req, res) => {
     try {
+        if (typeof fetch === 'undefined') return res.json([]);
         const response = await fetch('https://newsapi.org/v2/top-headlines?country=ru&apiKey=demo&pageSize=10');
         const data = await response.json();
         if (data.articles) {
@@ -1081,68 +1176,86 @@ app.get('/api/internet-news', async (req, res) => {
         }
         res.json([]);
     } catch (e) {
+        console.error('internet-news error:', e.message);
         res.json([]);
     }
 });
 
+// Извлечение groupId из roomKey
+function extractGroupIdFromRoomKey(roomKey) {
+    if (!roomKey || typeof roomKey !== 'string') return null;
+    const parts = roomKey.split('_');
+    // group_123456_sub_789 -> ['group','123456','sub','789']
+    if (parts.length >= 2 && parts[0] === 'group') return parts[1];
+    return null;
+}
+
 // ====== SOCKET.IO ======
 io.on('connection', (socket) => {
     socket.on('register', (login) => {
+        try {
         if (login) {
             socket.userLogin = login.toLowerCase();
             socket.join(socket.userLogin);
             db.lastSeen[socket.userLogin] = Date.now();
         }
+        } catch(e) { console.error('socket register error:', e.message); }
     });
 
     socket.on('refresh-db', () => {
-        broadcastDb();
+        try { broadcastDb(); } catch(e) { console.error('refresh-db error:', e.message); }
     });
 
     socket.on('join-group-room', (groupId) => {
-        socket.join(`group_${groupId}`);
+        try { if (groupId) socket.join(`group_${groupId}`); } catch(e) {}
     });
 
     socket.on('join-group-workspace', (groupId) => {
-        socket.join(`workspace_${groupId}`);
+        try { if (groupId) socket.join(`workspace_${groupId}`); } catch(e) {}
     });
 
     socket.on('leave-group-workspace', (groupId) => {
-        socket.leave(`workspace_${groupId}`);
-    });
-
-    socket.on('send-saved-message', ({ login, msg }) => {
-        if (!login) return;
-        const chatKey = `saved_${login.toLowerCase()}`;
-        if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
-        if (!db.messagesStore[chatKey].find(m => m.id === msg.id)) {
-            db.messagesStore[chatKey].push(msg);
-        }
-        debouncedSave();
-        debouncedBroadcast();
+        try { if (groupId) socket.leave(`workspace_${groupId}`); } catch(e) {}
     });
 
     socket.on('call-user', ({ offer, to, from }) => {
-        io.to(to.toLowerCase()).emit('incoming-call', { offer, from });
+        try {
+        const room = safeToRoom(to);
+        if (room) io.to(room).emit('incoming-call', { offer, from });
+        } catch(e) { console.error('call-user error:', e.message); }
     });
 
     socket.on('make-answer', ({ answer, to }) => {
-        io.to(to.toLowerCase()).emit('call-answered', { answer, from: socket.userLogin });
+        try {
+        const room = safeToRoom(to);
+        if (room) io.to(room).emit('call-answered', { answer, from: socket.userLogin });
+        } catch(e) { console.error('make-answer error:', e.message); }
     });
 
     socket.on('reject-call', ({ to }) => {
-        io.to(to.toLowerCase()).emit('call-rejected');
+        try {
+        const room = safeToRoom(to);
+        if (room) io.to(room).emit('call-rejected');
+        } catch(e) { console.error('reject-call error:', e.message); }
     });
 
     socket.on('hang-up', ({ to }) => {
-        io.to(to.toLowerCase()).emit('call-ended');
+        try {
+        const room = safeToRoom(to);
+        if (room) io.to(room).emit('call-ended');
+        } catch(e) { console.error('hang-up error:', e.message); }
     });
 
     socket.on('ice-candidate', ({ candidate, to }) => {
-        io.to(to.toLowerCase()).emit('ice-candidate', { candidate, from: socket.userLogin });
+        try {
+        const room = safeToRoom(to);
+        if (room) io.to(room).emit('ice-candidate', { candidate, from: socket.userLogin });
+        } catch(e) { console.error('ice-candidate error:', e.message); }
     });
 
     socket.on('send-message', ({ sender, receiver, msg }) => {
+        try {
+        if (!sender || !receiver || !msg) return;
         const storeKey = [sender, receiver].sort().join('_');
         if (!db.messagesStore[storeKey]) db.messagesStore[storeKey] = [];
         
@@ -1165,9 +1278,22 @@ io.on('connection', (socket) => {
         io.to(receiver.toLowerCase()).emit('receive-message', { sender, receiver, msg });
         io.to(sender.toLowerCase()).emit('receive-message', { sender, receiver, msg });
         debouncedBroadcast();
+        } catch(e) { console.error('send-message socket error:', e.message); }
+    });
+
+    socket.on('send-saved-message', ({ login, msg }) => {
+        try {
+        if (!login || !msg) return;
+        const storeKey = `saved_${login}`;
+        if (!db.messagesStore[storeKey]) db.messagesStore[storeKey] = [];
+        db.messagesStore[storeKey].push(msg);
+        debouncedSave();
+        } catch(e) { console.error('send-saved-message error:', e.message); }
     });
 
     socket.on('send-group-message', ({ groupId, subgroup, msg }) => {
+        try {
+        if (!groupId || !msg) return;
         const group = db.groups[groupId];
         if (!group) return;
         
@@ -1200,9 +1326,12 @@ io.on('connection', (socket) => {
         
         io.emit('receive-group-message', { groupId, msg, subgroup: subgroup || 'main' });
         debouncedBroadcast();
+        } catch(e) { console.error('send-group-message socket error:', e.message); }
     });
 
     socket.on('join-voice-room', ({ roomKey, login }) => {
+        try {
+        if (!roomKey || !login) return;
         socket.join(roomKey);
         socket.roomKey = roomKey;
         socket.voiceLogin = login;
@@ -1215,13 +1344,16 @@ io.on('connection', (socket) => {
         
         io.to(roomKey).emit('voice-room-update', { roomKey, participants });
         socket.to(roomKey).emit('voice-user-joined', { login });
-        
-        // Also notify workspace
-        const gid = extractGroupIdFromRoomKey(roomKey);
-        if (gid) io.to(`workspace_${gid}`).emit('voice-room-update', { roomKey, participants });
+
+        // Также уведомляем всех, кто в workspace группы
+        const gId = extractGroupIdFromRoomKey(roomKey);
+        if (gId) io.to(`workspace_${gId}`).emit('voice-room-update', { roomKey, participants });
+        } catch(e) { console.error('join-voice-room error:', e.message); }
     });
 
     socket.on('leave-voice-room', ({ roomKey, login }) => {
+        try {
+        if (!roomKey) return;
         socket.leave(roomKey);
         
         if (global.voiceRooms && global.voiceRooms[roomKey] && login) {
@@ -1229,30 +1361,43 @@ io.on('connection', (socket) => {
             const participants = Array.from(global.voiceRooms[roomKey]);
             io.to(roomKey).emit('voice-room-update', { roomKey, participants });
             socket.emit('voice-room-update', { roomKey, participants });
-            
-            const gid = extractGroupIdFromRoomKey(roomKey);
-            if (gid) io.to(`workspace_${gid}`).emit('voice-room-update', { roomKey, participants });
+
+            const gId = extractGroupIdFromRoomKey(roomKey);
+            if (gId) io.to(`workspace_${gId}`).emit('voice-room-update', { roomKey, participants });
         }
         
         socket.roomKey = null;
         socket.voiceLogin = null;
+        } catch(e) { console.error('leave-voice-room error:', e.message); }
     });
 
     socket.on('voice-speaking', ({ roomKey, login, isSpeaking }) => {
+        try {
+        if (!roomKey || !login) return;
         socket.to(roomKey).emit('user-speaking', { login, isSpeaking });
-        const gid = extractGroupIdFromRoomKey(roomKey);
-        if (gid) socket.to(`workspace_${gid}`).emit('user-speaking', { login, isSpeaking });
+
+        const gId = extractGroupIdFromRoomKey(roomKey);
+        if (gId) io.to(`workspace_${gId}`).emit('user-speaking', { login, isSpeaking });
+        } catch(e) { console.error('voice-speaking error:', e.message); }
     });
 
     socket.on('voice-offer', ({ offer, to, from }) => {
-        io.to(to.toLowerCase()).emit('voice-offer', { offer, from });
+        try {
+        const room = safeToRoom(to);
+        if (room) io.to(room).emit('voice-offer', { offer, from });
+        } catch(e) { console.error('voice-offer error:', e.message); }
     });
 
     socket.on('voice-answer', ({ answer, to }) => {
-        io.to(to.toLowerCase()).emit('voice-answer', { answer, from: socket.userLogin });
+        try {
+        const room = safeToRoom(to);
+        if (room) io.to(room).emit('voice-answer', { answer, from: socket.userLogin });
+        } catch(e) { console.error('voice-answer error:', e.message); }
     });
 
     socket.on('admin-voice-action', ({ groupId, subId, targetLogin, action, adminLogin }) => {
+        try {
+        if (!groupId || !targetLogin) return;
         const group = db.groups[groupId];
         if (!group) return;
         const isLeader = group.creator === adminLogin;
@@ -1261,10 +1406,13 @@ io.on('connection', (socket) => {
         const canCtrl = isLeader || myRole === 'Админ' || (rolePerms && rolePerms.canVoiceControl) || hasFullAccess(adminLogin);
         if (!canCtrl) return;
 
-        io.to(targetLogin.toLowerCase()).emit('forced-voice-action', { action, subId });
+        const room = safeToRoom(targetLogin);
+        if (room) io.to(room).emit('forced-voice-action', { action, subId });
+        } catch(e) { console.error('admin-voice-action error:', e.message); }
     });
 
     socket.on('disconnect', () => {
+        try {
         if (socket.userLogin) {
             db.lastSeen[socket.userLogin] = Date.now();
         }
@@ -1273,11 +1421,12 @@ io.on('connection', (socket) => {
                 global.voiceRooms[socket.roomKey].delete(socket.voiceLogin);
                 const participants = Array.from(global.voiceRooms[socket.roomKey]);
                 io.to(socket.roomKey).emit('voice-room-update', { roomKey: socket.roomKey, participants });
-                
-                const gid = extractGroupIdFromRoomKey(socket.roomKey);
-                if (gid) io.to(`workspace_${gid}`).emit('voice-room-update', { roomKey: socket.roomKey, participants });
+
+                const gId = extractGroupIdFromRoomKey(socket.roomKey);
+                if (gId) io.to(`workspace_${gId}`).emit('voice-room-update', { roomKey: socket.roomKey, participants });
             }
         }
+        } catch(e) { console.error('disconnect error:', e.message); }
     });
 });
 
@@ -1285,5 +1434,11 @@ const PORT = process.env.PORT || 3000;
 initDatabase().then(() => {
     server.listen(PORT, () => {
         console.log(`Сервер запущен на порту ${PORT}`);
+    });
+}).catch(e => {
+    console.error('Ошибка инициализации БД:', e);
+    // Запускаем сервер даже без БД — данные будут в памяти
+    server.listen(PORT, () => {
+        console.log(`Сервер запущен на порту ${PORT} (без подключения к MongoDB)`);
     });
 });
