@@ -42,10 +42,8 @@
         }
 
         @media (max-width: 768px) {
-            body { overflow: hidden; height: 100dvh; -webkit-tap-highlight-color: transparent; }
+            body { overflow: hidden; height: 100dvh; }
             #main-app { flex-direction: row !important; height: 100dvh !important; }
-            
-            /* === NAV SIDEBAR === */
             .nav-sidebar {
                 width: 56px !important;
                 height: 100dvh !important;
@@ -75,11 +73,7 @@
                 border-width: 2px !important;
                 display: block !important;
             }
-            
-            /* === CONTENT WRAPPER === */
             .content-wrapper { height: 100dvh !important; margin-bottom: 0 !important; }
-            
-            /* === CHAT PANELS === */
             .chat-list-panel {
                 width: 100% !important;
                 position: absolute !important;
@@ -91,125 +85,7 @@
             .chat-list-panel.mobile-hidden { transform: translateX(-100%); }
             .active-chat-panel { width: 100% !important; position: absolute !important; height: 100% !important; z-index: 5; }
             .mobile-back-btn { display: inline-block !important; }
-            
-            /* === TAB CONTENT PADDING === */
-            #tab-content-friends, #tab-content-news, #tab-content-moderation, #tab-content-profile {
-                padding: 12px !important;
-            }
-            #tab-content-groups { padding: 12px !important; }
-            
-            /* === GROUPS MAIN VIEW === */
-            #groups-main-view { padding: 12px !important; }
-            
-            /* === GROUP WORKSPACE SIDEBAR === */
-            .gw-sidebar {
-                position: absolute !important;
-                width: 100% !important;
-                max-width: 280px;
-                height: 100% !important;
-                z-index: 20;
-                transition: transform 0.3s ease;
-            }
-            .gw-sidebar.mobile-hidden { transform: translateX(-100%); }
-            .gw-chat-area { width: 100% !important; }
-            .gw-mobile-back-btn { display: inline-block !important; }
-            
-            /* === MODALS === */
-            #custom-modal > div, #violation-edit-modal > div, #violation-mute-modal > div,
-            #group-requests-modal > div, #role-assign-modal > div, #subgroup-modal > div {
-                width: 94% !important;
-                max-width: 360px !important;
-                max-height: 85vh !important;
-                overflow-y: auto !important;
-                padding: 16px !important;
-            }
-            #settings-modal > div, #group-settings-modal > div {
-                width: 94% !important;
-                max-width: 480px !important;
-                max-height: 88vh !important;
-                overflow-y: auto !important;
-                padding: 16px !important;
-            }
-            #auth-screen > div {
-                width: 94% !important;
-                max-width: 380px !important;
-                padding: 20px !important;
-            }
-            
-            /* === MODERATION TABS === */
-            #tab-content-moderation .flex.border-b {
-                overflow-x: auto !important;
-                -webkit-overflow-scrolling: touch;
-                white-space: nowrap !important;
-            }
-            #tab-content-moderation .flex.border-b button {
-                white-space: nowrap !important;
-                flex-shrink: 0 !important;
-            }
-            
-            /* === GROUP SETTINGS INTERNAL === */
-            #group-settings-modal .flex.items-center.space-x-4 {
-                flex-direction: column !important;
-                align-items: stretch !important;
-                gap: 12px !important;
-            }
-            #group-settings-modal .flex.items-center.space-x-4 > img {
-                align-self: center !important;
-            }
-            
-            /* === INPUTS & TEXTAREAS === */
-            input, textarea, select {
-                font-size: 16px !important;
-            }
-            
-            /* === CHAT INPUT === */
-            #chat-input-wrapper { padding: 8px !important; gap: 4px !important; }
-            #message-input, #ws-message-input { font-size: 16px !important; padding: 8px 12px !important; }
-            
-            /* === GROUP POST CREATION === */
-            #group-post-select { width: 100% !important; margin-bottom: 8px !important; }
-            
-            /* === HEADINGS === */
-            h2 { font-size: 1.25rem !important; }
-            
-            /* === VERIFIED NAME === */
             .verified-gradient-name { font-size: 0.95rem !important; }
-            
-            /* === SCROLL CONTAINERS === */
-            #groups-list { max-height: calc(100dvh - 400px) !important; }
-            #groups-feed-list { max-height: 400px !important; }
-            
-            /* === CALL MODALS === */
-            #incoming-call-modal, #single-call-modal {
-                inset-x-4 !important;
-                bottom-6 !important;
-                width: auto !important;
-                max-width: calc(100% - 32px) !important;
-            }
-            
-            /* === FRIENDS SECTION === */
-            #tab-content-friends .max-w-xl { max-width: 100% !important; }
-            
-            /* === NEWS SECTION === */
-            #tab-content-news .max-w-2xl { max-width: 100% !important; }
-            
-            /* === PROFILE SECTION === */
-            #tab-content-profile .max-w-md { max-width: 100% !important; }
-            
-            /* === TOUCH TARGETS === */
-            button { min-height: 36px; }
-            
-            /* === HIDE HORIZONTAL OVERFLOW === */
-            #main-app { overflow-x: hidden !important; }
-        }
-        
-        @media (max-width: 480px) {
-            .nav-sidebar { width: 48px !important; }
-            h2 { font-size: 1.1rem !important; }
-            #tab-content-friends, #tab-content-news, #tab-content-moderation, #tab-content-profile {
-                padding: 8px !important;
-            }
-            #groups-main-view { padding: 8px !important; }
         }
     </style>
 </head>
@@ -588,7 +464,7 @@
 
                 <!-- Рабочая область группы -->
                 <div id="group-workspace-view" class="flex-1 flex overflow-hidden hidden">
-                    <div class="w-64 bg-gray-900 border-r border-gray-800 flex flex-col flex-shrink-0 gw-sidebar">
+                    <div class="w-64 bg-gray-900 border-r border-gray-800 flex flex-col flex-shrink-0">
                         <div class="p-4 border-b border-gray-800 flex items-center justify-between">
                             <button onclick="closeGroupWorkspace()" class="text-xs text-gray-400 hover:text-white font-bold">← К списку</button>
                             <span id="ws-group-sidebar-name" class="font-bold text-white truncate text-xs">Группа</span>
@@ -628,9 +504,9 @@
                         </div>
                     </div>
 
-                    <div class="flex-1 flex flex-col bg-gray-950 relative gw-chat-area">
+                    <div class="flex-1 flex flex-col bg-gray-950 relative">
                         <div class="p-4 bg-gray-900/80 backdrop-blur border-b border-gray-800 flex items-center justify-between z-10">
-                            <div class="flex items-center space-x-3"><button onclick="gwMobileBack()" class="gw-mobile-back-btn bg-gray-800 hover:bg-gray-700 text-white px-2 py-1.5 rounded-xl text-xs font-bold transition" style="display:none;">☰</button>
+                            <div class="flex items-center space-x-3">
                                 <img id="ws-active-chat-avatar" src="" class="w-10 h-10 rounded-full object-cover border border-purple-500/50">
                                 <div>
                                     <div id="ws-active-chat-name" class="font-bold text-white flex items-center space-x-1"></div>
@@ -2332,6 +2208,23 @@
         }
 
         socket.on('update-db', (updatedDb) => {
+            // Preserve locally stored messages that might not be on server yet
+            if (db.messagesStore && updatedDb.messagesStore) {
+                for (let key in db.messagesStore) {
+                    if (!updatedDb.messagesStore[key]) {
+                        updatedDb.messagesStore[key] = db.messagesStore[key];
+                    } else {
+                        // Merge: add any local messages not on server
+                        const localIds = new Set(db.messagesStore[key].map(m => m.id));
+                        const serverIds = new Set(updatedDb.messagesStore[key].map(m => m.id));
+                        for (let m of db.messagesStore[key]) {
+                            if (!serverIds.has(m.id)) {
+                                updatedDb.messagesStore[key].push(m);
+                            }
+                        }
+                    }
+                }
+            }
             const oldRequestsCount = (db.friendRequests && db.friendRequests[currentUser.login]) ? db.friendRequests[currentUser.login].length : 0;
             db = updatedDb;
             const newRequestsCount = (db.friendRequests && db.friendRequests[currentUser.login]) ? db.friendRequests[currentUser.login].length : 0;
@@ -2359,7 +2252,9 @@
             if (!db.messagesStore) db.messagesStore = {};
             const key = [sender, receiver].sort().join('_');
             if (!db.messagesStore[key]) db.messagesStore[key] = [];
-            db.messagesStore[key].push(msg);
+            if (!db.messagesStore[key].find(m => m.id === msg.id)) {
+                db.messagesStore[key].push(msg);
+            }
 
             if (sender !== currentUser.login) {
                 if (!activeChat || activeChat.type !== 'user' || activeChat.id !== sender) {
@@ -2375,6 +2270,12 @@
         });
 
         socket.on('receive-group-message', ({ groupId, msg, subgroup }) => {
+            const storeKey = `group_${groupId}_${subgroup || 'main'}`;
+            if (!db.messagesStore) db.messagesStore = {};
+            if (!db.messagesStore[storeKey]) db.messagesStore[storeKey] = [];
+            if (!db.messagesStore[storeKey].find(m => m.id === msg.id)) {
+                db.messagesStore[storeKey].push(msg);
+            }
             if (msg.sender !== currentUser.login) {
                 unreadGroupsCount++;
                 updateGroupsBadge();
@@ -3126,13 +3027,6 @@
             }
         }
 
-        function gwMobileBack() {
-            const sidebar = document.querySelector('.gw-sidebar');
-            if (sidebar) {
-                sidebar.classList.remove('mobile-hidden');
-            }
-        }
-        
         function openGroupWorkspace(groupId) {
             activeGroupWorkspaceId = groupId;
             const group = db.groups[groupId];
@@ -3151,9 +3045,6 @@
             activeGroupWorkspaceId = null;
             document.getElementById('group-workspace-view').classList.add('hidden');
             document.getElementById('groups-main-view').classList.remove('hidden');
-            // Reset mobile sidebar
-            const sidebar = document.querySelector('.gw-sidebar');
-            if (sidebar) sidebar.classList.remove('mobile-hidden');
         }
 
         function renderGroupWorkspaceSidebar(group) {
@@ -3241,12 +3132,6 @@
             if (!group) return;
 
             renderGroupWorkspaceSidebar(group);
-            
-            // Mobile: hide sidebar after selecting a channel
-            if (window.innerWidth <= 768) {
-                const sidebar = document.querySelector('.gw-sidebar');
-                if (sidebar) sidebar.classList.add('mobile-hidden');
-            }
             
             const nameEl = document.getElementById('ws-active-chat-name');
             if (subgroupId === 'main') {
@@ -3390,7 +3275,8 @@
 
             let allPosts = [];
             Object.values(db.groups || {}).forEach(g => {
-                if (g.posts) {
+                // Показываем посты только из групп, в которых состоит пользователь
+                if (g.posts && g.members && g.members.includes(currentUser.login)) {
                     g.posts.forEach(p => {
                         allPosts.push({ ...p, groupName: g.name, groupAvatar: g.avatar, groupId: g.id, isGroupVerified: g.isVerified });
                     });
@@ -3735,9 +3621,18 @@
                 if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
                 db.messagesStore[chatKey].push(msgObj);
                 renderMessages();
+                socket.emit('send-saved-message', { login: currentUser.login, msg: msgObj });
             } else if (activeChat.type === 'user') {
+                const chatKey = [currentUser.login, activeChat.id].sort().join('_');
+                if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
+                db.messagesStore[chatKey].push(msgObj);
+                renderMessages();
                 socket.emit('send-message', { sender: currentUser.login, receiver: activeChat.id, msg: msgObj });
             } else if (activeChat.type === 'group') {
+                const chatKey = `group_${activeChat.id}_${activeChat.subgroup || 'main'}`;
+                if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
+                db.messagesStore[chatKey].push(msgObj);
+                renderMessages();
                 socket.emit('send-group-message', { groupId: activeChat.id, subgroup: activeChat.subgroup || 'main', msg: msgObj });
             }
 
