@@ -902,6 +902,9 @@
         let activeChat = null;
         let activeGroupWorkspaceId = null;
         let currentUploadedMedia = null;
+        let draftMap = {};
+        let lastRenderedChatKey = null;
+        let lastRenderedMsgCount = -1;
         let activeSubgroup = 'main';
 
         let mediaRecorder = null;
@@ -2209,6 +2212,34 @@
 
         socket.on('update-db', (updatedDb) => {
             const oldRequestsCount = (db.friendRequests && db.friendRequests[currentUser.login]) ? db.friendRequests[currentUser.login].length : 0;
+
+            // Save current input value before db replacement
+            const currentInput = document.getElementById(activeGroupWorkspaceId ? 'ws-message-input' : 'message-input');
+            if (currentInput && activeChat) {
+                let draftKey = '';
+                if (activeChat.type === 'saved') draftKey = `saved_${currentUser.login}`;
+                else if (activeChat.type === 'user') draftKey = `user_${activeChat.id}`;
+                else if (activeChat.type === 'group') draftKey = `group_${activeChat.id}_${activeChat.subgroup || 'main'}`;
+                if (draftKey) draftMap[draftKey] = currentInput.value;
+            }
+
+            // Merge local messages that might not be on server yet
+            if (db.messagesStore && updatedDb.messagesStore) {
+                for (let key in db.messagesStore) {
+                    if (!updatedDb.messagesStore[key]) {
+                        updatedDb.messagesStore[key] = db.messagesStore[key];
+                    } else {
+                        // Merge by msg.id to avoid losing optimistic messages
+                        const localIds = new Set(updatedDb.messagesStore[key].map(m => m.id));
+                        for (let m of db.messagesStore[key]) {
+                            if (!localIds.has(m.id)) {
+                                updatedDb.messagesStore[key].push(m);
+                            }
+                        }
+                    }
+                }
+            }
+
             db = updatedDb;
             const newRequestsCount = (db.friendRequests && db.friendRequests[currentUser.login]) ? db.friendRequests[currentUser.login].length : 0;
 
@@ -2216,6 +2247,9 @@
                 playNotificationSound();
                 showWebNotification('Новая заявка в друзья', 'У вас появился новый запрос на добавление в друзья!');
             }
+
+            // Force re-render on db update
+            lastRenderedChatKey = null;
 
             renderFriends();
             renderChatsList();
@@ -2229,13 +2263,18 @@
                 const grp = db.groups[activeGroupWorkspaceId];
                 if (grp) renderGroupWorkspaceSidebar(grp);
             }
-        });
+        }););
 
         socket.on('receive-message', ({ sender, receiver, msg }) => {
             if (!db.messagesStore) db.messagesStore = {};
             const key = [sender, receiver].sort().join('_');
             if (!db.messagesStore[key]) db.messagesStore[key] = [];
-            db.messagesStore[key].push(msg);
+
+            // Dedup check
+            const exists = db.messagesStore[key].some(m => m.id === msg.id);
+            if (!exists) {
+                db.messagesStore[key].push(msg);
+            }
 
             if (sender !== currentUser.login) {
                 if (!activeChat || activeChat.type !== 'user' || activeChat.id !== sender) {
@@ -2245,18 +2284,33 @@
                     showWebNotification(`Новое сообщение от @${sender}`, msg.text || '[Медиафайл]');
                 }
             }
+            // Force re-render
+            lastRenderedChatKey = null;
             renderChatsList();
             renderMessages();
             renderModerationPanel();
         });
 
         socket.on('receive-group-message', ({ groupId, msg, subgroup }) => {
+            // Save message to local store
+            if (!db.messagesStore) db.messagesStore = {};
+            const key = `group_${groupId}_${subgroup || 'main'}`;
+            if (!db.messagesStore[key]) db.messagesStore[key] = [];
+
+            // Dedup check
+            const exists = db.messagesStore[key].some(m => m.id === msg.id);
+            if (!exists) {
+                db.messagesStore[key].push(msg);
+            }
+
             if (msg.sender !== currentUser.login) {
                 unreadGroupsCount++;
                 updateGroupsBadge();
                 playNotificationSound();
                 showWebNotification('Новое сообщение в группе', msg.text || '[Медиафайл]');
             }
+            // Force re-render
+            lastRenderedChatKey = null;
             renderMessages();
             renderModerationPanel();
         });
@@ -3017,6 +3071,13 @@
         }
 
         function closeGroupWorkspace() {
+            // Save draft before closing
+            const currentInput = document.getElementById('ws-message-input');
+            if (currentInput && activeChat && activeChat.type === 'group') {
+                let draftKey = `group_${activeChat.id}_${activeChat.subgroup || 'main'}`;
+                draftMap[draftKey] = currentInput.value;
+            }
+
             activeGroupWorkspaceId = null;
             activeSubgroup = 'main';
             if (activeChat && activeChat.type === 'group') {
@@ -3108,6 +3169,13 @@
         }
 
         function selectSubgroup(subgroupId) {
+            // Save draft from current subgroup before switching
+            const currentInput = document.getElementById('ws-message-input');
+            if (currentInput && activeChat && activeChat.type === 'group') {
+                let draftKey = `group_${activeChat.id}_${activeChat.subgroup || 'main'}`;
+                draftMap[draftKey] = currentInput.value;
+            }
+
             activeSubgroup = subgroupId;
             const group = db.groups[activeGroupWorkspaceId];
             if (!group) return;
@@ -3132,6 +3200,13 @@
             }
 
             selectChat({ type: 'group', id: group.id, subgroup: subgroupId });
+
+            // Restore draft for new subgroup
+            const newInput = document.getElementById('ws-message-input');
+            if (newInput) {
+                let newDraftKey = `group_${group.id}_${subgroupId}`;
+                newInput.value = draftMap[newDraftKey] || '';
+            }
         }
 
         let pendingChannelType = 'text';
@@ -3341,7 +3416,22 @@
         }
 
         function selectChat(chatInfo) {
+            // Save draft from current chat before switching
+            const currentInput = document.getElementById(activeGroupWorkspaceId ? 'ws-message-input' : 'message-input');
+            if (currentInput && activeChat) {
+                let draftKey = '';
+                if (activeChat.type === 'saved') draftKey = `saved_${currentUser.login}`;
+                else if (activeChat.type === 'user') draftKey = `user_${activeChat.id}`;
+                else if (activeChat.type === 'group') draftKey = `group_${activeChat.id}_${activeChat.subgroup || 'main'}`;
+                if (draftKey) draftMap[draftKey] = currentInput.value;
+            }
+
             activeChat = chatInfo;
+
+            // Reset render cache so messages always re-render on chat switch
+            lastRenderedChatKey = null;
+            lastRenderedMsgCount = -1;
+
             document.getElementById('no-chat-selected').classList.add('hidden');
             document.getElementById('chat-window').classList.remove('hidden');
 
@@ -3380,6 +3470,16 @@
 
             renderMessages();
             renderPinnedMessageBanner();
+
+            // Restore draft for new chat
+            const newInput = document.getElementById(activeGroupWorkspaceId ? 'ws-message-input' : 'message-input');
+            if (newInput) {
+                let newDraftKey = '';
+                if (chatInfo.type === 'saved') newDraftKey = `saved_${currentUser.login}`;
+                else if (chatInfo.type === 'user') newDraftKey = `user_${chatInfo.id}`;
+                else if (chatInfo.type === 'group') newDraftKey = `group_${chatInfo.id}_${chatInfo.subgroup || 'main'}`;
+                newInput.value = draftMap[newDraftKey] || '';
+            }
             
             if (window.innerWidth <= 768) {
                 document.getElementById('chat-list-panel').classList.add('mobile-hidden');
@@ -3408,6 +3508,13 @@
                 chatKey = `group_${activeChat.id}_${activeChat.subgroup || 'main'}`;
                 messages = db.messagesStore[chatKey] || [];
             }
+
+            // OPTIMIZATION: Skip re-render if nothing changed
+            if (lastRenderedChatKey === chatKey && lastRenderedMsgCount === messages.length) {
+                return;
+            }
+            lastRenderedChatKey = chatKey;
+            lastRenderedMsgCount = messages.length;
 
             container.innerHTML = '';
             messages.forEach((msg, idx) => {
@@ -3575,18 +3682,19 @@
                 else if (activeChat.type === 'user') chatKey = [currentUser.login, activeChat.id].sort().join('_');
                 else if (activeChat.type === 'group') chatKey = `group_${activeChat.id}_${activeChat.subgroup || 'main'}`;
 
-                const res = await fetch('/api/edit-message', {
+                fetch('/api/edit-message', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ chatKey, msgId: editingMessageId, newText: text, login: currentUser.login })
+                }).then(r => r.json()).then(data => {
+                    if (data.success) {
+                        db = data.db;
+                        cancelEditing();
+                        lastRenderedChatKey = null;
+                        renderMessages();
+                        socket.emit('refresh-db');
+                    }
                 });
-                const data = await res.json();
-                if (data.success) {
-                    db = data.db;
-                    cancelEditing();
-                    renderMessages();
-                    socket.emit('refresh-db');
-                }
                 return;
             }
 
@@ -3602,15 +3710,36 @@
                 const chatKey = `saved_${currentUser.login}`;
                 if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
                 db.messagesStore[chatKey].push(msgObj);
+                socket.emit('send-saved-message', { login: currentUser.login, msg: msgObj });
+                lastRenderedChatKey = null;
                 renderMessages();
             } else if (activeChat.type === 'user') {
+                // Optimistic UI: add to local store immediately
+                const chatKey = [currentUser.login, activeChat.id].sort().join('_');
+                if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
+                db.messagesStore[chatKey].push(msgObj);
+                lastRenderedChatKey = null;
+                renderMessages();
                 socket.emit('send-message', { sender: currentUser.login, receiver: activeChat.id, msg: msgObj });
             } else if (activeChat.type === 'group') {
+                // Optimistic UI: add to local store immediately
+                const chatKey = `group_${activeChat.id}_${activeChat.subgroup || 'main'}`;
+                if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
+                db.messagesStore[chatKey].push(msgObj);
+                lastRenderedChatKey = null;
+                renderMessages();
                 socket.emit('send-group-message', { groupId: activeChat.id, subgroup: activeChat.subgroup || 'main', msg: msgObj });
             }
 
             inputEl.value = '';
             currentUploadedMedia = null;
+
+            // Clear draft for this chat
+            let draftKey = '';
+            if (activeChat.type === 'saved') draftKey = `saved_${currentUser.login}`;
+            else if (activeChat.type === 'user') draftKey = `user_${activeChat.id}`;
+            else if (activeChat.type === 'group') draftKey = `group_${activeChat.id}_${activeChat.subgroup || 'main'}`;
+            if (draftKey) delete draftMap[draftKey];
         }
 
         async function handleFileUpload(e) {
