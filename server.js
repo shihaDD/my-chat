@@ -107,15 +107,8 @@ async function initDatabase() {
     }
 }
 
-// --- DEBOUNCE для ускорения ---
-function debounce(func, delay) {
-    let timeoutId;
-    return (...args) => {
-        clearTimeout(timeoutId);
-        timeoutId = setTimeout(() => func(...args), delay);
-    };
-}
-
+// --- DEBOUNCE: запись в MongoDB не чаще раза в 800мс ---
+let saveDbTimer = null;
 async function saveDb() {
     try {
         await AppState.findOneAndUpdate(
@@ -144,21 +137,30 @@ async function saveDb() {
     }
 }
 
-function broadcastDb() {
-    io.emit('update-db', db);
+function debouncedSaveDb() {
+    if (saveDbTimer) clearTimeout(saveDbTimer);
+    saveDbTimer = setTimeout(() => { saveDb(); saveDbTimer = null; }, 800);
 }
 
-// Debounced версии: сохраняем раз в 800мс, рассылаем раз в 200мс
-const debouncedSave = debounce(saveDb, 800);
-const debouncedBroadcast = debounce(broadcastDb, 200);
+// --- DEBOUNCE: рассылка update-db по сокетам не чаще раза в 200мс ---
+let broadcastTimer = null;
+function debouncedBroadcast() {
+    if (broadcastTimer) clearTimeout(broadcastTimer);
+    broadcastTimer = setTimeout(() => {
+        io.emit('update-db', db);
+        broadcastTimer = null;
+    }, 200);
+}
 
+// Единая функция: дебаунс сохранения + дебаунс рассылки
 function saveAndBroadcast() {
-    debouncedSave();
+    debouncedSaveDb();
     debouncedBroadcast();
 }
 
-// Принудительное сохранение (для критичных операций)
+// Принудительное немедленное сохранение (для критичных операций)
 async function saveDbNow() {
+    if (saveDbTimer) { clearTimeout(saveDbTimer); saveDbTimer = null; }
     await saveDb();
 }
 
@@ -199,8 +201,7 @@ app.post('/api/register', async (req, res) => {
     db.friendRequests[cleanLogin] = [];
     db.outgoingRequests[cleanLogin] = [];
     db.lastSeen[cleanLogin] = Date.now();
-    saveAndBroadcast();
-
+    await saveDbNow();
     res.json({ success: true, user: db.users[cleanLogin], db });
 });
 
@@ -220,7 +221,7 @@ app.post('/api/login', async (req, res) => {
     }
 
     db.lastSeen[cleanLogin] = Date.now();
-    saveAndBroadcast();
+    await saveDbNow();
     res.json({ success: true, user, db });
 });
 
@@ -231,7 +232,7 @@ app.post('/api/restore-session', async (req, res) => {
     const user = db.users[cleanLogin];
     if (!user) return res.json({ success: false });
     db.lastSeen[cleanLogin] = Date.now();
-    saveAndBroadcast();
+    debouncedSaveDb();
     res.json({ success: true, user, db });
 });
 
@@ -247,7 +248,7 @@ app.post('/api/update-profile', async (req, res) => {
     if (avatar) db.users[cleanLogin].avatar = avatar;
     if (password) db.users[cleanLogin].password = password;
     saveAndBroadcast();
-    res.json({ success: true, user: db.users[cleanLogin] });
+    res.json({ success: true, user: db.users[cleanLogin], db });
 });
 
 app.post('/api/set-global-role', async (req, res) => {
@@ -259,7 +260,7 @@ app.post('/api/set-global-role', async (req, res) => {
     if (!db.globalRoles) db.globalRoles = {};
     db.globalRoles[targetLogin.trim().toLowerCase()] = newRole;
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/remove-global-mute', async (req, res) => {
@@ -272,7 +273,7 @@ app.post('/api/remove-global-mute', async (req, res) => {
         delete db.mutedUsers[targetLogin.trim().toLowerCase()];
     }
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/issue-global-mute', async (req, res) => {
@@ -288,7 +289,7 @@ app.post('/api/issue-global-mute', async (req, res) => {
         reason: reason || 'Нарушение правил'
     };
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/add-friend', async (req, res) => {
@@ -311,7 +312,7 @@ app.post('/api/add-friend', async (req, res) => {
     db.friendRequests[cleanTarget].push(login);
     db.outgoingRequests[login].push(cleanTarget);
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/cancel-friend-request', async (req, res) => {
@@ -323,7 +324,7 @@ app.post('/api/cancel-friend-request', async (req, res) => {
         db.friendRequests[targetLogin] = db.friendRequests[targetLogin].filter(l => l !== login);
     }
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/respond-friend-request', async (req, res) => {
@@ -343,7 +344,7 @@ app.post('/api/respond-friend-request', async (req, res) => {
         if (!db.friends[requesterLogin].includes(login)) db.friends[requesterLogin].push(login);
     }
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/remove-friend', async (req, res) => {
@@ -351,7 +352,7 @@ app.post('/api/remove-friend', async (req, res) => {
     if (db.friends[login]) db.friends[login] = db.friends[login].filter(l => l !== targetLogin);
     if (db.friends[targetLogin]) db.friends[targetLogin] = db.friends[targetLogin].filter(l => l !== login);
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/create-group', async (req, res) => {
@@ -383,7 +384,7 @@ app.post('/api/create-group', async (req, res) => {
         verificationPending: false
     };
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/delete-group', async (req, res) => {
@@ -399,7 +400,7 @@ app.post('/api/delete-group', async (req, res) => {
     }
     delete db.groups[groupId];
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/update-group-settings', async (req, res) => {
@@ -413,7 +414,7 @@ app.post('/api/update-group-settings', async (req, res) => {
     if (avatar) group.avatar = avatar;
     if (isClosed !== undefined) group.isClosed = !!isClosed;
     saveAndBroadcast();
-    res.json({ success: true, group });
+    res.json({ success: true, db, group });
 });
 
 app.post('/api/update-group', async (req, res) => {
@@ -427,7 +428,7 @@ app.post('/api/update-group', async (req, res) => {
     if (avatar) group.avatar = avatar;
     if (isClosed !== undefined) group.isClosed = !!isClosed;
     saveAndBroadcast();
-    res.json({ success: true, group });
+    res.json({ success: true, db, group });
 });
 
 app.post('/api/leave-group', async (req, res) => {
@@ -441,7 +442,7 @@ app.post('/api/leave-group', async (req, res) => {
         if (otherMembers.length === 0) {
             delete db.groups[groupId];
             saveAndBroadcast();
-            return res.json({ success: true });
+            return res.json({ success: true, db });
         }
         let nextLeader = otherMembers.find(m => group.roles?.[m] === 'Админ') || otherMembers[0];
         group.creator = nextLeader;
@@ -454,7 +455,7 @@ app.post('/api/leave-group', async (req, res) => {
     if (group.groupNicknames) delete group.groupNicknames[login];
 
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/group-mute-member', async (req, res) => {
@@ -482,7 +483,7 @@ app.post('/api/group-mute-member', async (req, res) => {
     }
 
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/group-set-nickname', async (req, res) => {
@@ -508,7 +509,7 @@ app.post('/api/group-set-nickname', async (req, res) => {
     }
 
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/request-verification', async (req, res) => {
@@ -534,7 +535,7 @@ app.post('/api/request-verification', async (req, res) => {
     });
 
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/resolve-verification', async (req, res) => {
@@ -555,7 +556,7 @@ app.post('/api/resolve-verification', async (req, res) => {
 
     db.verificationRequests = db.verificationRequests.filter(r => r.id !== requestId);
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/join-group', async (req, res) => {
@@ -572,7 +573,7 @@ app.post('/api/join-group', async (req, res) => {
         group.roles[login] = 'Участник';
         saveAndBroadcast();
     }
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/request-join-group', async (req, res) => {
@@ -586,7 +587,7 @@ app.post('/api/request-join-group', async (req, res) => {
         group.joinRequests.push(login);
         saveAndBroadcast();
     }
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/respond-join-request', async (req, res) => {
@@ -610,7 +611,7 @@ app.post('/api/respond-join-request', async (req, res) => {
         }
     }
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/set-group-role', async (req, res) => {
@@ -625,7 +626,7 @@ app.post('/api/set-group-role', async (req, res) => {
     if (!group.roles) group.roles = {};
     group.roles[targetLogin] = newRole;
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/change-group-member-role', async (req, res) => {
@@ -640,7 +641,7 @@ app.post('/api/change-group-member-role', async (req, res) => {
     if (!group.roles) group.roles = {};
     group.roles[targetLogin] = newRole;
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/create-custom-role', async (req, res) => {
@@ -656,7 +657,7 @@ app.post('/api/create-custom-role', async (req, res) => {
 
     group.customRoles[cleanName] = permissions || { canPost: true, canDelete: true, canVoice: true, canDuplicateNews: false, canVoiceControl: false };
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/update-role-permissions', async (req, res) => {
@@ -669,7 +670,7 @@ app.post('/api/update-role-permissions', async (req, res) => {
     if (!group.customRoles) group.customRoles = {};
     group.customRoles[roleName] = permissions;
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/delete-custom-role', async (req, res) => {
@@ -686,7 +687,7 @@ app.post('/api/delete-custom-role', async (req, res) => {
         delete group.customRoles[roleName];
         saveAndBroadcast();
     }
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/kick-group-member', async (req, res) => {
@@ -708,7 +709,7 @@ app.post('/api/kick-group-member', async (req, res) => {
     if (group.groupMutedUsers) delete group.groupMutedUsers[targetLogin];
     if (group.groupNicknames) delete group.groupNicknames[targetLogin];
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/create-subgroup', async (req, res) => {
@@ -728,7 +729,7 @@ app.post('/api/create-subgroup', async (req, res) => {
         allowedRole: allowedRole || 'all'
     });
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/delete-subgroup', async (req, res) => {
@@ -743,7 +744,7 @@ app.post('/api/delete-subgroup', async (req, res) => {
         group.subgroups = group.subgroups.filter(s => s.id !== subId);
     }
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/edit-message', async (req, res) => {
@@ -766,7 +767,7 @@ app.post('/api/edit-message', async (req, res) => {
 
     if (found) {
         saveAndBroadcast();
-        res.json({ success: true });
+        res.json({ success: true, db });
     } else {
         res.json({ success: false, error: 'Сообщение не найдено' });
     }
@@ -793,7 +794,7 @@ app.post('/api/delete-message', async (req, res) => {
 
     if (found) {
         saveAndBroadcast();
-        res.json({ success: true });
+        res.json({ success: true, db });
     } else {
         res.json({ success: false, error: 'Сообщение не найдено' });
     }
@@ -804,7 +805,7 @@ app.post('/api/pin-message', async (req, res) => {
     if (!db.pinnedMessages) db.pinnedMessages = {};
     db.pinnedMessages[chatKey] = messageId;
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/unpin-message', async (req, res) => {
@@ -813,7 +814,7 @@ app.post('/api/unpin-message', async (req, res) => {
         delete db.pinnedMessages[chatKey];
         saveAndBroadcast();
     }
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/create-news', async (req, res) => {
@@ -845,7 +846,7 @@ app.post('/api/create-news', async (req, res) => {
     }
 
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/publish-news', async (req, res) => {
@@ -877,7 +878,7 @@ app.post('/api/publish-news', async (req, res) => {
     }
 
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/delete-news', async (req, res) => {
@@ -889,7 +890,7 @@ app.post('/api/delete-news', async (req, res) => {
     }
     db.news = db.news.filter(p => p.id !== postId);
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/create-group-post', async (req, res) => {
@@ -948,7 +949,7 @@ app.post('/api/create-group-post', async (req, res) => {
     }
 
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/publish-group-post', async (req, res) => {
@@ -1006,7 +1007,7 @@ app.post('/api/publish-group-post', async (req, res) => {
     }
 
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/delete-group-post', async (req, res) => {
@@ -1028,7 +1029,7 @@ app.post('/api/delete-group-post', async (req, res) => {
 
     group.posts = group.posts.filter(p => p.id !== postId);
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.post('/api/resolve-violation-action', async (req, res) => {
@@ -1085,7 +1086,7 @@ app.post('/api/resolve-violation-action', async (req, res) => {
 
     db.violations = db.violations.filter(v => v.id !== violId);
     saveAndBroadcast();
-    res.json({ success: true });
+    res.json({ success: true, db });
 });
 
 app.get('/api/internet-news', async (req, res) => {
@@ -1116,6 +1117,7 @@ io.on('connection', (socket) => {
             socket.userLogin = login.toLowerCase();
             socket.join(socket.userLogin);
             db.lastSeen[socket.userLogin] = Date.now();
+            debouncedSaveDb();
         }
     });
 
@@ -1260,6 +1262,7 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         if (socket.userLogin) {
             db.lastSeen[socket.userLogin] = Date.now();
+            debouncedSaveDb();
         }
         if (socket.roomKey && socket.voiceLogin) {
             if (global.voiceRooms && global.voiceRooms[socket.roomKey]) {
