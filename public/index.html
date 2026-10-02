@@ -895,7 +895,6 @@
 
     <!-- КЛИЕНТСКАЯ ЛОГИКА -->
     <script>
-
         const socket = io();
 
         let currentUser = null;
@@ -903,6 +902,9 @@
         let activeChat = null;
         let activeGroupWorkspaceId = null;
         let currentUploadedMedia = null;
+        const draftMap = {};
+        let lastRenderedChatKey = null;
+        let lastRenderedMsgCount = -1;
         let activeSubgroup = 'main';
 
         let mediaRecorder = null;
@@ -924,9 +926,6 @@
         let unreadMessagesMap = {};
         let unreadGroupsCount = 0;
         let unreadNewsCount = 0;
-        let draftMap = {};
-        let lastRenderedChatKey = null;
-        let lastRenderedMsgCount = -1;
 
         let appSettings = { audioDevice: '', audioOutput: '', pttMode: 'voice', pttKey: 'Space', micVolume: 80 };
         let isPttPressed = false;
@@ -1287,6 +1286,14 @@
         window.addEventListener('DOMContentLoaded', async () => {
             const savedLogin = localStorage.getItem('currentUserLogin');
             if (savedLogin) {
+                // Скрываем форму входа сразу, чтобы она не мелькала
+                const authScreen = document.getElementById('auth-screen');
+                const loadingDiv = document.createElement('div');
+                loadingDiv.id = 'auth-loading-overlay';
+                loadingDiv.style.cssText = 'position:fixed;inset:0;background:#1a1a2e;display:flex;align-items:center;justify-content:center;z-index:9999;color:#a78bfa;font-size:1.2rem;';
+                loadingDiv.textContent = 'Восстановление сессии...';
+                if (authScreen) authScreen.appendChild(loadingDiv);
+
                 try {
                     const res = await fetch('/api/restore-session', {
                         method: 'POST',
@@ -1297,11 +1304,19 @@
                     if (data.success) {
                         currentUser = data.user;
                         db = data.db;
+                        const ov = document.getElementById('auth-loading-overlay');
+                        if (ov) ov.remove();
                         initApp();
                         checkUrlHashAction();
                         return;
                     }
-                } catch (e) {}
+                } catch (e) {
+                    console.error('Restore session error:', e);
+                }
+                // Если restoring failed — убираем оверлей и показываем форму
+                const ov = document.getElementById('auth-loading-overlay');
+                if (ov) ov.remove();
+                localStorage.removeItem('currentUserLogin');
             }
             checkUrlHashAction();
         });
@@ -2213,25 +2228,14 @@
 
         socket.on('update-db', (updatedDb) => {
             if (!currentUser) { db = updatedDb; return; }
+            // Сохраняем черновик текста перед заменой db
+            const _draftInput = document.getElementById(activeGroupWorkspaceId ? 'ws-message-input' : 'message-input');
+            if (_draftInput && _draftInput.value) {
+                const _dk = activeGroupWorkspaceId ? `group_${activeGroupWorkspaceId}_${activeSubgroup || 'main'}` : (activeChat ? (activeChat.type === 'saved' ? `saved_${currentUser.login}` : activeChat.type === 'user' ? [currentUser.login, activeChat.id].sort().join('_') : `group_${activeChat.id}_${activeChat.subgroup || 'main'}`) : null);
+                if (_dk) draftMap[_dk] = _draftInput.value;
+            }
             const oldRequestsCount = (db.friendRequests && db.friendRequests[currentUser.login]) ? db.friendRequests[currentUser.login].length : 0;
-            // Preserve local messages before replacing db
-            const localMsgs = {};
-            if (db.messagesStore) {
-                for (let key in db.messagesStore) {
-                    localMsgs[key] = db.messagesStore[key].slice();
-                }
-            }
             db = updatedDb;
-            // Merge local messages back
-            if (!db.messagesStore) db.messagesStore = {};
-            for (let key in localMsgs) {
-                if (!db.messagesStore[key]) db.messagesStore[key] = [];
-                for (let m of localMsgs[key]) {
-                    if (!db.messagesStore[key].some(x => x.id === m.id)) {
-                        db.messagesStore[key].push(m);
-                    }
-                }
-            }
             const newRequestsCount = (db.friendRequests && db.friendRequests[currentUser.login]) ? db.friendRequests[currentUser.login].length : 0;
 
             if (newRequestsCount > oldRequestsCount) {
@@ -2258,9 +2262,9 @@
             if (!db.messagesStore) db.messagesStore = {};
             const key = [sender, receiver].sort().join('_');
             if (!db.messagesStore[key]) db.messagesStore[key] = [];
-            if (!db.messagesStore[key].some(m => m.id === msg.id)) {
-                db.messagesStore[key].push(msg);
-            }
+            // Дедупликация по msg.id
+            if (db.messagesStore[key].some(m => m.id === msg.id)) return;
+            db.messagesStore[key].push(msg);
 
             if (sender !== currentUser.login) {
                 if (!activeChat || activeChat.type !== 'user' || activeChat.id !== sender) {
@@ -2278,10 +2282,11 @@
         socket.on('receive-group-message', ({ groupId, msg, subgroup }) => {
             if (!currentUser) return;
             if (!db.messagesStore) db.messagesStore = {};
-            const storeKey = `group_${groupId}_${subgroup || 'main'}`;
-            if (!db.messagesStore[storeKey]) db.messagesStore[storeKey] = [];
-            if (!db.messagesStore[storeKey].some(m => m.id === msg.id)) {
-                db.messagesStore[storeKey].push(msg);
+            const gKey = `group_${groupId}_${subgroup || 'main'}`;
+            if (!db.messagesStore[gKey]) db.messagesStore[gKey] = [];
+            // Дедупликация
+            if (!db.messagesStore[gKey].some(m => m.id === msg.id)) {
+                db.messagesStore[gKey].push(msg);
             }
             if (msg.sender !== currentUser.login) {
                 unreadGroupsCount++;
@@ -3049,21 +3054,21 @@
         }
 
         function closeGroupWorkspace() {
-            // Save draft before closing
-            const wsInputEl = document.getElementById('ws-message-input');
-            if (wsInputEl && activeChat) {
-                const dk = activeChat.type + '_' + (activeChat.id || '') + '_' + (activeChat.subgroup || '');
-                draftMap[dk] = wsInputEl.value;
+            // Сохраняем черновик
+            const _wsInput = document.getElementById('ws-message-input');
+            if (_wsInput && _wsInput.value && activeGroupWorkspaceId) {
+                const _wsKey = `group_${activeGroupWorkspaceId}_${activeSubgroup || 'main'}`;
+                draftMap[_wsKey] = _wsInput.value;
             }
             activeGroupWorkspaceId = null;
             activeSubgroup = 'main';
+            lastRenderedChatKey = null;
+            lastRenderedMsgCount = -1;
             if (activeChat && activeChat.type === 'group') {
                 activeChat = null;
                 document.getElementById('no-chat-selected')?.classList.remove('hidden');
                 document.getElementById('chat-window')?.classList.add('hidden');
             }
-            lastRenderedChatKey = null;
-            lastRenderedMsgCount = -1;
             document.getElementById('group-workspace-view').classList.add('hidden');
             document.getElementById('groups-main-view').classList.remove('hidden');
         }
@@ -3148,13 +3153,16 @@
         }
 
         function selectSubgroup(subgroupId) {
-            // Save draft before switching subgroup
-            const oldInputEl = document.getElementById('ws-message-input');
-            if (oldInputEl && activeChat) {
-                const oldKey = activeChat.type + '_' + (activeChat.id || '') + '_' + (activeChat.subgroup || '');
-                draftMap[oldKey] = oldInputEl.value;
+            // Сохраняем черновик
+            const _subInput = document.getElementById('ws-message-input');
+            if (_subInput && _subInput.value && activeGroupWorkspaceId) {
+                const _oldSubKey = `group_${activeGroupWorkspaceId}_${activeSubgroup || 'main'}`;
+                draftMap[_oldSubKey] = _subInput.value;
             }
             activeSubgroup = subgroupId;
+            // Сбрасываем кэш рендера
+            lastRenderedChatKey = null;
+            lastRenderedMsgCount = -1;
             const group = db.groups[activeGroupWorkspaceId];
             if (!group) return;
 
@@ -3387,13 +3395,20 @@
         }
 
         function selectChat(chatInfo) {
-            // Save draft from current chat before switching
-            const inputEl = document.getElementById(activeGroupWorkspaceId ? 'ws-message-input' : 'message-input');
-            if (inputEl && activeChat) {
-                const oldKey = activeChat.type + '_' + (activeChat.id || '') + '_' + (activeChat.subgroup || '');
-                draftMap[oldKey] = inputEl.value;
+            // Сохраняем черновик текущего чата
+            const _oldInput = document.getElementById(activeGroupWorkspaceId ? 'ws-message-input' : 'message-input');
+            if (_oldInput && _oldInput.value && activeChat) {
+                let _oldKey = '';
+                if (activeChat.type === 'saved') _oldKey = `saved_${currentUser.login}`;
+                else if (activeChat.type === 'user') _oldKey = [currentUser.login, activeChat.id].sort().join('_');
+                else if (activeChat.type === 'group') _oldKey = `group_${activeChat.id}_${activeChat.subgroup || 'main'}`;
+                if (_oldKey) draftMap[_oldKey] = _oldInput.value;
             }
+
             activeChat = chatInfo;
+            // Сбрасываем кэш рендера
+            lastRenderedChatKey = null;
+            lastRenderedMsgCount = -1;
             document.getElementById('no-chat-selected').classList.add('hidden');
             document.getElementById('chat-window').classList.remove('hidden');
 
@@ -3432,18 +3447,17 @@
 
             renderMessages();
             renderPinnedMessageBanner();
-            
-            // Restore draft for new chat
-            const newInputEl = document.getElementById(activeGroupWorkspaceId ? 'ws-message-input' : 'message-input');
-            if (newInputEl) {
-                const newKey = chatInfo.type + '_' + (chatInfo.id || '') + '_' + (chatInfo.subgroup || '');
-                newInputEl.value = draftMap[newKey] || '';
+
+            // Восстанавливаем черновик нового чата
+            let _newKey = '';
+            if (chatInfo.type === 'saved') _newKey = `saved_${currentUser.login}`;
+            else if (chatInfo.type === 'user') _newKey = [currentUser.login, chatInfo.id].sort().join('_');
+            else if (chatInfo.type === 'group') _newKey = `group_${chatInfo.id}_${chatInfo.subgroup || 'main'}`;
+            const _newInput = document.getElementById(activeGroupWorkspaceId ? 'ws-message-input' : 'message-input');
+            if (_newInput) {
+                _newInput.value = draftMap[_newKey] || '';
             }
-            
-            // Reset render cache
-            lastRenderedChatKey = null;
-            lastRenderedMsgCount = -1;
-            
+
             if (window.innerWidth <= 768) {
                 document.getElementById('chat-list-panel').classList.add('mobile-hidden');
             }
@@ -3455,7 +3469,7 @@
 
         function renderMessages() {
             const container = document.getElementById(activeGroupWorkspaceId ? 'ws-messages-container' : 'messages-container');
-            if (!container || !activeChat || !currentUser) return;
+            if (!container || !activeChat) return;
             if (activeChat.type === 'group' && !activeGroupWorkspaceId) return;
 
             let messages = [];
@@ -3472,12 +3486,9 @@
                 messages = db.messagesStore[chatKey] || [];
             }
 
-            // Optimization: skip re-render if nothing changed
-            const renderKey = chatKey + (activeGroupWorkspaceId || '');
-            if (lastRenderedChatKey === renderKey && lastRenderedMsgCount === messages.length) {
-                return;
-            }
-            lastRenderedChatKey = renderKey;
+            // Оптимизация: пропускаем перерисовку если чат и кол-во сообщений не изменились
+            if (lastRenderedChatKey === chatKey && lastRenderedMsgCount === messages.length) return;
+            lastRenderedChatKey = chatKey;
             lastRenderedMsgCount = messages.length;
 
             container.innerHTML = '';
@@ -3669,27 +3680,32 @@
                 timestamp: Date.now()
             };
 
+            // Очищаем черновик
+            let _sendKey = '';
+            if (activeChat.type === 'saved') _sendKey = `saved_${currentUser.login}`;
+            else if (activeChat.type === 'user') _sendKey = [currentUser.login, activeChat.id].sort().join('_');
+            else if (activeChat.type === 'group') _sendKey = `group_${activeChat.id}_${activeChat.subgroup || 'main'}`;
+            if (_sendKey) delete draftMap[_sendKey];
+
             if (activeChat.type === 'saved') {
                 const chatKey = `saved_${currentUser.login}`;
                 if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
                 db.messagesStore[chatKey].push(msgObj);
                 renderMessages();
             } else if (activeChat.type === 'user') {
+                // Оптимистичный рендер: добавляем локально сразу
                 const chatKey = [currentUser.login, activeChat.id].sort().join('_');
                 if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
                 db.messagesStore[chatKey].push(msgObj);
                 renderMessages();
                 socket.emit('send-message', { sender: currentUser.login, receiver: activeChat.id, msg: msgObj });
             } else if (activeChat.type === 'group') {
+                // Оптимистичный рендер для группы
                 const chatKey = `group_${activeChat.id}_${activeChat.subgroup || 'main'}`;
                 if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
                 db.messagesStore[chatKey].push(msgObj);
                 renderMessages();
                 socket.emit('send-group-message', { groupId: activeChat.id, subgroup: activeChat.subgroup || 'main', msg: msgObj });
-            }
-            if (draftMap) {
-                const dk = activeChat.type + '_' + (activeChat.id || '') + '_' + (activeChat.subgroup || '');
-                delete draftMap[dk];
             }
 
             inputEl.value = '';
@@ -4283,7 +4299,6 @@
                 showCustomModal('Ошибка', data.error, false, null, '⚠');
             }
         }
-    
     </script>
 </body>
 </html>
