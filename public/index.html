@@ -1520,7 +1520,7 @@
             document.getElementById(`nav-${tab}`)?.classList.add('bg-gray-800', 'text-purple-400');
             document.getElementById(`nav-${tab}`)?.classList.remove('text-gray-400');
 
-            if (tab === 'chats') { unreadMessagesMap = {}; updateChatsBadge(); }
+            if (tab === 'chats') { unreadMessagesMap = {}; updateChatsBadge(); if (activeChat && activeChat.type === 'group') { activeChat = null; document.getElementById('no-chat-selected')?.classList.remove('hidden'); document.getElementById('chat-window')?.classList.add('hidden'); } }
             if (tab === 'groups') {
                 unreadGroupsCount = 0;
                 updateGroupsBadge();
@@ -2208,23 +2208,6 @@
         }
 
         socket.on('update-db', (updatedDb) => {
-            // Preserve locally stored messages that might not be on server yet
-            if (db.messagesStore && updatedDb.messagesStore) {
-                for (let key in db.messagesStore) {
-                    if (!updatedDb.messagesStore[key]) {
-                        updatedDb.messagesStore[key] = db.messagesStore[key];
-                    } else {
-                        // Merge: add any local messages not on server
-                        const localIds = new Set(db.messagesStore[key].map(m => m.id));
-                        const serverIds = new Set(updatedDb.messagesStore[key].map(m => m.id));
-                        for (let m of db.messagesStore[key]) {
-                            if (!serverIds.has(m.id)) {
-                                updatedDb.messagesStore[key].push(m);
-                            }
-                        }
-                    }
-                }
-            }
             const oldRequestsCount = (db.friendRequests && db.friendRequests[currentUser.login]) ? db.friendRequests[currentUser.login].length : 0;
             db = updatedDb;
             const newRequestsCount = (db.friendRequests && db.friendRequests[currentUser.login]) ? db.friendRequests[currentUser.login].length : 0;
@@ -2252,9 +2235,7 @@
             if (!db.messagesStore) db.messagesStore = {};
             const key = [sender, receiver].sort().join('_');
             if (!db.messagesStore[key]) db.messagesStore[key] = [];
-            if (!db.messagesStore[key].find(m => m.id === msg.id)) {
-                db.messagesStore[key].push(msg);
-            }
+            db.messagesStore[key].push(msg);
 
             if (sender !== currentUser.login) {
                 if (!activeChat || activeChat.type !== 'user' || activeChat.id !== sender) {
@@ -2270,12 +2251,6 @@
         });
 
         socket.on('receive-group-message', ({ groupId, msg, subgroup }) => {
-            const storeKey = `group_${groupId}_${subgroup || 'main'}`;
-            if (!db.messagesStore) db.messagesStore = {};
-            if (!db.messagesStore[storeKey]) db.messagesStore[storeKey] = [];
-            if (!db.messagesStore[storeKey].find(m => m.id === msg.id)) {
-                db.messagesStore[storeKey].push(msg);
-            }
             if (msg.sender !== currentUser.login) {
                 unreadGroupsCount++;
                 updateGroupsBadge();
@@ -3043,6 +3018,12 @@
 
         function closeGroupWorkspace() {
             activeGroupWorkspaceId = null;
+            activeSubgroup = 'main';
+            if (activeChat && activeChat.type === 'group') {
+                activeChat = null;
+                document.getElementById('no-chat-selected')?.classList.remove('hidden');
+                document.getElementById('chat-window')?.classList.add('hidden');
+            }
             document.getElementById('group-workspace-view').classList.add('hidden');
             document.getElementById('groups-main-view').classList.remove('hidden');
         }
@@ -3412,6 +3393,7 @@
         function renderMessages() {
             const container = document.getElementById(activeGroupWorkspaceId ? 'ws-messages-container' : 'messages-container');
             if (!container || !activeChat) return;
+            if (activeChat.type === 'group' && !activeGroupWorkspaceId) return;
 
             let messages = [];
             let chatKey = '';
@@ -3621,18 +3603,9 @@
                 if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
                 db.messagesStore[chatKey].push(msgObj);
                 renderMessages();
-                socket.emit('send-saved-message', { login: currentUser.login, msg: msgObj });
             } else if (activeChat.type === 'user') {
-                const chatKey = [currentUser.login, activeChat.id].sort().join('_');
-                if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
-                db.messagesStore[chatKey].push(msgObj);
-                renderMessages();
                 socket.emit('send-message', { sender: currentUser.login, receiver: activeChat.id, msg: msgObj });
             } else if (activeChat.type === 'group') {
-                const chatKey = `group_${activeChat.id}_${activeChat.subgroup || 'main'}`;
-                if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
-                db.messagesStore[chatKey].push(msgObj);
-                renderMessages();
                 socket.emit('send-group-message', { groupId: activeChat.id, subgroup: activeChat.subgroup || 'main', msg: msgObj });
             }
 
