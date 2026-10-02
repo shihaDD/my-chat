@@ -900,10 +900,6 @@
         let currentUser = null;
         let db = { users: {}, messagesStore: {}, friendRequests: {}, outgoingRequests: {}, friends: [], news: [], customNicknames: {}, groups: {}, lastSeen: {}, pinnedMessages: {}, globalRoles: {}, violations: [], groupPostRequests: {}, verificationRequests: {}, mutedUsers: {} };
         let activeChat = null;
-        // Draft preservation system
-        const draftMap = {};
-        let lastRenderedChatKey = null;
-        let lastRenderedMsgCount = -1;
         let activeGroupWorkspaceId = null;
         let currentUploadedMedia = null;
         let activeSubgroup = 'main';
@@ -943,6 +939,9 @@
         let localAnalyser = null;
         let speakingInterval = null;
         let speakingUsersMap = {};
+        const draftMap = {};
+        let lastRenderedChatKey = null;
+        let lastRenderedMsgCount = -1;
 
         const radioStations = [
             { name: 'Европа Плюс', genre: 'Поп / Хит', url: 'https://ep256.europaplus.ru/ep256_aac', logo: '🌐' },
@@ -2212,18 +2211,28 @@
         }
 
         socket.on('update-db', (updatedDb) => {
-            if (!currentUser) return;
-            const currentInputEl = document.getElementById(activeGroupWorkspaceId ? 'ws-message-input' : 'message-input');
-            const savedInputText = currentInputEl ? currentInputEl.value : '';
+            if (!currentUser) { db = updatedDb; return; }
+            // Save current input draft before replacing db
+            const inputEl = document.getElementById(activeGroupWorkspaceId ? 'ws-message-input' : 'message-input');
+            if (inputEl && activeChat) {
+                const draftKey = activeChat.type + '_' + (activeChat.id || 'saved') + '_' + (activeChat.subgroup || 'main');
+                draftMap[draftKey] = inputEl.value;
+            }
+            // Merge local messages that aren't in updatedDb yet
             if (db.messagesStore && updatedDb.messagesStore) {
                 for (let key in db.messagesStore) {
                     if (!updatedDb.messagesStore[key]) {
                         updatedDb.messagesStore[key] = db.messagesStore[key];
                     } else {
-                        const existingIds = new Set(updatedDb.messagesStore[key].map(m => m.id));
-                        for (let m of db.messagesStore[key]) {
-                            if (!existingIds.has(m.id)) {
-                                updatedDb.messagesStore[key].push(m);
+                        const localIds = new Set(db.messagesStore[key].map(m => m.id));
+                        for (let msg of updatedDb.messagesStore[key]) {
+                            localIds.delete(msg.id);
+                        }
+                        if (localIds.size > 0) {
+                            for (let msg of db.messagesStore[key]) {
+                                if (localIds.has(msg.id)) {
+                                    updatedDb.messagesStore[key].push(msg);
+                                }
                             }
                         }
                     }
@@ -2231,10 +2240,6 @@
             }
             const oldRequestsCount = (db.friendRequests && db.friendRequests[currentUser.login]) ? db.friendRequests[currentUser.login].length : 0;
             db = updatedDb;
-            // Restore input text after db replacement
-            if (currentInputEl && savedInputText) {
-                currentInputEl.value = savedInputText;
-            }
             const newRequestsCount = (db.friendRequests && db.friendRequests[currentUser.login]) ? db.friendRequests[currentUser.login].length : 0;
 
             if (newRequestsCount > oldRequestsCount) {
@@ -2258,10 +2263,23 @@
 
         socket.on('receive-message', ({ sender, receiver, msg }) => {
             if (!currentUser) return;
+            const storeKey = [sender, receiver].sort().join('_');
+            if (!db.messagesStore[storeKey]) db.messagesStore[storeKey] = [];
+            // Dedup by msg.id
+            if (!db.messagesStore[storeKey].some(m => m.id === msg.id)) {
+                db.messagesStore[storeKey].push(msg);
+            }
+            // Render if this is the active chat
+            if (activeChat && activeChat.type === 'user' && (activeChat.id === sender || activeChat.id === receiver)) {
+                renderMessages();
+            }
+            if (sender !== currentUser.login) {
+                playNotificationSound();
+            }
+        });) => {
             if (!db.messagesStore) db.messagesStore = {};
             const key = [sender, receiver].sort().join('_');
             if (!db.messagesStore[key]) db.messagesStore[key] = [];
-            if (db.messagesStore[key].some(m => m.id === msg.id)) return;
             db.messagesStore[key].push(msg);
 
             if (sender !== currentUser.login) {
@@ -2279,12 +2297,20 @@
 
         socket.on('receive-group-message', ({ groupId, msg, subgroup }) => {
             if (!currentUser) return;
-            if (!db.messagesStore) db.messagesStore = {};
-            const key = `group_${groupId}_${subgroup || 'main'}`;
-            if (!db.messagesStore[key]) db.messagesStore[key] = [];
-            if (!db.messagesStore[key].some(m => m.id === msg.id)) {
-                db.messagesStore[key].push(msg);
+            const storeKey = `group_${groupId}_${subgroup || 'main'}`;
+            if (!db.messagesStore[storeKey]) db.messagesStore[storeKey] = [];
+            // Dedup by msg.id
+            if (!db.messagesStore[storeKey].some(m => m.id === msg.id)) {
+                db.messagesStore[storeKey].push(msg);
             }
+            // Render if this is the active group chat
+            if (activeChat && activeChat.type === 'group' && activeChat.id === groupId && (activeChat.subgroup || 'main') === (subgroup || 'main')) {
+                renderMessages();
+            }
+            if (msg.sender !== currentUser.login) {
+                playNotificationSound();
+            }
+        });) => {
             if (msg.sender !== currentUser.login) {
                 unreadGroupsCount++;
                 updateGroupsBadge();
@@ -3051,6 +3077,15 @@
         }
 
         function closeGroupWorkspace() {
+            // Save draft before closing
+            const wsInput = document.getElementById('ws-message-input');
+            if (wsInput && activeChat) {
+                const dk = activeChat.type + '_' + (activeChat.id || 'saved') + '_' + (activeChat.subgroup || 'main');
+                draftMap[dk] = wsInput.value;
+            }
+            // Reset render cache
+            lastRenderedChatKey = null;
+            lastRenderedMsgCount = -1;
             activeGroupWorkspaceId = null;
             activeSubgroup = 'main';
             if (activeChat && activeChat.type === 'group') {
@@ -3142,6 +3177,12 @@
         }
 
         function selectSubgroup(subgroupId) {
+            // Save draft for old subgroup
+            const oldInputEl = document.getElementById('ws-message-input');
+            if (oldInputEl && activeChat) {
+                const oldKey = activeChat.type + '_' + (activeChat.id || 'saved') + '_' + (activeChat.subgroup || 'main');
+                draftMap[oldKey] = oldInputEl.value;
+            }
             activeSubgroup = subgroupId;
             const group = db.groups[activeGroupWorkspaceId];
             if (!group) return;
@@ -3375,17 +3416,17 @@
         }
 
         function selectChat(chatInfo) {
-            // Save draft for current chat
-            if (activeChat) {
-                const oldInputEl = document.getElementById(activeGroupWorkspaceId ? 'ws-message-input' : 'message-input');
-                if (oldInputEl && oldInputEl.value) {
-                    const oldKey = activeChat.type === 'saved' ? `saved_${currentUser.login}` :
-                                   activeChat.type === 'user' ? `user_${activeChat.id}` :
-                                   `group_${activeChat.id}_${activeChat.subgroup || 'main'}`;
-                    draftMap[oldKey] = oldInputEl.value;
-                }
+            // Save draft for current chat before switching
+            const oldInputEl = document.getElementById(activeGroupWorkspaceId ? 'ws-message-input' : 'message-input');
+            if (oldInputEl && activeChat) {
+                const oldDraftKey = activeChat.type + '_' + (activeChat.id || 'saved') + '_' + (activeChat.subgroup || 'main');
+                draftMap[oldDraftKey] = oldInputEl.value;
             }
+            
             activeChat = chatInfo;
+            // Reset render cache for new chat
+            lastRenderedChatKey = null;
+            lastRenderedMsgCount = -1;
             document.getElementById('no-chat-selected').classList.add('hidden');
             document.getElementById('chat-window').classList.remove('hidden');
 
@@ -3422,19 +3463,18 @@
                 }
             }
 
-            // Restore draft for new chat
-            const newKey = activeChat.type === 'saved' ? `saved_${currentUser.login}` :
-                           activeChat.type === 'user' ? `user_${activeChat.id}` :
-                           `group_${activeChat.id}_${activeChat.subgroup || 'main'}`;
-            const newInputEl = document.getElementById(activeGroupWorkspaceId ? 'ws-message-input' : 'message-input');
-            if (newInputEl) {
-                newInputEl.value = draftMap[newKey] || '';
-            }
             renderMessages();
             renderPinnedMessageBanner();
             
             if (window.innerWidth <= 768) {
                 document.getElementById('chat-list-panel').classList.add('mobile-hidden');
+            }
+            
+            // Restore draft for new chat
+            const newInputEl = document.getElementById(activeGroupWorkspaceId ? 'ws-message-input' : 'message-input');
+            if (newInputEl) {
+                const newDraftKey = chatInfo.type + '_' + (chatInfo.id || 'saved') + '_' + (chatInfo.subgroup || 'main');
+                newInputEl.value = draftMap[newDraftKey] || '';
             }
         }
 
@@ -3445,6 +3485,21 @@
         function renderMessages() {
             const container = document.getElementById(activeGroupWorkspaceId ? 'ws-messages-container' : 'messages-container');
             if (!container || !activeChat) return;
+            
+            // Determine store key
+            let storeKey = '';
+            if (activeChat.type === 'saved') storeKey = `saved_${currentUser.login}`;
+            else if (activeChat.type === 'user') storeKey = [currentUser.login, activeChat.id].sort().join('_');
+            else if (activeChat.type === 'group') storeKey = `group_${activeChat.id}_${activeChat.subgroup || 'main'}`;
+            
+            const messages = db.messagesStore[storeKey] || [];
+            const renderKey = storeKey;
+            const msgCount = messages.length;
+            
+            // Skip re-render if chat and message count haven't changed
+            if (lastRenderedChatKey === renderKey && lastRenderedMsgCount === msgCount) return;
+            lastRenderedChatKey = renderKey;
+            lastRenderedMsgCount = msgCount;
             if (activeChat.type === 'group' && !activeGroupWorkspaceId) return;
 
             let messages = [];
@@ -3460,14 +3515,6 @@
                 chatKey = `group_${activeChat.id}_${activeChat.subgroup || 'main'}`;
                 messages = db.messagesStore[chatKey] || [];
             }
-
-            // Optimization: skip re-render if chat and message count haven't changed
-            const renderKey = chatKey;
-            if (lastRenderedChatKey === renderKey && lastRenderedMsgCount === messages.length) {
-                return;
-            }
-            lastRenderedChatKey = renderKey;
-            lastRenderedMsgCount = messages.length;
 
             container.innerHTML = '';
             messages.forEach((msg, idx) => {
@@ -3618,7 +3665,7 @@
             }
         }
 
-        async async function sendMessage() {
+        async function sendMessage() {
             if (isUserMutedAnywhere(currentUser.login)) {
                 showCustomModal('Доступ заблокирован', 'У вас действуют ограничения на отправку сообщений (Мут)!', false, null, '🔇');
                 return;
@@ -3661,8 +3708,11 @@
             if (activeChat.type === 'saved') {
                 const chatKey = `saved_${currentUser.login}`;
                 if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
-                db.messagesStore[chatKey].push(msgObj);
+                if (!db.messagesStore[chatKey].some(m => m.id === msgObj.id)) {
+                    db.messagesStore[chatKey].push(msgObj);
+                }
                 renderMessages();
+                socket.emit('send-saved-message', { login: currentUser.login, msg: msgObj });
             } else if (activeChat.type === 'user') {
                 const chatKey = [currentUser.login, activeChat.id].sort().join('_');
                 if (!db.messagesStore[chatKey]) db.messagesStore[chatKey] = [];
@@ -3682,12 +3732,8 @@
             }
 
             inputEl.value = '';
+            if (activeChat) { const dk = activeChat.type + '_' + (activeChat.id || 'saved') + '_' + (activeChat.subgroup || 'main'); delete draftMap[dk]; }
             currentUploadedMedia = null;
-            // Clear draft for this chat
-            const sentKey = activeChat.type === 'saved' ? `saved_${currentUser.login}` :
-                           activeChat.type === 'user' ? `user_${activeChat.id}` :
-                           `group_${activeChat.id}_${activeChat.subgroup || 'main'}`;
-            delete draftMap[sentKey];
         }
 
         async function handleFileUpload(e) {
