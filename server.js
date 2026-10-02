@@ -128,6 +128,7 @@ let isBroadcasting = false;
 let isSaving = false;
 
 async function saveDb() {
+    // Не сохраняем если MongoDB не подключена
     if (mongoose.connection.readyState !== 1) return;
     if (isSaving) return;
     isSaving = true;
@@ -160,7 +161,9 @@ async function saveDb() {
     }
 }
 
+// Лёгкая версия db для рассылки — без паролей и без тяжёлых аватаров
 function buildLightDb() {
+    // Создаём копию users без паролей
     const lightUsers = {};
     for (let login in db.users) {
         lightUsers[login] = { ...db.users[login] };
@@ -186,7 +189,7 @@ function buildLightDb() {
 }
 
 function broadcastDb() {
-    if (isBroadcasting) return;
+    if (isBroadcasting) return; // Не запускаем новую рассылку, если предыдущая ещё идёт
     isBroadcasting = true;
     try {
         const lightDb = buildLightDb();
@@ -194,44 +197,31 @@ function broadcastDb() {
     } catch(e) {
         console.error('broadcastDb error:', e.message);
     } finally {
+        // Сбрасываем флаг через короткий таймер, чтобы дать event loop передышку
         setTimeout(() => { isBroadcasting = false; }, 50);
     }
 }
 
 function debouncedSave() {
     if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => { saveDb(); }, 1000);
+    saveTimer = setTimeout(() => { saveDb(); }, 1000); // Увеличили до 1 сек
 }
 
 function debouncedBroadcast() {
     if (broadcastTimer) clearTimeout(broadcastTimer);
-    broadcastTimer = setTimeout(() => { broadcastDb(); }, 200); // Уменьшили до 200мс
+    // Увеличили задержку до 500мс — меньше нагрузка на event loop
+    broadcastTimer = setTimeout(() => { broadcastDb(); }, 500);
 }
 
 // Helper: save, broadcast, and return db in response
 function saveAndBroadcast(res, extra) {
     debouncedSave();
     debouncedBroadcast();
+    // Возвращаем лёгкую версию (без паролей)
     const lightDb = buildLightDb();
     const response = { success: true, db: lightDb };
     if (extra) {
-        if (extra.user) {
-            const safeUser = { ...extra.user };
-            delete safeUser.password;
-            response.user = safeUser;
-        } else {
-            Object.assign(response, extra);
-        }
-    }
-    return res.json(response);
-}
-
-// NEW: Быстрый ответ БЕЗ рассылки всем (для login, restore-session, register)
-function fastResponse(res, extra) {
-    debouncedSave(); // Сохраняем, но НЕ рассылаем всем
-    const lightDb = buildLightDb();
-    const response = { success: true, db: lightDb };
-    if (extra) {
+        // Убираем пароль из user-объекта, если есть
         if (extra.user) {
             const safeUser = { ...extra.user };
             delete safeUser.password;
@@ -287,7 +277,7 @@ app.post('/api/register', async (req, res) => {
     db.outgoingRequests[cleanLogin] = [];
     db.lastSeen[cleanLogin] = Date.now();
 
-    return fastResponse(res); // БЫСТРЕЕ: не рассылаем всем
+    return saveAndBroadcast(res);
     } catch(e) { console.error('register error:', e); return res.json({ success: false, error: 'Внутренняя ошибка сервера' }); }
 });
 
@@ -308,7 +298,7 @@ app.post('/api/login', async (req, res) => {
     }
 
     db.lastSeen[cleanLogin] = Date.now();
-    return fastResponse(res, { user }); // БЫСТРЕЕ: не рассылаем всем
+    return saveAndBroadcast(res, { user });
     } catch(e) { console.error('login error:', e); return res.json({ success: false, error: 'Внутренняя ошибка сервера' }); }
 });
 
@@ -320,7 +310,7 @@ app.post('/api/restore-session', async (req, res) => {
     const user = db.users[cleanLogin];
     if (!user) return res.json({ success: false });
     db.lastSeen[cleanLogin] = Date.now();
-    return fastResponse(res, { user }); // БЫСТРЕЕ: не рассылаем всем
+    return saveAndBroadcast(res, { user });
     } catch(e) { console.error('restore-session error:', e); return res.json({ success: false }); }
 });
 
@@ -398,18 +388,9 @@ app.post('/api/add-friend', async (req, res) => {
     if (db.friends[login] && db.friends[login].includes(cleanTarget)) {
         return res.json({ success: false, error: 'Вы уже друзья!' });
     }
-    
-    // ЗАЩИТА ОТ ДУБЛИКАТОВ: проверяем, не отправлена ли уже заявка
     if (!db.friendRequests[cleanTarget]) db.friendRequests[cleanTarget] = [];
     if (!db.outgoingRequests) db.outgoingRequests = {};
     if (!db.outgoingRequests[login]) db.outgoingRequests[login] = [];
-
-    if (db.friendRequests[cleanTarget].includes(login)) {
-        return res.json({ success: false, error: 'Заявка уже отправлена!' });
-    }
-    if (db.outgoingRequests[login].includes(cleanTarget)) {
-        return res.json({ success: false, error: 'Заявка уже отправлена!' });
-    }
 
     db.friendRequests[cleanTarget].push(login);
     db.outgoingRequests[login].push(cleanTarget);
@@ -1341,9 +1322,6 @@ io.on('connection', (socket) => {
         const storeKey = [sender, receiver].sort().join('_');
         if (!db.messagesStore[storeKey]) db.messagesStore[storeKey] = [];
         
-        // Дедупликация
-        if (db.messagesStore[storeKey].some(m => m.id === msg.id)) return;
-        
         if (containsMat(msg.text)) {
             if (!db.violations) db.violations = [];
             db.violations.push({
@@ -1371,7 +1349,6 @@ io.on('connection', (socket) => {
         if (!login || !msg) return;
         const storeKey = `saved_${login}`;
         if (!db.messagesStore[storeKey]) db.messagesStore[storeKey] = [];
-        if (db.messagesStore[storeKey].some(m => m.id === msg.id)) return;
         db.messagesStore[storeKey].push(msg);
         debouncedSave();
         } catch(e) { console.error('send-saved-message error:', e.message); }
@@ -1391,9 +1368,6 @@ io.on('connection', (socket) => {
         
         const storeKey = `group_${groupId}_${subgroup || 'main'}`;
         if (!db.messagesStore[storeKey]) db.messagesStore[storeKey] = [];
-        
-        // Дедупликация
-        if (db.messagesStore[storeKey].some(m => m.id === msg.id)) return;
         
         if (containsMat(msg.text)) {
             if (!db.violations) db.violations = [];
@@ -1432,7 +1406,6 @@ io.on('connection', (socket) => {
         const participants = Array.from(global.voiceRooms[roomKey]);
         
         io.to(roomKey).emit('voice-room-update', { roomKey, participants });
-        // НОВЫМ участникам говорим, кто уже в канале — они сами отправят offer каждому
         socket.to(roomKey).emit('voice-user-joined', { login });
 
         const gId = extractGroupIdFromRoomKey(roomKey);
